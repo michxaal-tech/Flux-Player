@@ -23,21 +23,31 @@ export interface LiveState {
   // engine-owned scratch state
   rot: number;
   vt: number;
-  tunnel: { z: number; rot: number }[];
+  tunnel: { z: number; rot: number; hot: boolean }[];
   stars: { x: number; y: number; z: number }[];
   vparts: { x: number; y: number; sp: number; sz: number; ph: number }[];
-  specHist: number[][];
+  specHist: { v: number[]; hot: boolean }[];
   ripples: { r: number; a: number }[];
   flies: { x: number; y: number; vx: number; vy: number; ph: number }[];
   vort: { a: number; r: number; sp: number }[];
   cityH: number[];
   shakeVal: number;
   beatAvg: number;
-  beatCool: number;
+  /** previous frame's bass level, for onset (flux) detection */
+  prevBass: number;
+  /** running average of positive bass flux */
+  fluxAvg: number;
+  /** timestamp of the last detected beat (refractory period is time-based,
+   * so detection behaves the same at 17fps and 120fps) */
+  lastBeatAt: number;
   beats: number[];
   bpm: number;
   flashVal: number;
   cycleT: number;
+  /** Beat punch envelope: jumps to 1 on every detected beat, decays ~10%/frame. */
+  beatE: number;
+  /** Per-theme scratch buckets keyed by theme; new themes park their state here. */
+  scratch: Record<string, any>;
 }
 
 export const live: LiveState = {
@@ -45,8 +55,12 @@ export const live: LiveState = {
   cfg: { ...DEFAULT_VIS_CFG }, trackName: "", peaks: null, prog: 0, dur: 0, loopA: null, loopB: null,
   rot: 0, vt: 0, tunnel: [], stars: [], vparts: [], specHist: [], ripples: [],
   flies: [], vort: [], cityH: [], shakeVal: 0,
-  beatAvg: 0, beatCool: 0, beats: [], bpm: 0, flashVal: 0, cycleT: 0,
+  beatAvg: 0, prevBass: 0, fluxAvg: 0, lastBeatAt: 0, beats: [], bpm: 0, flashVal: 0, cycleT: 0,
+  beatE: 0, scratch: {},
 };
+
+// Debug handle: inspect the render-loop state from the console (window.__flux).
+if (typeof window !== "undefined") (window as any).__flux = live;
 
 /** DOM targets the render loop draws into. Components register/unregister these on mount. */
 export const canvasRefs = {

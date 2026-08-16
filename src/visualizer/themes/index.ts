@@ -19,9 +19,14 @@ import { BARS } from "./bars";
 import { NEBULA } from "./nebula";
 import { TUNNEL } from "./tunnel";
 import { STARFIELD } from "./starfield";
+import { TIDE } from "./tide";
+import { NOVA } from "./nova";
+import { HALO } from "./halo";
+import { COMETS } from "./comets";
 import { CLOCK } from "./clock";
 
 export const themes: Record<string, ThemeDraw> = {
   RING, KALEIDO, HELIX, WAVES, LASERS, GRID, ORB, RIPPLES, SPIRAL, FIREFLIES,
-  CITY, VORTEX, SCOPE, AURORA, DOTGRID, BARS, NEBULA, TUNNEL, STARFIELD, CLOCK,
+  CITY, VORTEX, SCOPE, AURORA, DOTGRID, BARS, NEBULA, TUNNEL, STARFIELD,
+  TIDE, NOVA, HALO, COMETS, CLOCK,
 };

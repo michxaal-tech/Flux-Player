@@ -24,9 +24,12 @@ function makeTestWav(path) {
   let off = 44;
   for (let i = 0; i < n; i++) {
     const t = i / rate;
-    const beat = Math.exp(-8 * (t % 0.5)) * Math.sin(2 * Math.PI * 55 * t);
+    const env = Math.exp(-8 * (t % 0.5));
+    // broadband kick like a real drum: fundamental + harmonics + noise click
+    const beat =
+      env * (Math.sin(2 * Math.PI * 55 * t) + 0.5 * Math.sin(2 * Math.PI * 110 * t) + 0.3 * Math.sin(2 * Math.PI * 220 * t) + (Math.random() * 2 - 1) * 0.25);
     const tone = 0.2 * Math.sin(2 * Math.PI * 440 * t);
-    const s = Math.round(Math.max(-1, Math.min(1, tone + beat * 0.8)) * 32767 * 0.8);
+    const s = Math.round(Math.max(-1, Math.min(1, tone + beat * 0.7)) * 32767 * 0.8);
     buf.writeInt16LE(s, off); off += 2;
     buf.writeInt16LE(s, off); off += 2;
   }

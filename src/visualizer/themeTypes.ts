@@ -25,6 +25,11 @@ export interface ThemeCtx {
   midV: number;
   trebV: number;
   beat: boolean;
+  /**
+   * Beat punch envelope: 1 on the beat frame, decaying to 0 over ~10 frames.
+   * Multiply sizes/glow/speeds by (1 + beatE * k) for dramatic hits.
+   */
+  beatE: number;
   cfg: VisCfg;
   /** cfg.intensity */
   I: number;

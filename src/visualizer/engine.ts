@@ -57,8 +57,17 @@ export function startRenderLoop(): void {
   const freq = new Uint8Array(512);
   const wave = new Uint8Array(1024);
   let t = 0;
+  let lastFrame = 0;
 
   const draw = () => {
+    // cap at ~60fps: animation constants are tuned per-frame, so 120Hz
+    // displays (iPad Pro) would otherwise run everything double speed
+    const nowMs = performance.now();
+    if (nowMs - lastFrame < 14) {
+      requestAnimationFrame(draw);
+      return;
+    }
+    lastFrame = nowMs;
     t++;
     const n = engine.nodes;
     const L = live;
@@ -76,13 +85,19 @@ export function startRenderLoop(): void {
       rms = Math.sqrt(rms / 128);
       liveAudio = true;
       if (L.spin) n.panner.pan.value = Math.sin(t * 0.016 * L.spinRate) * 0.95;
-      // beat + BPM detection
+      // beat + BPM detection via bass onset flux (rising edge), not absolute
+      // level — sustained basslines pin the average and would starve a
+      // threshold-over-average detector
       L.beatAvg = L.beatAvg * 0.95 + bass * 0.05;
-      if (L.beatCool > 0) L.beatCool--;
-      if (bass > Math.max(0.2, L.beatAvg * 1.35) && L.beatCool === 0) {
-        L.beatCool = 12;
+      // lagged reference (~2 frames behind) so onsets that ramp over a few
+      // frames still register as one strong flux spike
+      const flux = Math.max(0, bass - L.prevBass);
+      L.prevBass = L.prevBass * 0.5 + bass * 0.5;
+      L.fluxAvg = L.fluxAvg * 0.95 + flux * 0.05;
+      const now = performance.now();
+      if (flux > Math.max(0.012, L.fluxAvg * 2) && now - L.lastBeatAt > 180) {
+        L.lastBeatAt = now;
         beat = true;
-        const now = performance.now();
         L.beats.push(now);
         if (L.beats.length > 16) L.beats.shift();
         const ivs: number[] = [];
@@ -97,7 +112,10 @@ export function startRenderLoop(): void {
       }
     } else {
       for (let i = 0; i < wave.length; i++) wave[i] = 128 + Math.sin(t * 0.02 + i * 0.05) * 5;
+      // idle demo pulse so themes still show their beat effects
+      if (L.visOpen && t % 75 === 0) beat = true;
     }
+    L.beatE = beat ? 1 : L.beatE * 0.9;
 
     for (const el of canvasRefs.bpm) el.textContent = L.bpm ? `${L.bpm}` : "––";
     if (canvasRefs.level) canvasRefs.level.style.width = `${Math.min(100, rms * 240)}%`;
@@ -222,7 +240,7 @@ export function startRenderLoop(): void {
 
       const themeCtx: ThemeCtx = {
         c, w, h, cx, cy, R, t, vt, freq, wave, liveAudio,
-        bass, mid, treb, bassV, midV, trebV, beat, cfg, I, TK,
+        bass, mid, treb, bassV, midV, trebV, beat, beatE: L.beatE, cfg, I, TK,
         C1, C2, CMix, glow, noGlow, L, trackName: L.trackName,
       };
       themes[TH]?.(themeCtx);
@@ -243,9 +261,9 @@ export function startRenderLoop(): void {
         if (p.x < -0.02) p.x = 1.02;
         if (p.x > 1.02) p.x = -0.02;
         const tw = st === "EMBERS" ? 0.3 + Math.abs(Math.sin(vt * 0.09 + p.ph)) * 0.7 : 0.4 + Math.sin(vt * 0.05 + p.ph) * 0.3;
-        c.fillStyle = CMix((p.ph % 6.28) / 6.28, (0.25 + bassV * 0.5) * tw, st === "EMBERS" ? 62 : 75);
+        c.fillStyle = CMix((p.ph % 6.28) / 6.28, (0.25 + bassV * 0.5 + L.beatE * 0.3) * tw, st === "EMBERS" ? 62 : 75);
         c.beginPath();
-        c.arc(p.x * w, p.y * h, p.sz * (1 + bassV * 1.6) * (st === "SNOW" ? 1.3 : 1) * TK, 0, Math.PI * 2);
+        c.arc(p.x * w, p.y * h, p.sz * (1 + bassV * 1.6 + L.beatE * 0.8) * (st === "SNOW" ? 1.3 : 1) * TK, 0, Math.PI * 2);
         c.fill();
       }
 
