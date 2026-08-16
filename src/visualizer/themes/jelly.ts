@@ -30,13 +30,14 @@ export const JELLY: ThemeDraw = ({ c, w, h, vt, beat, beatE, cfg, bassV, midV, t
   }
 
   for (const j of S.j) {
-    // swim pulse on the beat, then sink slowly back
-    if (beat) j.vy = -0.0035 * j.sz;
-    j.vy = j.vy * 0.96 + 0.00006;
+    // constant gentle rise plus a swim pulse on the beat; wrap top → bottom
+    // so the school flows upward through the frame forever
+    if (beat) j.vy -= 0.0016 * j.sz;
+    j.vy = j.vy * 0.95 - 0.000012;
+    j.vy = Math.max(j.vy, -0.004);
     j.y += j.vy * cfg.speed;
     j.x += Math.sin(vt * 0.006 + j.ph) * 0.0004;
-    if (j.y < 0.05) j.y = 0.05;
-    if (j.y > 1.1) { j.y = 1.1; j.vy = 0; }
+    if (j.y < -0.14) { j.y = 1.14; j.x = Math.random(); j.vy = 0; }
     const jx = j.x * w, jy = j.y * h;
     // bell contracts (narrower, taller) at the pulse
     const pulse = beatE;

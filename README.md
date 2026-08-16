@@ -1,6 +1,6 @@
 # FLUX PRO
 
-Local music player with a live Web Audio FX rack, DJ performance deck, and a 29-theme
+Local music player with a live Web Audio FX rack, DJ performance deck, and a 33-theme
 audio-reactive visualizer — the production build of the `flux-studio-pro.tsx` prototype
 (kept as the design spec in [`docs/prototype/`](docs/prototype/flux-studio-pro.tsx)).
 
@@ -28,7 +28,7 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
   wind) are synthesized in the audio graph, no samples.
 - **DJ deck** — live BPM detection, output meter, 4 hot cues, hold-to-stutter
   (⅛/¼/½), tape brake & spin-up, speed nudge.
-- **Visualizer** — 29 canvas themes × 15 palettes (+ custom hue pair), 15 tune
+- **Visualizer** — 33 canvas themes × 15 palettes (+ custom hue pair), 15 tune
   controls (glow, trails, particles w/ 4 styles, reactivity, zoom, scene spin,
   mirror, beat flash/shake, auto-cycle), edge spectrum meters on every tab.
 - **Recorder** — captures the master output (FX, stutters, ambience included)

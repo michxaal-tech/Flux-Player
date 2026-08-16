@@ -56,6 +56,7 @@ export function startRenderLoop(): void {
   syncLive();
 
   const freq = new Uint8Array(512);
+  const beatFreq = new Uint8Array(512);
   const wave = new Uint8Array(1024);
   let t = 0;
   let lastFrame = 0;
@@ -86,17 +87,33 @@ export function startRenderLoop(): void {
       rms = Math.sqrt(rms / 128);
       liveAudio = true;
       if (L.spin) n.panner.pan.value = Math.sin(t * 0.016 * L.spinRate) * 0.95;
-      // beat + BPM detection via bass onset flux (rising edge), not absolute
-      // level — sustained basslines pin the average and would starve a
-      // threshold-over-average detector
-      L.beatAvg = L.beatAvg * 0.95 + bass * 0.05;
+      // ── beat detection ──
+      // Onset flux on a dedicated low-smoothing analyser (the visual analyser
+      // blurs transients), kick band only (bins 1-12 ≈ 40-520Hz), with an
+      // adaptive mean+deviation threshold. Once a tempo is locked, a phase
+      // gate welcomes on-grid onsets and resists off-grid ones so beats stop
+      // firing "at the wrong parts".
+      n.beatAnalyser.getByteFrequencyData(beatFreq);
+      let kick = 0;
+      for (let i = 1; i <= 12; i++) kick += beatFreq[i];
+      kick /= 12 * 255;
       // lagged reference (~2 frames behind) so onsets that ramp over a few
       // frames still register as one strong flux spike
-      const flux = Math.max(0, bass - L.prevBass);
-      L.prevBass = L.prevBass * 0.5 + bass * 0.5;
+      const flux = Math.max(0, kick - L.prevBass);
+      L.prevBass = L.prevBass * 0.5 + kick * 0.5;
       L.fluxAvg = L.fluxAvg * 0.95 + flux * 0.05;
+      L.fluxDev = L.fluxDev * 0.95 + Math.abs(flux - L.fluxAvg) * 0.05;
       const now = performance.now();
-      if (flux > Math.max(0.012, L.fluxAvg * 2) && now - L.lastBeatAt > 180) {
+      let thresh = L.fluxAvg + 2.2 * L.fluxDev + 0.008;
+      let refractory = 180;
+      const iv = L.bpm ? 60000 / L.bpm : 0;
+      if (iv) {
+        const phase = ((now - L.lastBeatAt) % iv) / iv;
+        const onGrid = phase < 0.18 || phase > 0.82;
+        thresh *= onGrid ? 0.65 : 1.6;
+        refractory = Math.min(240, Math.max(140, iv * 0.4));
+      }
+      if (flux > thresh && now - L.lastBeatAt > refractory) {
         L.lastBeatAt = now;
         beat = true;
         L.beats.push(now);

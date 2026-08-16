@@ -37,6 +37,8 @@ export interface LiveState {
   prevBass: number;
   /** running average of positive bass flux */
   fluxAvg: number;
+  /** running mean absolute deviation of the flux, for the adaptive threshold */
+  fluxDev: number;
   /** timestamp of the last detected beat (refractory period is time-based,
    * so detection behaves the same at 17fps and 120fps) */
   lastBeatAt: number;
@@ -55,7 +57,7 @@ export const live: LiveState = {
   cfg: { ...DEFAULT_VIS_CFG }, trackName: "", peaks: null, prog: 0, dur: 0, loopA: null, loopB: null,
   rot: 0, vt: 0, tunnel: [], stars: [], vparts: [], specHist: [], ripples: [],
   flies: [], vort: [], cityH: [], shakeVal: 0,
-  beatAvg: 0, prevBass: 0, fluxAvg: 0, lastBeatAt: 0, beats: [], bpm: 0, flashVal: 0, cycleT: 0,
+  beatAvg: 0, prevBass: 0, fluxAvg: 0, fluxDev: 0, lastBeatAt: 0, beats: [], bpm: 0, flashVal: 0, cycleT: 0,
   beatE: 0, scratch: {},
 };
 

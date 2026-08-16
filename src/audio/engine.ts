@@ -21,6 +21,9 @@ export interface GraphNodes {
   panner: StereoPannerNode;
   comp: DynamicsCompressorNode;
   analyser: AnalyserNode;
+  /** lightly-smoothed tap used only for beat onset detection — the main
+   * analyser's heavy smoothing blurs transients and ruins beat timing */
+  beatAnalyser: AnalyserNode;
   streamDest: MediaStreamAudioDestinationNode;
   cGain: GainNode;
   rainG: GainNode;
@@ -116,6 +119,7 @@ class AudioEngine {
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -16; comp.ratio.value = 5; comp.attack.value = 0.004; comp.release.value = 0.2;
     const analyser = ctx.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.75;
+    const beatAnalyser = ctx.createAnalyser(); beatAnalyser.fftSize = 1024; beatAnalyser.smoothingTimeConstant = 0.35;
     const streamDest = ctx.createMediaStreamDestination();
 
     src.connect(shaper); shaper.connect(eqLow); eqLow.connect(eqMid); eqMid.connect(eqHigh);
@@ -127,6 +131,7 @@ class AudioEngine {
     post.connect(delay); delay.connect(delayMix); delayMix.connect(master);
     delay.connect(delayFb); delayFb.connect(delay);
     master.connect(fader); fader.connect(panner); panner.connect(comp); comp.connect(analyser);
+    comp.connect(beatAnalyser);
     analyser.connect(ctx.destination); analyser.connect(streamDest);
 
     const mkNoise = (fill: NoiseFill) => {
@@ -161,7 +166,7 @@ class AudioEngine {
 
     this.nodes = {
       ctx, shaper, eqLow, eqMid, eqHigh, toneLP, hp, vDry, vSum, dry, convolver, wet,
-      delay, delayFb, delayMix, master, fader, panner, comp, analyser, streamDest,
+      delay, delayFb, delayMix, master, fader, panner, comp, analyser, beatAnalyser, streamDest,
       cGain, rainG, fireG, windG,
     };
     this.buildImpulse(2.2);

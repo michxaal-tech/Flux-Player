@@ -45,7 +45,8 @@ export const PRESETS: Preset[] = [
 export const VIS_THEMES = [
   "RING", "KALEIDO", "HELIX", "WAVES", "LASERS", "GRID", "ORB", "RIPPLES", "SPIRAL", "FIREFLIES",
   "CITY", "VORTEX", "SCOPE", "AURORA", "DOTGRID", "BARS", "NEBULA", "TUNNEL", "STARFIELD",
-  "TIDE", "NOVA", "HALO", "COMETS", "FIREWORKS", "LANTERNS", "JELLY", "CRYSTAL", "BLOOM", "CLOCK",
+  "TIDE", "NOVA", "HALO", "COMETS", "FIREWORKS", "LANTERNS", "JELLY", "CRYSTAL", "BLOOM",
+  "ECLIPSE", "GALAXY", "SILK", "LIQUID", "CLOCK",
 ];
 
 export interface Palette {

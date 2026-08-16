@@ -28,10 +28,15 @@ import { LANTERNS } from "./lanterns";
 import { JELLY } from "./jelly";
 import { CRYSTAL } from "./crystal";
 import { BLOOM } from "./bloom";
+import { ECLIPSE } from "./eclipse";
+import { GALAXY } from "./galaxy";
+import { SILK } from "./silk";
+import { LIQUID } from "./liquid";
 import { CLOCK } from "./clock";
 
 export const themes: Record<string, ThemeDraw> = {
   RING, KALEIDO, HELIX, WAVES, LASERS, GRID, ORB, RIPPLES, SPIRAL, FIREFLIES,
   CITY, VORTEX, SCOPE, AURORA, DOTGRID, BARS, NEBULA, TUNNEL, STARFIELD,
-  TIDE, NOVA, HALO, COMETS, FIREWORKS, LANTERNS, JELLY, CRYSTAL, BLOOM, CLOCK,
+  TIDE, NOVA, HALO, COMETS, FIREWORKS, LANTERNS, JELLY, CRYSTAL, BLOOM,
+  ECLIPSE, GALAXY, SILK, LIQUID, CLOCK,
 };

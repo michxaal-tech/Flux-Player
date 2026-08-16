@@ -159,7 +159,9 @@ export const useStore = create<StoreState>()(
               glow: 0.3 + Math.random() * 0.7, trail: Math.random() * 0.9, particles: Math.random(),
               pStyle: P_STYLES[Math.floor(Math.random() * P_STYLES.length)],
               speed: 0.5 + Math.random() * 1.2, intensity: 0.7 + Math.random() * 1.0,
-              zoom: 0.8 + Math.random() * 0.5, spinV: (Math.random() - 0.5) * 1.6,
+              // never randomize scene rotation/zoom — a spinning screen reads
+              // as broken, not as a fresh look
+              zoom: 0.95 + Math.random() * 0.15, spinV: 0,
               bgWash: Math.random() * 0.6, thick: 0.6 + Math.random() * 1.4,
               mirror: Math.random() < 0.35, shake: Math.random() < 0.5,
             },
