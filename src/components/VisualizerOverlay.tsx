@@ -15,6 +15,7 @@ export function VisualizerOverlay() {
   const playing = useStore((s) => s.playing);
   const track = useStore(getCurrentTrack);
   const lyricsOn = useStore((s) => s.lyricsOn);
+  const lyricAuto = useStore((s) => s.lyricAuto);
   const lyricStyle = useStore((s) => s.lyricStyle);
   const lyricStatus = useStore((s) => s.lyricStatus);
   const set = useStore((s) => s.set);
@@ -123,6 +124,11 @@ export function VisualizerOverlay() {
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
           <button onClick={() => set({ lyricsOn: !lyricsOn })} style={chip(lyricsOn)} title="Lyrics on/off">♪</button>
+          <button
+            onClick={() => set({ lyricAuto: !lyricAuto })}
+            style={{ ...chip(lyricAuto, MAG), fontSize: 10 }}
+            title="Auto-search lyrics for every track"
+          >⟳ AUTO</button>
           <button onClick={visChaos} style={chip(false, MAG)}>🎲</button>
           <button onClick={() => set({ visPanel: !visPanel })} style={chip(visPanel, MAG)}>⚙ TUNE</button>
           <button onClick={() => set({ visOpen: false })} style={{ ...chip(false), fontSize: 14 }}>✕</button>

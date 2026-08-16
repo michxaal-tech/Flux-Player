@@ -51,6 +51,8 @@ export interface StoreState {
   lyricsOn: boolean;
   lyricStyle: string;
   lyricStatus: string;
+  /** auto-search lyrics when a track starts (manual FIND when off) */
+  lyricAuto: boolean;
   // profile
   stats: Stats;
   // ui
@@ -127,6 +129,7 @@ export const useStore = create<StoreState>()(
         lyricsOn: true,
         lyricStyle: "DRIFT",
         lyricStatus: "",
+        lyricAuto: true,
         stats: { plays: 0, seconds: 0 },
         tab: "player",
         shortcutsOpen: false,
@@ -323,6 +326,7 @@ export const useStore = create<StoreState>()(
           instMode: s.instMode,
           lyricsOn: s.lyricsOn,
           lyricStyle: s.lyricStyle,
+          lyricAuto: s.lyricAuto,
         }),
         merge: (persisted, current) => {
           const p = (persisted ?? {}) as Partial<StoreState>;

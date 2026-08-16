@@ -1,7 +1,7 @@
-// Draws synced lyrics over any visualizer theme as fluid, floating text:
-// each line materializes somewhere new on screen (golden-ratio scatter, so
-// placements feel varied but balanced), lives with the music, and drifts
-// away as the next line appears. Runs inside the render loop after the theme.
+// Draws synced lyrics over any visualizer theme as fluid, floating text.
+// Long lines WRAP into up to three rows at a readable size — they are never
+// shrunk into a tiny single strip. Each line materializes somewhere new
+// (golden-ratio scatter) and dissolves as the next appears.
 import type { LiveState } from "./live";
 
 export interface LyricCtx {
@@ -25,9 +25,7 @@ export interface CurrentLyric {
   prev: string;
   text: string;
   next: string;
-  /** progress 0..1 through the current line's time window */
   frac: number;
-  /** seconds since the line started */
   age: number;
   index: number;
 }
@@ -53,24 +51,56 @@ const smooth = (x: number) => {
   const t = Math.min(1, Math.max(0, x));
   return t * t * (3 - 2 * t);
 };
-
-/** golden-ratio scatter: varied but evenly balanced positions, per line index */
-const posFor = (i: number, w: number, h: number): [number, number] => {
-  const fx = (i * 0.618033988 + 0.31) % 1;
-  const fy = (i * 0.381966011 + 0.12) % 1;
-  return [w * (0.24 + fx * 0.52), h * (0.2 + fy * 0.46)];
-};
-
-/** deterministic gentle tilt per line, ±0.12 rad, never harsh */
-const angFor = (i: number): number => (((i * 2654435761) % 97) / 97 - 0.5) * 0.24;
-
-/** ease-out cubic — the "settles softly" curve */
 const easeOut = (x: number) => {
   const t = Math.min(1, Math.max(0, x));
   return 1 - Math.pow(1 - t, 3);
 };
 
-interface LineOpts {
+/** golden-ratio scatter: varied but evenly balanced positions, per line index */
+const posFor = (i: number, w: number, h: number): [number, number] => {
+  const fx = (i * 0.618033988 + 0.31) % 1;
+  const fy = (i * 0.381966011 + 0.12) % 1;
+  return [w * (0.28 + fx * 0.44), h * (0.22 + fy * 0.42)];
+};
+
+/** deterministic gentle tilt per line, ±0.09 rad, never harsh */
+const angFor = (i: number): number => (((i * 2654435761) % 97) / 97 - 0.5) * 0.18;
+
+// ── multi-row text blocks ───────────────────────────────────────
+interface Block {
+  rows: string[];
+  scale: number;
+}
+
+function wrapRows(c: CanvasRenderingContext2D, text: string, maxW: number): string[] {
+  const words = text.split(" ");
+  const rows: string[] = [];
+  let row = "";
+  for (const wd of words) {
+    const tryRow = row ? `${row} ${wd}` : wd;
+    if (c.measureText(tryRow).width <= maxW || !row) row = tryRow;
+    else {
+      rows.push(row);
+      row = wd;
+    }
+  }
+  if (row) rows.push(row);
+  return rows;
+}
+
+/** wrap into ≤3 rows, only shrinking as a last resort (never below 0.68×) */
+function layoutBlock(c: CanvasRenderingContext2D, text: string, sizePx: number, maxW: number): Block {
+  for (const s of [1, 0.9, 0.8, 0.68]) {
+    c.font = `700 ${Math.floor(sizePx * s)}px 'Space Grotesk', sans-serif`;
+    const rows = wrapRows(c, text, maxW);
+    const widest = Math.max(...rows.map((r) => c.measureText(r).width));
+    if (rows.length <= 3 && widest <= maxW) return { rows, scale: s };
+  }
+  c.font = `700 ${Math.floor(sizePx * 0.68)}px 'Space Grotesk', sans-serif`;
+  return { rows: wrapRows(c, text, maxW).slice(0, 3), scale: 0.68 };
+}
+
+interface BlockOpts {
   x: number;
   y: number;
   alpha: number;
@@ -83,23 +113,26 @@ interface LineOpts {
   glowColor: string;
 }
 
-function drawLine(c: CanvasRenderingContext2D, text: string, o: LineOpts, w: number): void {
+function drawBlock(c: CanvasRenderingContext2D, text: string, o: BlockOpts, w: number): void {
   if (o.alpha <= 0.01 || !text) return;
-  c.font = `700 ${Math.floor(o.size)}px 'Space Grotesk', sans-serif`;
-  const tw = c.measureText(text).width;
-  const fit = Math.min(1, o.maxW / Math.max(1, tw));
-  const half = (tw * fit * o.scale) / 2;
-  const x = Math.min(Math.max(o.x, half + 14), w - half - 14);
+  const block = layoutBlock(c, text, o.size, o.maxW);
+  const sizePx = o.size * block.scale;
+  const lineH = sizePx * 1.16;
+  c.font = `700 ${Math.floor(sizePx)}px 'Space Grotesk', sans-serif`;
+  const widest = Math.max(...block.rows.map((r) => c.measureText(r).width)) * o.scale;
+  const x = Math.min(Math.max(o.x, widest / 2 + 14), w - widest / 2 - 14);
   c.save();
   c.translate(x, o.y);
   if (o.rot) c.rotate(o.rot);
-  c.scale(fit * o.scale, fit * o.scale);
+  c.scale(o.scale, o.scale);
   c.shadowBlur = o.glowAmt;
   c.shadowColor = o.glowColor;
   c.fillStyle = o.color ?? `rgba(255,255,255,${o.alpha})`;
   c.textAlign = "center";
   c.textBaseline = "middle";
-  c.fillText(text, 0, 0);
+  block.rows.forEach((row, i) => {
+    c.fillText(row, 0, (i - (block.rows.length - 1) / 2) * lineH);
+  });
   c.restore();
 }
 
@@ -110,69 +143,122 @@ export function drawLyricOverlay(x: LyricCtx): void {
   const cur = currentLyric(lines, time);
   if (!cur) return;
   const style = LYRIC_STYLES.includes(L.lyricStyle) ? L.lyricStyle : "DRIFT";
-  const size = Math.min(w * 0.05, h * 0.062);
+  const size = Math.min(w * 0.058, h * 0.072);
   c.save();
   c.globalCompositeOperation = "source-over";
 
   if (style === "KARAOKE") {
-    // classic bottom line with progressive word-fill
     if (cur.text) {
-      const y = h * 0.72;
       c.font = `700 ${Math.floor(size)}px 'Space Grotesk', sans-serif`;
-      const fit = Math.min(1, (w * 0.88) / Math.max(1, c.measureText(cur.text).width));
-      c.save();
-      c.translate(w / 2, y);
-      c.scale(fit, fit);
-      const tw = c.measureText(cur.text).width;
-      c.shadowBlur = 12;
-      c.shadowColor = "rgba(0,0,0,0.8)";
-      c.fillStyle = "rgba(255,255,255,0.35)";
+      const block = layoutBlock(c, cur.text, size, w * 0.84);
+      const sizePx = size * block.scale;
+      const lineH = sizePx * 1.16;
+      const y = h * 0.68;
+      c.font = `700 ${Math.floor(sizePx)}px 'Space Grotesk', sans-serif`;
       c.textAlign = "center";
       c.textBaseline = "middle";
-      c.fillText(cur.text, 0, 0);
-      c.shadowBlur = 18 + beatE * 18;
-      c.shadowColor = C1();
-      c.save();
-      c.beginPath();
-      c.rect(-tw / 2, -size, tw * cur.frac, size * 2);
-      c.clip();
-      c.fillStyle = C1(1, 70);
-      c.fillText(cur.text, 0, 0);
-      c.restore();
-      c.fillStyle = C2(0.9, 80);
-      c.beginPath();
-      c.arc(-tw / 2 + tw * cur.frac, -size * 0.62, (2.5 + beatE * 3) * TK, 0, Math.PI * 2);
-      c.fill();
-      c.restore();
-      if (cur.next) {
-        c.font = `500 ${Math.floor(size * 0.45)}px 'Space Grotesk', sans-serif`;
-        const nfit = Math.min(1, (w * 0.8) / Math.max(1, c.measureText(cur.next).width));
-        c.save();
-        c.translate(w / 2, y + size * 1.1);
-        c.scale(nfit, nfit);
-        c.fillStyle = "rgba(255,255,255,0.3)";
-        c.textAlign = "center";
-        c.fillText(cur.next, 0, 0);
-        c.restore();
-      }
+      // char-progress across the whole block
+      const totalChars = block.rows.reduce((a, r) => a + r.length, 0);
+      let sung = Math.floor(cur.frac * totalChars);
+      block.rows.forEach((row, i) => {
+        const ry = y + (i - (block.rows.length - 1) / 2) * lineH;
+        const rw = c.measureText(row).width;
+        c.shadowBlur = 12;
+        c.shadowColor = "rgba(0,0,0,0.8)";
+        c.fillStyle = "rgba(255,255,255,0.35)";
+        c.fillText(row, w / 2, ry);
+        const rowFrac = Math.min(1, Math.max(0, sung / row.length));
+        sung -= row.length;
+        if (rowFrac > 0) {
+          c.save();
+          c.beginPath();
+          c.rect(w / 2 - rw / 2, ry - lineH / 2, rw * rowFrac, lineH);
+          c.clip();
+          c.shadowBlur = 18 + beatE * 18;
+          c.shadowColor = C1();
+          c.fillStyle = C1(1, 70);
+          c.fillText(row, w / 2, ry);
+          c.restore();
+        }
+      });
     }
     c.restore();
     return;
   }
 
-  // ── fluid, position-scattered styles ──
+  if (style === "CASCADE") {
+    // one word at a time: each word owns a slice of the line's duration,
+    // fading out as the next fades in at a fresh spot
+    if (cur.text) {
+      const words = cur.text.split(" ").filter(Boolean);
+      const n = words.length;
+      const pos2 = cur.frac * n;
+      const active = Math.min(n - 1, Math.floor(pos2));
+      const local = Math.min(1, pos2 - active);
+      const drawWord = (k: number, alpha: number, scl: number) => {
+        if (k < 0 || k >= n || alpha <= 0.02) return;
+        const [wx, wy] = posFor(cur.index * 13 + k * 5, w, h);
+        drawBlock(c, words[k], {
+          x: wx,
+          y: wy,
+          alpha,
+          scale: scl,
+          rot: angFor(cur.index + k),
+          maxW: w * 0.7,
+          size: size * 1.4,
+          glowAmt: 18 + beatE * 22,
+          glowColor: CMix(((cur.index + k) % 9) / 9),
+        }, w);
+      };
+      // outgoing previous word overlaps the incoming one briefly
+      drawWord(active - 1, (1 - smooth(local * 2.4)) * 0.7, 1.02);
+      const appear = smooth(local * 2.6);
+      const out = local > 0.72 ? smooth((local - 0.72) / 0.28) : 0;
+      drawWord(active, appear * (1 - out * 0.85), 0.86 + appear * 0.14 + beatE * 0.04);
+    }
+    c.restore();
+    return;
+  }
+
+  if (style === "SCATTER") {
+    // lines pop in one at a time at scattered spots with gentle tilts and
+    // stay up as a small fading collage — newest brightest
+    const KEEP = 3;
+    for (let k = KEEP - 1; k >= 0; k--) {
+      const idx = cur.index - k;
+      if (idx < 0 || !lines[idx]) continue;
+      const [sx, sy] = posFor(idx, w, h);
+      const lineAge = time - lines[idx].t;
+      const pop = easeOut(lineAge * 2.6);
+      const fade = k === 0 ? 1 : Math.max(0, 0.55 - (k - 1) * 0.28 - cur.age * 0.1);
+      if (fade <= 0.02) continue;
+      drawBlock(c, lines[idx].text, {
+        x: sx,
+        y: sy + (1 - pop) * 26 - lineAge * 2,
+        alpha: k === 0 ? 0.95 * pop : fade,
+        scale: (0.86 + pop * 0.14) * (1 - k * 0.1) + (k === 0 ? beatE * 0.025 : 0),
+        rot: angFor(idx) * pop,
+        maxW: w * 0.5,
+        size: size * (k === 0 ? 1 : 0.8),
+        glowAmt: k === 0 ? 16 + beatE * 22 : 6,
+        glowColor: CMix((idx % 9) / 9),
+      }, w);
+    }
+    c.restore();
+    return;
+  }
+
   // ghost of the previous line, still drifting away from its own spot
-  // (SCATTER keeps its own multi-line collage, so no extra ghost there)
-  if (style !== "SCATTER" && cur.prev && cur.index >= 1) {
+  if (cur.prev && cur.index >= 1) {
     const [px, py] = posFor(cur.index - 1, w, h);
     const gone = smooth(cur.age * 0.7);
-    drawLine(c, cur.prev, {
+    drawBlock(c, cur.prev, {
       x: px,
       y: py - 26 - cur.age * 12,
-      alpha: 0.45 * (1 - gone),
-      scale: 1 - gone * 0.12,
-      maxW: w * 0.55,
-      size: size * 0.8,
+      alpha: 0.4 * (1 - gone),
+      scale: 0.85 - gone * 0.1,
+      maxW: w * 0.45,
+      size: size * 0.75,
       glowAmt: 6,
       glowColor: C2(),
     }, w);
@@ -187,147 +273,89 @@ export function drawLyricOverlay(x: LyricCtx): void {
   const leave = cur.frac > 0.86 ? smooth((cur.frac - 0.86) / 0.14) : 0;
   const alpha = appear * (1 - leave * 0.9);
 
-  if (style === "SCATTER") {
-    // lines pop in one at a time at scattered spots with gentle tilts and
-    // stay up as a collage — newest brightest, older ones melt away
-    const KEEP = 4;
-    for (let k = KEEP - 1; k >= 0; k--) {
-      const idx = cur.index - k;
-      if (idx < 0 || !lines[idx]) continue;
-      const text = lines[idx].text;
-      const [sx, sy] = posFor(idx, w, h);
-      const lineAge = time - lines[idx].t;
-      const pop = easeOut(lineAge * 2.6);
-      const depth = k / KEEP;
-      const fade = k === 0 ? 1 : Math.max(0, 1 - depth * 1.1 - cur.age * 0.12);
-      if (fade <= 0.02) continue;
-      drawLine(c, text, {
-        x: sx,
-        y: sy + (1 - pop) * 26 - lineAge * 2.2,
-        alpha: (k === 0 ? 0.95 * pop : 0.5 * fade),
-        scale: (0.8 + pop * 0.2) * (1 - depth * 0.16) + (k === 0 ? beatE * 0.025 : 0),
-        rot: angFor(idx) * pop,
-        maxW: w * 0.52,
-        size: size * (k === 0 ? 1 : 0.82),
-        glowAmt: k === 0 ? 16 + beatE * 22 : 6,
-        glowColor: CMix((idx % 9) / 9),
-      }, w);
-    }
-    c.restore();
-    return;
-  }
-
   if (style === "DRIFT") {
-    drawLine(c, cur.text, {
+    drawBlock(c, cur.text, {
       x: lx + Math.sin(vt * 0.008 + cur.index) * 8,
       y: ly + (1 - appear) * 24 - cur.age * 9 - leave * 14,
       alpha,
       scale: 0.92 + appear * 0.08 + beatE * 0.025,
-      maxW: w * 0.6,
+      maxW: w * 0.56,
       size,
       glowAmt: 18 + beatE * 22,
       glowColor: C1(),
     }, w);
   } else if (style === "POP") {
-    // springy overshoot in, quick zoom-fade out
     const spring = appear + Math.sin(Math.min(1, cur.age * 2.2) * Math.PI) * 0.14 * (1 - appear);
-    drawLine(c, cur.text, {
+    drawBlock(c, cur.text, {
       x: lx,
       y: ly,
       alpha,
       scale: (0.6 + spring * 0.4) * (1 + leave * 0.35) + beatE * 0.04,
       rot: (1 - appear) * 0.06 * (cur.index % 2 ? 1 : -1),
-      maxW: w * 0.6,
+      maxW: w * 0.56,
       size,
       glowAmt: 16 + beatE * 26,
       glowColor: CMix((cur.index % 8) / 8),
     }, w);
-  } else if (style === "ORBIT") {
-    // lines take positions along a slow orbit around the screen center
-    const ang = cur.index * 2.4 + vt * 0.0015;
-    const rad = Math.min(w, h) * (0.22 + ((cur.index * 37) % 10) / 10 * 0.1);
-    const ox = w / 2 + Math.cos(ang) * rad * 1.25;
-    const oy = h * 0.45 + Math.sin(ang) * rad * 0.75;
-    drawLine(c, cur.text, {
-      x: ox,
-      y: oy + (1 - appear) * 18,
-      alpha,
-      scale: 0.9 + appear * 0.1 + beatE * 0.03,
-      rot: Math.sin(ang) * 0.05,
-      maxW: w * 0.5,
-      size: size * 0.92,
-      glowAmt: 16 + beatE * 20,
-      glowColor: C1(),
-    }, w);
   } else if (style === "RISE") {
-    // line rises from below, settles softly at its spot, then floats off the top
     const settle = easeOut(cur.age * 1.7);
     const exitY = leave * h * 0.28;
-    drawLine(c, cur.text, {
+    drawBlock(c, cur.text, {
       x: lx,
       y: h * 0.85 + (ly - h * 0.85) * settle - exitY,
       alpha: Math.min(1, cur.age * 3) * (1 - leave),
       scale: 0.88 + settle * 0.12 + beatE * 0.02,
       rot: angFor(cur.index) * 0.5 * settle,
-      maxW: w * 0.6,
+      maxW: w * 0.56,
       size,
       glowAmt: 16 + beatE * 20,
       glowColor: C1(),
     }, w);
   } else if (style === "SPIN") {
-    // swings in with a soft rotation, unwinds while it sits, spins away
     const inn = easeOut(cur.age * 2);
     const rot = (1 - inn) * -0.4 + angFor(cur.index) * inn + leave * 0.45;
-    drawLine(c, cur.text, {
+    drawBlock(c, cur.text, {
       x: lx,
       y: ly,
       alpha,
       scale: (0.6 + inn * 0.4) * (1 - leave * 0.25) + beatE * 0.03,
       rot,
-      maxW: w * 0.58,
+      maxW: w * 0.54,
       size,
       glowAmt: 16 + beatE * 22,
       glowColor: CMix((cur.index % 7) / 7),
     }, w);
+  } else if (style === "ORBIT") {
+    const ang = cur.index * 2.4 + vt * 0.0015;
+    const rad = Math.min(w, h) * (0.22 + ((cur.index * 37) % 10) / 10 * 0.1);
+    const ox = w / 2 + Math.cos(ang) * rad * 1.25;
+    const oy = h * 0.45 + Math.sin(ang) * rad * 0.75;
+    drawBlock(c, cur.text, {
+      x: ox,
+      y: oy + (1 - appear) * 18,
+      alpha,
+      scale: 0.9 + appear * 0.1 + beatE * 0.03,
+      rot: Math.sin(ang) * 0.05,
+      maxW: w * 0.46,
+      size: size * 0.92,
+      glowAmt: 16 + beatE * 20,
+      glowColor: C1(),
+    }, w);
   } else if (style === "TYPE") {
-    // typewriter with a soft glow cursor, centered
     const chars = [...cur.text];
     const shown = Math.min(chars.length, Math.floor(cur.age * Math.max(12, chars.length * 1.6)));
     const text = chars.slice(0, shown).join("");
     const cursorOn = (Math.floor(vt / 14) % 2 === 0 && shown < chars.length) || shown === 0;
-    drawLine(c, text + (cursorOn ? "▌" : shown < chars.length ? " " : ""), {
+    drawBlock(c, text + (cursorOn ? "▌" : shown < chars.length ? " " : ""), {
       x: w / 2,
       y: h * 0.45,
       alpha: 1 - leave,
       scale: 1 + beatE * 0.02,
-      maxW: w * 0.8,
+      maxW: w * 0.7,
       size,
       glowAmt: 14 + beatE * 16,
       glowColor: C1(),
     }, w);
-  } else if (style === "CASCADE") {
-    // words scatter in one after another across a loose diagonal band
-    const words = cur.text.split(" ");
-    const reveal = cur.age * Math.max(3, words.length + 1) * 0.85;
-    words.forEach((wd, k) => {
-      const wAppear = smooth(reveal - k);
-      if (wAppear <= 0.01) return;
-      const [bx, by] = posFor(cur.index, w, h);
-      const t2 = words.length > 1 ? k / (words.length - 1) : 0.5;
-      const wx = bx + (t2 - 0.5) * w * 0.42 + Math.sin(cur.index * 3 + k * 2.4) * w * 0.05;
-      const wy = by + (t2 - 0.5) * h * 0.16 + Math.cos(cur.index * 5 + k * 1.7) * h * 0.06;
-      drawLine(c, wd, {
-        x: wx,
-        y: wy + (1 - wAppear) * 16 - leave * 12,
-        alpha: wAppear * (1 - leave * 0.9),
-        scale: 0.85 + wAppear * 0.15 + (k === Math.floor(cur.frac * words.length) ? beatE * 0.08 : 0),
-        rot: Math.sin(cur.index + k) * 0.05,
-        maxW: w * 0.4,
-        size: size * 0.85,
-        glowAmt: 14 + beatE * 16,
-        glowColor: CMix(((cur.index + k) % 9) / 9),
-      }, w);
-    });
   }
   c.restore();
 }

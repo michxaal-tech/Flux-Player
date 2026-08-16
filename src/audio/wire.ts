@@ -1,7 +1,7 @@
 // One-time wiring between the zustand store and the audio engine / element.
 import { engine } from "./engine";
 import { nextTrack } from "./transport";
-import { useStore } from "../store/useStore";
+import { getCurrentTrack, useStore } from "../store/useStore";
 
 let wired = false;
 
@@ -52,6 +52,25 @@ export function wireAudio(): void {
       useStore.setState({ playing: false, sleepEnd: null });
     }
   }, 1000);
+
+  // auto lyric lookup: when enabled, search once per track as it starts
+  // (delayed so duration metadata is loaded for match ranking)
+  const lyricAttempted = new Set<string>();
+  useStore.subscribe(
+    (s) => getCurrentTrack(s)?.id,
+    (id) => {
+      if (!id) return;
+      setTimeout(async () => {
+        const s = useStore.getState();
+        const tr = getCurrentTrack(s);
+        if (!s.lyricAuto || !tr || tr.id !== id || tr.lyrics || lyricAttempted.has(tr.id)) return;
+        if (!navigator.onLine) return;
+        lyricAttempted.add(tr.id);
+        const { fetchLyrics } = await import("../lyrics");
+        fetchLyrics(tr);
+      }, 1600);
+    }
+  );
 
   // background-audio keepalive: iOS/Safari can suspend or "interrupt" the
   // AudioContext when the tab is backgrounded or the screen locks — resume
