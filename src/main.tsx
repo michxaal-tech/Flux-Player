@@ -3,10 +3,14 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import { wireAudio } from "./audio/wire";
 import { startRenderLoop } from "./visualizer/engine";
+import { applyAccentTheme } from "./theme";
+import { useStore } from "./store/useStore";
 import "./styles.css";
 
 wireAudio();
 startRenderLoop();
+applyAccentTheme(useStore.getState().visCfg);
+useStore.subscribe((s) => s.visCfg, applyAccentTheme);
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

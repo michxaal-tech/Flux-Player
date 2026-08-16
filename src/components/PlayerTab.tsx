@@ -4,6 +4,7 @@ import { BG, BORDER, CYAN, LEVELS, MAG, MONO, TAGS } from "../constants";
 import { nextTrack, prevTrack, playAt, seek, togglePlay } from "../audio/transport";
 import { getCurrentTrack, getFavCount, getPlayingList, useStore } from "../store/useStore";
 import { canvasRefs } from "../visualizer/live";
+import { mix } from "../theme";
 import { fmt } from "../utils";
 import { PresetRow } from "./PresetRow";
 import { chip, Module, NextIcon, PauseIcon, playBtn, PlayIcon, PrevIcon, skipBtn, Toggle } from "./ui";
@@ -107,18 +108,18 @@ export function PlayerTab() {
                     onClick={() => toggleTag(track.id, tg)}
                     style={{
                       padding: "4px 10px", borderRadius: 999, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.1em", cursor: "pointer", flexShrink: 0,
-                      background: track.tags?.includes(tg) ? "rgba(83,233,255,0.18)" : "rgba(255,255,255,0.04)",
+                      background: track.tags?.includes(tg) ? mix(CYAN, 18) : "rgba(255,255,255,0.04)",
                       color: track.tags?.includes(tg) ? CYAN : "rgba(255,255,255,0.45)",
-                      border: track.tags?.includes(tg) ? `1px solid ${CYAN}88` : BORDER,
+                      border: track.tags?.includes(tg) ? `1px solid ${mix(CYAN, 53)}` : BORDER,
                     }}
                   >{tg}</button>
                 ))}
               </div>
               <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 6 }}>
                 {activePreset && activePreset !== "CLEAN" && (
-                  <span style={{ fontFamily: MONO, fontSize: 10, color: CYAN, border: `1px solid ${CYAN}55`, borderRadius: 6, padding: "2px 7px" }}>{activePreset}</span>
+                  <span style={{ fontFamily: MONO, fontSize: 10, color: CYAN, border: `1px solid ${mix(CYAN, 33)}`, borderRadius: 6, padding: "2px 7px" }}>{activePreset}</span>
                 )}
-                <button onClick={togglePinCurrent} style={{ fontFamily: MONO, fontSize: 10, cursor: "pointer", color: track.fxPin ? BG : MAG, background: track.fxPin ? MAG : "transparent", border: `1px solid ${MAG}66`, borderRadius: 6, padding: "2px 7px" }}>
+                <button onClick={togglePinCurrent} style={{ fontFamily: MONO, fontSize: 10, cursor: "pointer", color: track.fxPin ? BG : MAG, background: track.fxPin ? MAG : "transparent", border: `1px solid ${mix(MAG, 40)}`, borderRadius: 6, padding: "2px 7px" }}>
                   {track.fxPin ? "📌 PINNED" : "📌 PIN FX"}
                 </button>
                 <button onClick={() => setNoteOpen((x) => !x)} style={{ fontFamily: MONO, fontSize: 10, cursor: "pointer", color: track.note ? BG : "rgba(255,255,255,0.6)", background: track.note ? CYAN : "transparent", border: `1px solid rgba(255,255,255,0.25)`, borderRadius: 6, padding: "2px 7px" }}>

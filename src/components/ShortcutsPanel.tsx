@@ -1,4 +1,5 @@
 import { BORDER, CYAN, MONO } from "../constants";
+import { mix } from "../theme";
 import { SHORTCUTS } from "../hooks/useKeyboard";
 import { useStore } from "../store/useStore";
 import { chip } from "./ui";
@@ -21,7 +22,7 @@ export function ShortcutsPanel() {
         {SHORTCUTS.map((sc) => (
           <div key={sc.keys} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 2px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
             <span style={{ fontSize: 12.5, color: "rgba(255,255,255,0.8)" }}>{sc.does}</span>
-            <span style={{ fontFamily: MONO, fontSize: 11, color: CYAN, background: "rgba(83,233,255,0.08)", border: `1px solid ${CYAN}33`, borderRadius: 6, padding: "3px 8px" }}>{sc.keys}</span>
+            <span style={{ fontFamily: MONO, fontSize: 11, color: CYAN, background: mix(CYAN, 8), border: `1px solid ${mix(CYAN, 20)}`, borderRadius: 6, padding: "3px 8px" }}>{sc.keys}</span>
           </div>
         ))}
         <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 10 }}>Press ? anywhere to open this panel.</div>

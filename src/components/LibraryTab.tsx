@@ -4,6 +4,7 @@ import { BORDER, CARD, CYAN, MAG, MONO, TAGS } from "../constants";
 import { deletePlaylist, playAt, removeTrack } from "../audio/transport";
 import { exportTrack } from "../audio/exporter";
 import { getCurrentTrack, getFavCount, getViewEntries, getViewingPlId, useStore } from "../store/useStore";
+import { mix } from "../theme";
 import { chip } from "./ui";
 
 export function LibraryTab({ onLoadClick }: { onLoadClick: () => void }) {
@@ -121,7 +122,7 @@ export function LibraryTab({ onLoadClick }: { onLoadClick: () => void }) {
       </div>
 
       {exporting && (
-        <div style={{ padding: "9px 12px", marginBottom: 8, borderRadius: 10, border: `1px solid ${CYAN}44`, background: "rgba(83,233,255,0.07)", color: CYAN, fontSize: 12, fontFamily: MONO }}>
+        <div style={{ padding: "9px 12px", marginBottom: 8, borderRadius: 10, border: `1px solid ${mix(CYAN, 27)}`, background: mix(CYAN, 7), color: CYAN, fontSize: 12, fontFamily: MONO }}>
           ⏳ {exporting}
         </div>
       )}
@@ -157,8 +158,8 @@ export function LibraryTab({ onLoadClick }: { onLoadClick: () => void }) {
               onDragEnd={() => { setDragIdx(null); setDragOver(null); }}
               style={{
                 padding: "10px 12px", borderRadius: 10, fontSize: 13.5, display: "flex", gap: 9, alignItems: "center",
-                background: isPlaying ? "rgba(83,233,255,0.1)" : CARD,
-                border: isPlaying ? `1px solid rgba(83,233,255,0.5)` : BORDER,
+                background: isPlaying ? mix(CYAN, 10) : CARD,
+                border: isPlaying ? `1px solid ${mix(CYAN, 50)}` : BORDER,
                 opacity: dragIdx === idx ? 0.4 : 1,
                 cursor: canReorder ? "grab" : undefined,
               }}

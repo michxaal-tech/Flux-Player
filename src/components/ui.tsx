@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { BG, BORDER, CARD, CYAN, MAG, MONO } from "../constants";
+import { mix } from "../theme";
 
 export function Slider({
   label, value, min, max, step, format, onChange, color = CYAN,
@@ -58,7 +59,7 @@ export const chip = (active: boolean, color = CYAN): CSSProperties => ({
 
 export const bigBtn = (color = CYAN): CSSProperties => ({
   padding: "16px 10px", borderRadius: 12, fontSize: 13, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer",
-  background: "rgba(255,255,255,0.05)", color, border: `1px solid ${color}44`, textAlign: "center",
+  background: "rgba(255,255,255,0.05)", color, border: `1px solid ${mix(color, 27)}`, textAlign: "center",
 });
 
 // crisp SVG transport icons
@@ -99,5 +100,5 @@ export const playBtn = (size: number): CSSProperties => ({
   width: size, height: size, borderRadius: "50%", border: "none", cursor: "pointer",
   background: `linear-gradient(145deg, ${CYAN}, ${MAG})`,
   display: "flex", alignItems: "center", justifyContent: "center",
-  boxShadow: "0 0 32px rgba(83,233,255,0.45), inset 0 2px 6px rgba(255,255,255,0.35), inset 0 -3px 8px rgba(0,0,0,0.25)",
+  boxShadow: `0 0 32px ${mix(CYAN, 45)}, inset 0 2px 6px rgba(255,255,255,0.35), inset 0 -3px 8px rgba(0,0,0,0.25)`,
 });

@@ -3,6 +3,7 @@ import { BORDER, CARD, CYAN, MAG, MONO } from "../constants";
 import { brake, launch, stutterDown, stutterUp, tapCue } from "../audio/transport";
 import { useStore } from "../store/useStore";
 import { canvasRefs } from "../visualizer/live";
+import { mix } from "../theme";
 import { fmt } from "../utils";
 import { bigBtn, Module, Slider } from "./ui";
 
@@ -50,7 +51,7 @@ export function DJTab() {
                 onClick={() => tapCue(i)}
                 style={{
                   ...bigBtn(cq !== null ? MAG : CYAN), width: "100%",
-                  background: cq !== null ? "rgba(255,78,205,0.14)" : "rgba(255,255,255,0.05)",
+                  background: cq !== null ? mix(MAG, 14) : "rgba(255,255,255,0.05)",
                 }}
               >
                 {["A", "B", "C", "D"][i]}

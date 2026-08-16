@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
-import { BORDER, MAG, P_STYLES, PALETTES, VIS_THEMES } from "../constants";
+import { useEffect, useRef, useState } from "react";
+import { BG, BORDER, CYAN, MAG, P_STYLES, PALETTES, VIS_THEMES } from "../constants";
 import { nextTrack, prevTrack, togglePlay } from "../audio/transport";
 import { getCurrentTrack, useStore } from "../store/useStore";
+import { mix } from "../theme";
 import { canvasRefs } from "../visualizer/live";
 import { chip, NextIcon, PauseIcon, playBtn, PlayIcon, PrevIcon, skipBtn, Slider, Toggle } from "./ui";
 
@@ -15,6 +16,7 @@ export function VisualizerOverlay() {
   const setV = useStore((s) => s.setVisKey);
   const visChaos = useStore((s) => s.visChaos);
 
+  const [themeMenu, setThemeMenu] = useState(false);
   const visRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     canvasRefs.vis = visRef.current;
@@ -25,13 +27,47 @@ export function VisualizerOverlay() {
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "#05060A" }}>
-      <canvas ref={visRef} onClick={() => set({ visPanel: false })} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
+      <canvas
+        ref={visRef}
+        onClick={() => { set({ visPanel: false }); setThemeMenu(false); }}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+      />
 
       <div style={{ position: "absolute", top: 14, left: 16, right: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-        <div className="hscroll" style={{ display: "flex", gap: 6, overflowX: "auto" }}>
-          {VIS_THEMES.map((v) => (
-            <button key={v} onClick={() => set({ visTheme: v })} style={chip(visTheme === v)}>{v}</button>
-          ))}
+        {/* compact theme picker: one chip + fluid dropdown, no chip clutter */}
+        <div style={{ position: "relative" }}>
+          <button
+            onClick={() => setThemeMenu((x) => !x)}
+            style={{ ...chip(themeMenu), display: "flex", alignItems: "center", gap: 9 }}
+          >
+            ◉ {visTheme}
+            <span style={{ display: "inline-block", fontSize: 9, transform: themeMenu ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}>▼</span>
+          </button>
+          {themeMenu && (
+            <div
+              className="dropin"
+              style={{
+                position: "absolute", top: 46, left: 0, width: 200, maxHeight: "62vh", overflowY: "auto",
+                background: "rgba(10,12,18,0.95)", border: BORDER, borderRadius: 14, padding: 6,
+                backdropFilter: "blur(20px)", zIndex: 6, boxShadow: "0 14px 40px rgba(0,0,0,0.6)",
+              }}
+            >
+              {VIS_THEMES.map((v) => (
+                <div
+                  key={v}
+                  onClick={() => { set({ visTheme: v }); setThemeMenu(false); }}
+                  style={{
+                    padding: "9px 12px", borderRadius: 9, fontSize: 12, fontWeight: 700, letterSpacing: "0.06em",
+                    cursor: "pointer", marginBottom: 1,
+                    color: visTheme === v ? BG : "rgba(255,255,255,0.8)",
+                    background: visTheme === v ? CYAN : "transparent",
+                  }}
+                >
+                  {v}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
           <button onClick={visChaos} style={chip(false, MAG)}>🎲</button>
@@ -103,7 +139,7 @@ export function VisualizerOverlay() {
 
       <div style={{ position: "absolute", bottom: 22, left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, pointerEvents: "none" }}>
         {visTheme !== "CLOCK" && (
-          <div style={{ fontSize: "clamp(15px, 3.6vw, 22px)", fontWeight: 700, maxWidth: "84vw", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textShadow: "0 0 24px rgba(83,233,255,0.6)", color: "#fff" }}>
+          <div style={{ fontSize: "clamp(15px, 3.6vw, 22px)", fontWeight: 700, maxWidth: "84vw", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textShadow: `0 0 24px ${mix(CYAN, 60)}`, color: "#fff" }}>
             {track ? track.name : ""}
           </div>
         )}

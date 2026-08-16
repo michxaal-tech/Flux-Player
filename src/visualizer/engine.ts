@@ -2,9 +2,10 @@
 // background edge meters, disc spin, waveform seekbar, and the fullscreen
 // visual engine (theme dispatch + particle overlay + mirror/flash/vignette).
 import { engine } from "../audio/engine";
-import { PALETTES, VIS_THEMES, CYAN } from "../constants";
+import { PALETTES, VIS_THEMES } from "../constants";
 import { getCurrentTrack, useStore } from "../store/useStore";
 import { shallow } from "zustand/shallow";
+import { ac1, ac2 } from "../theme";
 import { canvasRefs, live } from "./live";
 import { themes } from "./themes";
 import type { ThemeCtx } from "./themeTypes";
@@ -128,8 +129,8 @@ export function startRenderLoop(): void {
       c.fillStyle = "rgba(8,9,13,0.3)";
       c.fillRect(0, 0, w, h);
       const g = c.createRadialGradient(w / 2, h * 0.25, 0, w / 2, h * 0.25, h * (0.5 + bass * 0.3));
-      g.addColorStop(0, `rgba(83,233,255,${0.04 + bass * 0.1})`);
-      g.addColorStop(0.6, `rgba(255,78,205,${0.02 + bass * 0.05})`);
+      g.addColorStop(0, ac1(0.04 + bass * 0.1));
+      g.addColorStop(0.6, ac2(0.02 + bass * 0.05));
       g.addColorStop(1, "transparent");
       c.fillStyle = g;
       c.fillRect(0, 0, w, h);
@@ -138,9 +139,9 @@ export function startRenderLoop(): void {
         const v = liveAudio ? freq[i * 9] / 255 : 0.08 + 0.07 * Math.sin(t * 0.02 + i * 0.6);
         const bh2 = h / SB;
         const bw2 = 3 + v * 30;
-        c.fillStyle = `rgba(83,233,255,${0.06 + v * 0.3})`;
+        c.fillStyle = ac1(0.06 + v * 0.3);
         c.fillRect(0, i * bh2 + 2, bw2, bh2 - 4);
-        c.fillStyle = `rgba(255,78,205,${0.06 + v * 0.3})`;
+        c.fillStyle = ac2(0.06 + v * 0.3);
         c.fillRect(w - bw2, i * bh2 + 2, bw2, bh2 - 4);
       }
     }
@@ -149,7 +150,7 @@ export function startRenderLoop(): void {
     if (canvasRefs.disc) {
       if (L.playing) L.rot += 0.7 * L.speed;
       canvasRefs.disc.style.transform = `rotate(${L.rot}deg) scale(${1 + bass * 0.05})`;
-      canvasRefs.disc.style.boxShadow = `0 0 ${30 + bass * 70}px rgba(83,233,255,${0.15 + bass * 0.4})`;
+      canvasRefs.disc.style.boxShadow = `0 0 ${30 + bass * 70}px ${ac1(0.15 + bass * 0.4)}`;
     }
 
     // ── decoded waveform seekbar ──
@@ -164,16 +165,16 @@ export function startRenderLoop(): void {
       for (let i = 0; i < N; i++) {
         const v = pk ? pk[i] : 0.25 + 0.2 * Math.sin(i * 0.4 + t * 0.03);
         const bh = Math.max(2, v * h * 0.92);
-        c.fillStyle = i / N <= L.prog ? CYAN : "rgba(255,255,255,0.16)";
+        c.fillStyle = i / N <= L.prog ? ac1() : "rgba(255,255,255,0.16)";
         c.fillRect(i * bw + 0.5, (h - bh) / 2, Math.max(1, bw - 1.5), bh);
       }
       const { loopA: a, loopB: b, dur } = L;
       if (a !== null && dur > 0) {
-        c.fillStyle = "rgba(255,78,205,0.9)";
+        c.fillStyle = ac2(0.9);
         c.fillRect((a / dur) * w - 1, 0, 2, h);
         if (b !== null) {
           c.fillRect((b / dur) * w - 1, 0, 2, h);
-          c.fillStyle = "rgba(255,78,205,0.12)";
+          c.fillStyle = ac2(0.12);
           c.fillRect((a / dur) * w, 0, ((b - a) / dur) * w, h);
         }
       }

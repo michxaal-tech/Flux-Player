@@ -102,10 +102,12 @@ await step("DJ tab renders cues + performance fx", async () => {
   await page.waitForSelector("text=LIVE BPM");
 });
 
-await step("visualizer opens, themes switch, tune panel works", async () => {
+await step("visualizer opens, theme dropdown works, tune panel works", async () => {
   await page.click("button:has-text('◉ VISUALS')");
-  await page.waitForSelector("text=KALEIDO");
-  await page.click("button:has-text('TUNNEL')");
+  await page.click("button:has-text('◉ RING')"); // theme picker dropdown
+  await page.waitForSelector("div:text-is('KALEIDO')");
+  await page.click("div:text-is('TUNNEL')");
+  await page.waitForSelector("button:has-text('◉ TUNNEL')");
   await page.click("button:has-text('⚙ TUNE')");
   await page.waitForSelector("text=COLOR PALETTE");
   await page.click("button:has-text('VAPOR')");

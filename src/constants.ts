@@ -1,7 +1,9 @@
 import type { FxState, Preset, VisCfg } from "./types";
 
-export const CYAN = "#53E9FF";
-export const MAG = "#FF4ECD";
+// Accent colors are CSS vars set from the visualizer palette (see theme.ts),
+// so picking a palette re-themes the entire app. Defaults live in styles.css.
+export const CYAN = "var(--ac1)";
+export const MAG = "var(--ac2)";
 export const BG = "#08090D";
 export const CARD = "rgba(255,255,255,0.04)";
 export const BORDER = "1px solid rgba(255,255,255,0.09)";
@@ -43,7 +45,7 @@ export const PRESETS: Preset[] = [
 export const VIS_THEMES = [
   "RING", "KALEIDO", "HELIX", "WAVES", "LASERS", "GRID", "ORB", "RIPPLES", "SPIRAL", "FIREFLIES",
   "CITY", "VORTEX", "SCOPE", "AURORA", "DOTGRID", "BARS", "NEBULA", "TUNNEL", "STARFIELD",
-  "TIDE", "NOVA", "HALO", "COMETS", "CLOCK",
+  "TIDE", "NOVA", "HALO", "COMETS", "FIREWORKS", "LANTERNS", "JELLY", "CRYSTAL", "BLOOM", "CLOCK",
 ];
 
 export interface Palette {

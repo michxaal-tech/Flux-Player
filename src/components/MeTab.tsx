@@ -4,6 +4,7 @@ import { deleteTake, startRec, stopRec } from "../audio/recorder";
 import { exportTrack } from "../audio/exporter";
 import { getUrl } from "../store/blobStore";
 import { getCurrentTrack, getFavCount, useStore } from "../store/useStore";
+import { mix } from "../theme";
 import type { Take } from "../types";
 import { fmt } from "../utils";
 import { bigBtn, chip, Module, Toggle } from "./ui";
@@ -22,7 +23,7 @@ function TakeRow({ take }: { take: Take }) {
         download={take.name}
         style={{
           flex: 1, display: "flex", justifyContent: "space-between", padding: "10px 12px", borderRadius: 10,
-          background: "rgba(83,233,255,0.08)", border: `1px solid ${CYAN}44`, color: CYAN,
+          background: mix(CYAN, 8), border: `1px solid ${mix(CYAN, 27)}`, color: CYAN,
           textDecoration: "none", fontSize: 12.5, fontWeight: 700, opacity: url ? 1 : 0.5,
         }}
       >
@@ -62,7 +63,7 @@ export function MeTab() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 6, maxWidth: 640, margin: "0 auto" }}>
-      <div style={{ background: `linear-gradient(135deg, rgba(83,233,255,0.12), rgba(255,78,205,0.12))`, border: BORDER, borderRadius: 16, padding: 16 }}>
+      <div style={{ background: `linear-gradient(135deg, ${mix(CYAN, 12)}, ${mix(MAG, 12)})`, border: BORDER, borderRadius: 16, padding: 16 }}>
         <div style={{ fontSize: 10, letterSpacing: "0.24em", color: "rgba(255,255,255,0.55)" }}>{greeting} · LEVEL {lvlIdx + 1}</div>
         <div style={{ fontSize: 22, fontWeight: 700, margin: "4px 0 10px" }}>{LEVELS[lvlIdx].name}</div>
         <div style={{ height: 8, borderRadius: 4, background: "rgba(255,255,255,0.1)", overflow: "hidden" }}>
@@ -94,7 +95,7 @@ export function MeTab() {
             : "Play a track to export it with FX baked in."}
         </div>
         {exporting ? (
-          <div style={{ padding: "12px", borderRadius: 10, border: `1px solid ${CYAN}44`, background: "rgba(83,233,255,0.07)", color: CYAN, fontSize: 12, fontFamily: MONO, textAlign: "center" }}>
+          <div style={{ padding: "12px", borderRadius: 10, border: `1px solid ${mix(CYAN, 27)}`, background: mix(CYAN, 7), color: CYAN, fontSize: 12, fontFamily: MONO, textAlign: "center" }}>
             ⏳ {exporting}
           </div>
         ) : (

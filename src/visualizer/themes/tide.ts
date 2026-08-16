@@ -1,13 +1,22 @@
 import type { ThemeDraw } from "../themeTypes";
 
-// Glowing ocean under a moon. Two swells roll in from the left and right and
-// crash together in the center — on the crash (or a strong beat) the sea
-// flashes and throws up a burst of luminous spray. Majestic on purpose.
+interface Swell {
+  /** 0 at the edge → 1 at center-screen impact */
+  p: number;
+  amp: number;
+  side: -1 | 1;
+}
+
+// Glowing ocean under a moon. Swells continuously roll in from both edges at
+// different phases — spawned by the surf itself and extra-large ones by the
+// beat — and each crashes center-screen with a flash and luminous spray.
+// There is no global reset, so the sea never snaps back or loops.
 export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg, bassV, I, TK, C1, C2, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.tide ??= {
-    travel: 0,
-    flash: 0,
+    swells: [] as Swell[],
     foam: [] as { x: number; y: number; vx: number; vy: number; a: number; sz: number }[],
+    flash: 0,
+    spawnT: 0,
   });
 
   // painted scene, not additive — "lighter" would blow the sea out to white
@@ -33,41 +42,78 @@ export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg
     c.fillRect(sx, sy, 1.6, 1.6);
   }
 
-  // swells advance from both edges toward the center
-  S.travel += (0.0035 + bassV * 0.009) * cfg.speed;
-  let crash = false;
-  if (S.travel >= 1 || (beat && S.travel > 0.55)) {
-    crash = true;
-    S.flash = 1;
-    S.travel = 0;
+  // keep swells coming: a fresh pair on every beat, ambient pairs in between
+  const spawnPair = (amp: number) => {
+    if (S.swells.length >= 8) return;
+    S.swells.push({ p: 0, amp, side: -1 }, { p: 0, amp: amp * (0.8 + Math.random() * 0.4), side: 1 });
+  };
+  S.spawnT--;
+  if (beat) {
+    spawnPair(0.8 + bassV * 0.6);
+    S.spawnT = 45;
+  } else if (S.spawnT <= 0) {
+    spawnPair(0.45 + Math.random() * 0.2);
+    S.spawnT = 80;
+  }
+
+  const crashY = h * 0.66;
+  for (let i = S.swells.length - 1; i >= 0; i--) {
+    const sw = S.swells[i];
+    sw.p += (0.007 + bassV * 0.005) * cfg.speed;
+    if (sw.p >= 1) {
+      // impact: spray + flash proportional to the swell's size
+      S.flash = Math.max(S.flash, 0.5 + sw.amp * 0.5);
+      const count = Math.floor(20 + sw.amp * 40);
+      for (let k = 0; k < count; k++) {
+        const a2 = -Math.PI / 2 + (Math.random() - 0.5) * 1.9;
+        const sp = h * (0.003 + Math.random() * 0.01) * (0.6 + sw.amp * 0.6);
+        S.foam.push({
+          x: w / 2 + (Math.random() - 0.5) * w * 0.08,
+          y: crashY,
+          vx: Math.cos(a2) * sp + sw.side * -h * 0.001,
+          vy: Math.sin(a2) * sp,
+          a: 1,
+          sz: 1 + Math.random() * 2.4,
+        });
+      }
+      S.swells.splice(i, 1);
+    }
   }
   S.flash *= 0.9;
 
-  const crestSigma = w * 0.06;
+  // crest x for a swell: edge → just past center, easing in from offscreen
+  const crestX = (sw: Swell) =>
+    sw.side === -1 ? -w * 0.06 + sw.p * w * 0.56 : w * 1.06 - sw.p * w * 0.56;
+
+  const crestSigma = w * 0.055;
+  const surfaceY = (x: number, f: number, baseY: number, amp: number) => {
+    let y =
+      baseY +
+      Math.sin(x * 0.01 + vt * 0.02 * (1 + f)) * amp +
+      Math.sin(x * 0.023 - vt * 0.013 + f * 4) * amp * 0.6;
+    const fv = liveAudio ? freq[Math.floor((x / w) * 160)] / 255 : 0.15;
+    y -= fv * h * 0.02 * I;
+    for (const sw of S.swells) {
+      // ramp the bump in as it enters so it never pops into existence
+      const ramp = Math.min(1, sw.p * 6);
+      const d = x - crestX(sw);
+      const bump = h * (0.04 + f * 0.09) * sw.amp * (0.6 + bassV + beatE * 0.4) * ramp;
+      y -= bump * Math.exp(-(d * d) / (2 * crestSigma * crestSigma));
+    }
+    return y;
+  };
+
   const layers = 3;
   for (let ly = 0; ly < layers; ly++) {
     const f = ly / (layers - 1); // 0 back … 1 front
     const baseY = h * (0.58 + f * 0.16);
     const amp = h * (0.018 + f * 0.028) * (1 + bassV * 1.2);
-    const swellH = h * (0.05 + f * 0.1) * (0.35 + S.travel) * (0.6 + bassV + beatE * 0.5);
-    const crestX = -w * 0.05 + w * 0.55 * S.travel; // left crest; right is mirrored
     c.beginPath();
     c.moveTo(0, h);
-    for (let x = 0; x <= w; x += 8) {
-      let y =
-        baseY +
-        Math.sin(x * 0.01 + vt * 0.02 * (1 + f)) * amp +
-        Math.sin(x * 0.023 - vt * 0.013 + ly * 2) * amp * 0.6;
-      const fv = liveAudio ? freq[Math.floor((x / w) * 160)] / 255 : 0.15;
-      y -= fv * h * 0.02 * I;
-      const dl = x - crestX, dr = x - (w - crestX);
-      y -= swellH * Math.exp(-(dl * dl) / (2 * crestSigma * crestSigma));
-      y -= swellH * Math.exp(-(dr * dr) / (2 * crestSigma * crestSigma));
-      c.lineTo(x, y);
-    }
+    for (let x = 0; x <= w; x += 8) c.lineTo(x, surfaceY(x, f, baseY, amp));
     c.lineTo(w, h);
     c.closePath();
-    const grad = c.createLinearGradient(0, baseY - swellH, 0, h);
+    const grad = c.createLinearGradient(0, baseY - h * 0.12, 0, h);
     grad.addColorStop(0, CMix(f, 0.55 + bassV * 0.15 + S.flash * 0.25, 46 + S.flash * 14));
     grad.addColorStop(1, CMix(1 - f, 0.8, 14));
     c.fillStyle = grad;
@@ -75,15 +121,7 @@ export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg
     // glowing crest line
     c.beginPath();
     for (let x = 0; x <= w; x += 8) {
-      let y =
-        baseY +
-        Math.sin(x * 0.01 + vt * 0.02 * (1 + f)) * amp +
-        Math.sin(x * 0.023 - vt * 0.013 + ly * 2) * amp * 0.6;
-      const fv = liveAudio ? freq[Math.floor((x / w) * 160)] / 255 : 0.15;
-      y -= fv * h * 0.02 * I;
-      const dl = x - crestX, dr = x - (w - crestX);
-      y -= swellH * Math.exp(-(dl * dl) / (2 * crestSigma * crestSigma));
-      y -= swellH * Math.exp(-(dr * dr) / (2 * crestSigma * crestSigma));
+      const y = surfaceY(x, f, baseY, amp);
       x === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
     }
     c.strokeStyle = CMix(f, 0.45 + beatE * 0.35 + S.flash * 0.4, 66 + S.flash * 18);
@@ -93,23 +131,8 @@ export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg
   }
   noGlow();
 
-  // the crash: burst of luminous spray + center flash (additive again)
+  // spray + impact flash (additive again)
   c.globalCompositeOperation = "lighter";
-  const crashY = h * 0.66;
-  if (crash) {
-    for (let k = 0; k < 60; k++) {
-      const a2 = -Math.PI / 2 + (Math.random() - 0.5) * 1.9;
-      const sp = h * (0.004 + Math.random() * 0.011);
-      S.foam.push({
-        x: w / 2 + (Math.random() - 0.5) * w * 0.08,
-        y: crashY,
-        vx: Math.cos(a2) * sp,
-        vy: Math.sin(a2) * sp,
-        a: 1,
-        sz: 1 + Math.random() * 2.4,
-      });
-    }
-  }
   if (S.flash > 0.03) {
     const fg = c.createRadialGradient(w / 2, crashY, 0, w / 2, crashY, h * 0.3 * (1.3 - S.flash));
     fg.addColorStop(0, `rgba(255,255,255,${S.flash * 0.5})`);
