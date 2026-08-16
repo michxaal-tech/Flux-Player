@@ -73,7 +73,7 @@ export const BLOOM: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, beat
   // glowing pistil
   const pr = R * (0.035 + bassV * 0.03 + beatE * 0.03);
   const pg = c.createRadialGradient(cx, cy, 0, cx, cy, pr * 2.4);
-  pg.addColorStop(0, `rgba(255,255,255,${0.65 + beatE * 0.35})`);
+  pg.addColorStop(0, C1(0.65 + beatE * 0.35, 90));
   pg.addColorStop(0.4, C1(0.5, 74));
   pg.addColorStop(1, "transparent");
   c.fillStyle = pg;

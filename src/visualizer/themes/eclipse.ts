@@ -35,7 +35,7 @@ export const ECLIPSE: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, be
 
   // inner corona glow ring
   const cg = c.createRadialGradient(cx, cy, discR * 0.8, cx, cy, discR * (1.9 + bassV * 0.6 + beatE * 0.5));
-  cg.addColorStop(0, `rgba(255,255,255,${0.5 + beatE * 0.4})`);
+  cg.addColorStop(0, C1(0.5 + beatE * 0.4, 90));
   cg.addColorStop(0.35, C1(0.35 + midV * 0.3, 70));
   cg.addColorStop(1, "transparent");
   c.fillStyle = cg;
@@ -73,7 +73,7 @@ export const ECLIPSE: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, be
   c.arc(cx, cy, discR, 0, Math.PI * 2);
   c.fill();
   c.globalCompositeOperation = "lighter";
-  c.strokeStyle = `rgba(255,255,255,${0.75 + beatE * 0.25})`;
+  c.strokeStyle = C1(0.75 + beatE * 0.25, 92);
   c.lineWidth = (1.4 + beatE * 1.6) * TK;
   glow(26 + beatE * 30, C1());
   c.beginPath();

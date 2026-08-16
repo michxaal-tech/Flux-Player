@@ -49,7 +49,7 @@ export const COMETS: ThemeDraw = ({ c, w, h, t, beat, beatE, cfg, bassV, trebV, 
       c.stroke();
     }
     // head
-    c.fillStyle = `hsla(0, 0%, 100%, ${m.a})`;
+    c.fillStyle = CMix(m.hue, m.a, 88);
     glow(18 * (1 + beatE), CMix(m.hue));
     c.beginPath();
     c.arc(m.x, m.y, m.sz * (1 + beatE * 0.7) * TK, 0, Math.PI * 2);

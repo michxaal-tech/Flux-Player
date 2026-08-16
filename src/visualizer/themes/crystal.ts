@@ -24,7 +24,7 @@ export const CRYSTAL: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, be
   // radiant heart
   const heartR = R * (0.05 + bassV * 0.035 + beatE * 0.04);
   const hg = c.createRadialGradient(cx, cy, 0, cx, cy, heartR * 2.6);
-  hg.addColorStop(0, `rgba(255,255,255,${0.7 + beatE * 0.3})`);
+  hg.addColorStop(0, C1(0.7 + beatE * 0.3, 90));
   hg.addColorStop(0.35, C1(0.5 + beatE * 0.3, 72));
   hg.addColorStop(1, "transparent");
   c.fillStyle = hg;
@@ -56,7 +56,7 @@ export const CRYSTAL: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, be
     const inner = 0.25 + fv * 0.5 + beatE * 0.6;
     const grad = c.createLinearGradient(0, -s2, 0, s2);
     grad.addColorStop(0, CMix(sh.band / 190, inner * 0.7, 78));
-    grad.addColorStop(0.5, `hsla(0, 0%, 100%, ${inner * 0.5})`);
+    grad.addColorStop(0.5, CMix(sh.band / 190, inner * 0.5, 88));
     grad.addColorStop(1, CMix(sh.band / 190, inner * 0.4, 60));
     c.fillStyle = grad;
     c.strokeStyle = CMix(sh.band / 190, 0.5 + fv * 0.4 + beatE * 0.3, 72);
@@ -71,7 +71,7 @@ export const CRYSTAL: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, be
     c.fill();
     c.stroke();
     // internal facet line
-    c.strokeStyle = `hsla(0, 0%, 100%, ${inner * 0.6})`;
+    c.strokeStyle = CMix(sh.band / 190, inner * 0.6, 88);
     c.lineWidth = 0.8 * TK;
     c.beginPath();
     c.moveTo(0, -s2);
@@ -90,7 +90,7 @@ export const CRYSTAL: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, be
     g.a *= 0.88;
     if (g.a < 0.05) { S.glints.splice(i, 1); continue; }
     const gs = g.sz * g.a * TK;
-    c.strokeStyle = `hsla(0, 0%, 100%, ${g.a})`;
+    c.strokeStyle = C1(g.a, 90);
     c.lineWidth = 1.1 * TK;
     glow(16, C1());
     c.beginPath();

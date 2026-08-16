@@ -284,7 +284,7 @@ export function startRenderLoop(): void {
         if (p.x < -0.02) p.x = 1.02;
         if (p.x > 1.02) p.x = -0.02;
         const tw = st === "EMBERS" ? 0.3 + Math.abs(Math.sin(vt * 0.09 + p.ph)) * 0.7 : 0.4 + Math.sin(vt * 0.05 + p.ph) * 0.3;
-        c.fillStyle = CMix((p.ph % 6.28) / 6.28, (0.25 + bassV * 0.5 + L.beatE * 0.3) * tw, st === "EMBERS" ? 62 : 75);
+        c.fillStyle = CMix((p.ph % 6.28) / 6.28, (0.28 + bassV * 0.5 + L.beatE * 0.3) * tw, st === "EMBERS" ? 60 : 68);
         c.beginPath();
         c.arc(p.x * w, p.y * h, p.sz * (1 + bassV * 1.6 + L.beatE * 0.8) * (st === "SNOW" ? 1.3 : 1) * TK, 0, Math.PI * 2);
         c.fill();

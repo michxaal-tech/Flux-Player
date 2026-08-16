@@ -77,7 +77,14 @@ export const NOISE_FILLS: Record<"crackle" | "rain" | "fire" | "wind", NoiseFill
 };
 
 class AudioEngine {
-  audio: HTMLAudioElement = new Audio();
+  audio: HTMLAudioElement = (() => {
+    const el = new Audio();
+    el.preload = "auto";
+    // required for iOS to keep playing inline / in the background
+    el.setAttribute("playsinline", "");
+    (el as any).playsInline = true;
+    return el;
+  })();
   nodes: GraphNodes | null = null;
   /** Set while a tape brake / spin-up animation owns el.playbackRate. */
   brakeActive = false;

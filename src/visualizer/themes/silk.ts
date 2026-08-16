@@ -67,7 +67,7 @@ export const SILK: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg
     for (const sg of S.surges) {
       if (sg.ribbon !== rb || sg.x < 0 || sg.x > 1) continue;
       const bx = sg.x * w;
-      c.fillStyle = `hsla(0, 0%, 100%, 0.85)`;
+      c.fillStyle = CMix(f, 0.85, 90);
       glow(22, CMix(f));
       c.beginPath();
       c.arc(bx, edgeY(bx), (3 + beatE * 3) * TK, 0, Math.PI * 2);

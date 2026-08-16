@@ -70,7 +70,7 @@ export const JELLY: ThemeDraw = ({ c, w, h, vt, beat, beatE, cfg, bassV, midV, t
 
     // bell
     const bg2 = c.createRadialGradient(jx, jy - ry * 0.2, 0, jx, jy, ry * 1.6);
-    bg2.addColorStop(0, `hsla(0, 0%, 100%, ${bright * 0.9})`);
+    bg2.addColorStop(0, CMix(j.hue, bright * 0.9, 88));
     bg2.addColorStop(0.4, CMix(j.hue, bright, 70));
     bg2.addColorStop(1, CMix(j.hue, bright * 0.15, 55));
     c.fillStyle = bg2;

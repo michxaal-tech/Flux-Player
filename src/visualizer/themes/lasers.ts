@@ -29,7 +29,7 @@ export const LASERS: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, bea
   noGlow();
   const coreR = R * (0.08 + bassV * 0.08 + beatE * 0.1);
   const g = c.createRadialGradient(cx, cy, 0, cx, cy, coreR);
-  g.addColorStop(0, `rgba(255,255,255,${0.5 + bassV * 0.5})`);
+  g.addColorStop(0, C1(0.5 + bassV * 0.5, 90));
   g.addColorStop(0.4, C1(0.4 + beatE * 0.5));
   g.addColorStop(1, "transparent");
   c.fillStyle = g;

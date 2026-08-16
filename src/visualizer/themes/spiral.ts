@@ -47,7 +47,7 @@ export const SPIRAL: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, beat, beatE, 
   // bright galactic core that detonates with the beat
   const coreR = R * (0.03 + bassV * 0.04 + beatE * 0.06);
   const g = c.createRadialGradient(cx, cy, 0, cx, cy, coreR * 2.2);
-  g.addColorStop(0, `rgba(255,255,255,${0.2 + beatE * 0.4})`);
+  g.addColorStop(0, CMix(0.5, 0.2 + beatE * 0.4, 90));
   g.addColorStop(0.4, CMix(0.5, 0.25 + beatE * 0.35, 70));
   g.addColorStop(1, "transparent");
   c.fillStyle = g;

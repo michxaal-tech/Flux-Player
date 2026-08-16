@@ -27,7 +27,7 @@ export const NOVA: ThemeDraw = ({ c, cx, cy, R, treb, beat, beatE, bass, bassV, 
     const ringR = R * 0.5 * (1 - S.flash) + R * 0.05;
     c.beginPath();
     c.arc(cx, cy, ringR, 0, Math.PI * 2);
-    c.strokeStyle = `hsla(0, 0%, 100%, ${S.flash * 0.9})`;
+    c.strokeStyle = C2(S.flash * 0.9, 86);
     c.lineWidth = (2 + S.flash * 8) * TK;
     glow(30, C1());
     c.stroke();
@@ -68,7 +68,7 @@ export const NOVA: ThemeDraw = ({ c, cx, cy, R, treb, beat, beatE, bass, bassV, 
   const jy = (Math.random() - 0.5) * treb * 14;
   const coreR = R * (0.03 + S.charge * 0.06 + bassV * 0.02) * (1 + S.flash * 0.5);
   const g = c.createRadialGradient(cx + jx, cy + jy, 0, cx + jx, cy + jy, coreR * 2.2);
-  g.addColorStop(0, `rgba(255,255,255,${0.85 + S.flash * 0.15})`);
+  g.addColorStop(0, C1(0.85 + S.flash * 0.15, 92));
   g.addColorStop(0.18, C1(0.6 + S.charge * 0.3, 70));
   g.addColorStop(0.55, C2(0.22, 58));
   g.addColorStop(1, "transparent");

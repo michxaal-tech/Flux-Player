@@ -23,7 +23,7 @@ export const AURORA: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beatE, bassV, 
     for (let i = 0; i < 20; i++) {
       const sx = ((i * 977) % w) + Math.sin(vt * 0.02 + i) * 4;
       const sy = ((i * 613) % Math.floor(h * 0.35)) + 10;
-      c.fillStyle = `rgba(255,255,255,${beatE * (0.3 + ((i * 7) % 10) / 14)})`;
+      c.fillStyle = CMix((i % 4) / 4, beatE * (0.3 + ((i * 7) % 10) / 14), 88);
       c.fillRect(sx, sy, 2, 2);
     }
   }

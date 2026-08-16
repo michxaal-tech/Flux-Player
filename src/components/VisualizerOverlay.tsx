@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { BG, BORDER, CYAN, MAG, P_STYLES, PALETTES, VIS_THEMES } from "../constants";
 import { nextTrack, prevTrack, togglePlay } from "../audio/transport";
 import { getCurrentTrack, useStore } from "../store/useStore";
@@ -18,6 +19,7 @@ export function VisualizerOverlay() {
 
   const [themeMenu, setThemeMenu] = useState(false);
   const visRef = useRef<HTMLCanvasElement>(null);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => {
     canvasRefs.vis = visRef.current;
     return () => {
@@ -25,13 +27,40 @@ export function VisualizerOverlay() {
     };
   }, []);
 
+  const stepTheme = (dir: 1 | -1) => {
+    const i = VIS_THEMES.indexOf(visTheme);
+    set({ visTheme: VIS_THEMES[(i + dir + VIS_THEMES.length) % VIS_THEMES.length] });
+  };
+
+  const arrowStyle = (side: "left" | "right"): CSSProperties => ({
+    position: "absolute", [side]: 10, top: "50%", transform: "translateY(-50%)",
+    width: 38, height: 72, borderRadius: 12, cursor: "pointer", zIndex: 4,
+    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
+    color: "rgba(255,255,255,0.35)", fontSize: 26, lineHeight: "72px", textAlign: "center",
+    backdropFilter: "blur(4px)", padding: 0, userSelect: "none",
+  });
+
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "#05060A" }}>
       <canvas
         ref={visRef}
         onClick={() => { set({ visPanel: false }); setThemeMenu(false); }}
-        style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+        onTouchStart={(e) => { touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }}
+        onTouchEnd={(e) => {
+          const s0 = touchStart.current;
+          touchStart.current = null;
+          if (!s0) return;
+          const dx = e.changedTouches[0].clientX - s0.x;
+          const dy = e.changedTouches[0].clientY - s0.y;
+          // horizontal swipe switches theme (swipe left → next)
+          if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 2) stepTheme(dx < 0 ? 1 : -1);
+        }}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "pan-y" }}
       />
+
+      {/* translucent prev/next theme arrows */}
+      <button onClick={() => stepTheme(-1)} style={arrowStyle("left")} aria-label="Previous theme">‹</button>
+      <button onClick={() => stepTheme(1)} style={arrowStyle("right")} aria-label="Next theme">›</button>
 
       <div style={{ position: "absolute", top: 14, left: 16, right: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
         {/* compact theme picker: one chip + fluid dropdown, no chip clutter */}

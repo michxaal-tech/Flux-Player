@@ -42,7 +42,7 @@ export const LIQUID: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, bea
     // specular highlight snapping toward the beat
     const hx = bx - rad * 0.45, hy = by - rad * 0.5;
     const hg = c.createRadialGradient(hx, hy, 0, hx, hy, rad * (0.32 + b.kick * 0.2));
-    hg.addColorStop(0, `rgba(255,255,255,${0.14 + b.kick * 0.35 + midV * 0.1})`);
+    hg.addColorStop(0, C1(0.14 + b.kick * 0.35 + midV * 0.1, 90));
     hg.addColorStop(1, "transparent");
     c.fillStyle = hg;
     c.beginPath();

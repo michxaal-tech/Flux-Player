@@ -82,7 +82,7 @@ export const LANTERNS: ThemeDraw = ({ c, w, h, vt, beat, beatE, cfg, bassV, midV
 
     // paper body (teardrop)
     const bg2 = c.createRadialGradient(lx, ly + lh * 0.1, 0, lx, ly, lh);
-    bg2.addColorStop(0, `hsla(0, 0%, 100%, ${bright})`);
+    bg2.addColorStop(0, CMix(ln.hue, bright, 90));
     bg2.addColorStop(0.45, CMix(ln.hue, bright, 72));
     bg2.addColorStop(1, CMix(ln.hue, bright * 0.55, 55));
     c.fillStyle = bg2;

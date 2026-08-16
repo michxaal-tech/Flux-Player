@@ -36,7 +36,7 @@ export const FIREWORKS: ThemeDraw = ({ c, w, h, t, vt, beat, beatE, bassV, trebV
         x: r.x + (Math.random() - 0.5) * 3, y: r.y, vx: (Math.random() - 0.5) * 0.4,
         vy: h * 0.001, a: 0.5, hue: r.hue, tw: Math.random() * 9, sz: 0.9, white: true,
       });
-    c.fillStyle = `hsla(0, 0%, 100%, 0.95)`;
+    c.fillStyle = CMix(r.hue, 0.95, 88);
     glow(12, CMix(r.hue));
     c.beginPath();
     c.arc(r.x, r.y, 2.2 * TK, 0, Math.PI * 2);
@@ -69,7 +69,7 @@ export const FIREWORKS: ThemeDraw = ({ c, w, h, t, vt, beat, beatE, bassV, trebV
     if (s2.a < 0.03 || s2.y > h * 1.05) { S.sparks.splice(i, 1); continue; }
     const twinkle = 0.55 + 0.45 * Math.sin(vt * 0.3 + s2.tw);
     c.fillStyle = s2.white
-      ? `hsla(0, 0%, 100%, ${s2.a * twinkle})`
+      ? CMix(s2.hue, s2.a * twinkle, 90)
       : CMix(s2.hue, s2.a * twinkle, 68 + beatE * 8);
     glow(s2.sz > 6 ? 40 : 10, CMix(s2.hue));
     c.beginPath();
@@ -89,7 +89,7 @@ export const FIREWORKS: ThemeDraw = ({ c, w, h, t, vt, beat, beatE, bassV, trebV
   // treble glitter high in the sky
   if (trebV > 0.12) {
     for (let i = 0; i < 6; i++) {
-      c.fillStyle = `rgba(255,255,255,${trebV * 0.4 * Math.random()})`;
+      c.fillStyle = CMix(Math.random(), trebV * 0.4 * Math.random(), 88);
       c.fillRect(Math.random() * w, Math.random() * h * 0.5, 1.5, 1.5);
     }
   }

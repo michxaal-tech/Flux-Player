@@ -26,7 +26,7 @@ export const VORTEX: ThemeDraw = ({ c, cx, cy, R, beat, beatE, cfg, bassV, TK, C
   }
   const coreR = R * (0.06 + bassV * 0.05 + beatE * 0.08);
   const g = c.createRadialGradient(cx, cy, 0, cx, cy, coreR);
-  g.addColorStop(0, `rgba(255,255,255,${0.6 + bassV * 0.4})`);
+  g.addColorStop(0, C2(0.6 + bassV * 0.4, 88));
   g.addColorStop(0.5, C2(0.5 + beatE * 0.4));
   g.addColorStop(1, "transparent");
   c.fillStyle = g;

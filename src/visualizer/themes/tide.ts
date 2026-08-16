@@ -25,7 +25,7 @@ export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg
   // moon + halo, brightening on the beat
   const mx = w / 2, my = h * 0.18, mr = Math.min(w, h) * 0.07;
   const mg = c.createRadialGradient(mx, my, 0, mx, my, mr * 3.2);
-  mg.addColorStop(0, `rgba(255,255,255,${0.55 + beatE * 0.35})`);
+  mg.addColorStop(0, C1(0.55 + beatE * 0.35, 92));
   mg.addColorStop(0.22, C1(0.22 + beatE * 0.25, 78));
   mg.addColorStop(1, "transparent");
   c.fillStyle = mg;
@@ -135,7 +135,7 @@ export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg
   c.globalCompositeOperation = "lighter";
   if (S.flash > 0.03) {
     const fg = c.createRadialGradient(w / 2, crashY, 0, w / 2, crashY, h * 0.3 * (1.3 - S.flash));
-    fg.addColorStop(0, `rgba(255,255,255,${S.flash * 0.5})`);
+    fg.addColorStop(0, C1(S.flash * 0.5, 90));
     fg.addColorStop(0.4, C2(S.flash * 0.4, 75));
     fg.addColorStop(1, "transparent");
     c.fillStyle = fg;
@@ -150,7 +150,7 @@ export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg
     p.vy += h * 0.00035; // gravity
     p.a *= 0.965;
     if (p.a < 0.04 || p.y > h) { S.foam.splice(i, 1); continue; }
-    c.fillStyle = `hsla(0, 0%, 100%, ${p.a * 0.9})`;
+    c.fillStyle = C1(p.a * 0.9, 88);
     glow(12, C1());
     c.beginPath();
     c.arc(p.x, p.y, p.sz * (1 + beatE * 0.5) * TK, 0, Math.PI * 2);

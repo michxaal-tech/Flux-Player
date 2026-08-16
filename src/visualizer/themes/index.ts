@@ -32,11 +32,15 @@ import { ECLIPSE } from "./eclipse";
 import { GALAXY } from "./galaxy";
 import { SILK } from "./silk";
 import { LIQUID } from "./liquid";
+import { TERMINAL } from "./terminal";
+import { GLITCH } from "./glitch";
+import { PIXEL } from "./pixel";
+import { BRUTAL } from "./brutal";
 import { CLOCK } from "./clock";
 
 export const themes: Record<string, ThemeDraw> = {
   RING, KALEIDO, HELIX, WAVES, LASERS, GRID, ORB, RIPPLES, SPIRAL, FIREFLIES,
   CITY, VORTEX, SCOPE, AURORA, DOTGRID, BARS, NEBULA, TUNNEL, STARFIELD,
   TIDE, NOVA, HALO, COMETS, FIREWORKS, LANTERNS, JELLY, CRYSTAL, BLOOM,
-  ECLIPSE, GALAXY, SILK, LIQUID, CLOCK,
+  ECLIPSE, GALAXY, SILK, LIQUID, TERMINAL, GLITCH, PIXEL, BRUTAL, CLOCK,
 };

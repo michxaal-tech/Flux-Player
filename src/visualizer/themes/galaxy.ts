@@ -54,7 +54,7 @@ export const GALAXY: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, bea
   // galactic core — modest alphas so additive trails don't wash out the arms
   const coreR = R * (0.03 + bassV * 0.02 + beatE * 0.035) * punch;
   const cg = c.createRadialGradient(cx, cy, 0, cx, cy, coreR * 3);
-  cg.addColorStop(0, `rgba(255,255,255,${0.4 + beatE * 0.25})`);
+  cg.addColorStop(0, C1(0.4 + beatE * 0.25, 90));
   cg.addColorStop(0.25, C1(0.22 + midV * 0.15, 70));
   cg.addColorStop(0.6, CMix(0.5, 0.08, 58));
   cg.addColorStop(1, "transparent");
@@ -77,7 +77,7 @@ export const GALAXY: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, bea
     sh.y += sh.vy;
     sh.a *= 0.93;
     if (sh.a < 0.05) { S.shots.splice(i, 1); continue; }
-    c.strokeStyle = `rgba(255,255,255,${sh.a})`;
+    c.strokeStyle = C1(sh.a, 88);
     c.lineWidth = 1.6 * TK;
     glow(14, C1());
     c.beginPath();
