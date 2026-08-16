@@ -8,6 +8,9 @@ export interface GraphNodes {
   eqHigh: BiquadFilterNode;
   toneLP: BiquadFilterNode;
   hp: BiquadFilterNode;
+  /** pitch-shifter bypass slot: pIn → (worklet | direct) → pOut */
+  pIn: GainNode;
+  pOut: GainNode;
   vDry: GainNode;
   vSum: GainNode;
   dry: GainNode;
@@ -88,6 +91,9 @@ class AudioEngine {
   nodes: GraphNodes | null = null;
   /** Set while a tape brake / spin-up animation owns el.playbackRate. */
   brakeActive = false;
+  private pitchNode: AudioWorkletNode | null = null;
+  private pitchRouted = false;
+  private pendingPitch = 0;
 
   ensure(): void {
     if (this.nodes) {
@@ -129,10 +135,14 @@ class AudioEngine {
     const beatAnalyser = ctx.createAnalyser(); beatAnalyser.fftSize = 1024; beatAnalyser.smoothingTimeConstant = 0.35;
     const streamDest = ctx.createMediaStreamDestination();
 
+    const pIn = ctx.createGain();
+    const pOut = ctx.createGain();
+
     src.connect(shaper); shaper.connect(eqLow); eqLow.connect(eqMid); eqMid.connect(eqHigh);
     eqHigh.connect(toneLP); toneLP.connect(hp);
-    hp.connect(vDry); vDry.connect(post);
-    hp.connect(split); split.connect(gL, 0); split.connect(gR, 1); gL.connect(vSum); gR.connect(vSum); vSum.connect(post);
+    hp.connect(pIn); pIn.connect(pOut); // pitch slot (bypassed until needed)
+    pOut.connect(vDry); vDry.connect(post);
+    pOut.connect(split); split.connect(gL, 0); split.connect(gR, 1); gL.connect(vSum); gR.connect(vSum); vSum.connect(post);
     post.connect(dry); dry.connect(master);
     post.connect(convolver); convolver.connect(wet); wet.connect(master);
     post.connect(delay); delay.connect(delayMix); delayMix.connect(master);
@@ -172,12 +182,46 @@ class AudioEngine {
     windSrc.connect(windLP); windLP.connect(windG); windG.connect(fader);
 
     this.nodes = {
-      ctx, shaper, eqLow, eqMid, eqHigh, toneLP, hp, vDry, vSum, dry, convolver, wet,
+      ctx, shaper, eqLow, eqMid, eqHigh, toneLP, hp, pIn, pOut, vDry, vSum, dry, convolver, wet,
       delay, delayFb, delayMix, master, fader, panner, comp, analyser, beatAnalyser, streamDest,
       cGain, rainG, fireG, windG,
     };
     this.buildImpulse(2.2);
     this.setCurve(0);
+
+    // pitch shifter loads async; until then the slot stays bypassed
+    ctx.audioWorklet
+      ?.addModule(`${import.meta.env.BASE_URL}pitch-worklet.js`)
+      .then(() => {
+        this.pitchNode = new AudioWorkletNode(ctx, "flux-pitch", {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          outputChannelCount: [2],
+        });
+        this.setPitch(this.pendingPitch);
+      })
+      .catch((e) => console.warn("pitch worklet unavailable:", e));
+  }
+
+  /** Independent pitch shift in semitones; 0 hard-bypasses the worklet. */
+  setPitch(semitones: number): void {
+    this.pendingPitch = semitones;
+    const n = this.nodes;
+    const node = this.pitchNode;
+    if (!n || !node) return;
+    const p = node.parameters.get("pitch");
+    if (p) p.value = semitones;
+    const wantRouted = semitones !== 0;
+    if (wantRouted === this.pitchRouted) return;
+    n.pIn.disconnect();
+    if (wantRouted) {
+      n.pIn.connect(node);
+      node.connect(n.pOut);
+    } else {
+      node.disconnect();
+      n.pIn.connect(n.pOut);
+    }
+    this.pitchRouted = wantRouted;
   }
 
   buildImpulse(sec: number) {
@@ -226,6 +270,7 @@ class AudioEngine {
     n.master.gain.setTargetAtTime(fx.boost, t0, 0.05);
     if (!fx.spin) n.panner.pan.setTargetAtTime(0, t0, 0.1);
     this.setCurve(fx.crush);
+    this.setPitch(fx.pitch ?? 0);
   }
 
   applyAmb(amb: AmbState) {

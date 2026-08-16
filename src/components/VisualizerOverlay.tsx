@@ -24,11 +24,14 @@ export function VisualizerOverlay() {
 
   const [themeMenu, setThemeMenu] = useState(false);
   const visRef = useRef<HTMLCanvasElement>(null);
+  const lyrRef = useRef<HTMLCanvasElement>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => {
     canvasRefs.vis = visRef.current;
+    canvasRefs.lyr = lyrRef.current;
     return () => {
       if (canvasRefs.vis === visRef.current) canvasRefs.vis = null;
+      if (canvasRefs.lyr === lyrRef.current) canvasRefs.lyr = null;
     };
   }, []);
 
@@ -54,6 +57,8 @@ export function VisualizerOverlay() {
         }}
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "pan-y" }}
       />
+      {/* crisp lyric layer above the trail-faded vis canvas */}
+      <canvas ref={lyrRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
 
       {/* prev/next theme arrows — hidden until the edge is hovered */}
       <div className="viszone left">

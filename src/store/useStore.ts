@@ -124,7 +124,7 @@ export const useStore = create<StoreState>()(
         instMode: false,
         stemProgress: "",
         lyricsOn: true,
-        lyricStyle: "FADE",
+        lyricStyle: "DRIFT",
         lyricStatus: "",
         stats: { plays: 0, seconds: 0 },
         tab: "player",
@@ -151,6 +151,7 @@ export const useStore = create<StoreState>()(
             fx: {
               ...DEFAULT_FX,
               speed: 0.7 + Math.random() * 0.7, vinyl: Math.random() < 0.6,
+              pitch: Math.random() < 0.3 ? Math.floor(Math.random() * 9) - 4 : 0,
               reverb: Math.random() * 0.6, size: 1.5 + Math.random() * 3,
               echoMix: Math.random() < 0.5 ? 0 : Math.random() * 0.4,
               echoTime: 0.1 + Math.random() * 0.4, echoFb: Math.random() * 0.55,

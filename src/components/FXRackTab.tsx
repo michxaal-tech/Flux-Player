@@ -17,6 +17,14 @@ export function FXRackTab() {
           <Slider label="SPEED" value={fx.speed} min={0.5} max={1.5} step={0.01} format={(v) => `${v.toFixed(2)}×`} onChange={(v) => setFxKey("speed", v)} />
           <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.38)", lineHeight: 1.5 }}>TAPE on → pitch follows speed (slowed / nightcore).</div>
         </Module>
+        <Module title="🎙 PITCH" extra={<span style={{ fontSize: 9.5, color: "rgba(255,255,255,0.4)" }}>SPEED STAYS PUT</span>}>
+          <div className="hscroll" style={{ display: "flex", gap: 5, overflowX: "auto", paddingBottom: 8 }}>
+            {([["DEMON", -7], ["DEEP", -3], ["OFF", 0], ["BRIGHT", 3], ["CHIPMUNK", 7]] as const).map(([lbl, st]) => (
+              <button key={lbl} onClick={() => setFxKey("pitch", st)} style={{ padding: "6px 10px", borderRadius: 999, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer", flexShrink: 0, background: fx.pitch === st ? "var(--ac1)" : "rgba(255,255,255,0.06)", color: fx.pitch === st ? "#08090D" : "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.09)" }}>{lbl}</button>
+            ))}
+          </div>
+          <Slider label="SEMITONES" value={fx.pitch} min={-12} max={12} step={1} format={(v) => (v === 0 ? "OFF" : `${v > 0 ? "+" : ""}${v} st`)} onChange={(v) => setFxKey("pitch", v)} />
+        </Module>
         <Module title="🌊 REVERB">
           <Slider label="MIX" value={fx.reverb} min={0} max={0.85} step={0.01} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setFxKey("reverb", v)} />
           <Slider label="ROOM SIZE" value={fx.size} min={0.6} max={5.5} step={0.1} format={(v) => `${v.toFixed(1)}s`} onChange={(v) => setFxKey("size", v)} />

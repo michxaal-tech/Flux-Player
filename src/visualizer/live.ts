@@ -73,6 +73,8 @@ export const canvasRefs = {
   bg: null as HTMLCanvasElement | null,
   wave: null as HTMLCanvasElement | null,
   vis: null as HTMLCanvasElement | null,
+  /** crisp overlay above the vis canvas (lyrics) — cleared every frame */
+  lyr: null as HTMLCanvasElement | null,
   disc: null as HTMLDivElement | null,
   bpm: new Set<HTMLElement>(),
   level: null as HTMLDivElement | null,

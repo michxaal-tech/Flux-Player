@@ -28,6 +28,22 @@ export async function renderWithFx(blob: Blob, fx: FxState): Promise<AudioBuffer
   const toneLP = ctx.createBiquadFilter(); toneLP.type = "lowpass"; toneLP.frequency.value = fx.tone;
   const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = fx.highpass;
 
+  // independent pitch shift, same worklet as live playback
+  let pitchNode: AudioWorkletNode | null = null;
+  if ((fx.pitch ?? 0) !== 0 && ctx.audioWorklet) {
+    try {
+      await ctx.audioWorklet.addModule(`${import.meta.env.BASE_URL}pitch-worklet.js`);
+      pitchNode = new AudioWorkletNode(ctx, "flux-pitch", {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [2],
+        parameterData: { pitch: fx.pitch },
+      });
+    } catch (e) {
+      console.warn("offline pitch unavailable:", e);
+    }
+  }
+
   const vDry = ctx.createGain(); vDry.gain.value = fx.vocalCut ? 0 : 1;
   const split = ctx.createChannelSplitter(2);
   const gL = ctx.createGain(); gL.gain.value = 1;
@@ -49,8 +65,10 @@ export async function renderWithFx(blob: Blob, fx: FxState): Promise<AudioBuffer
 
   source.connect(shaper); shaper.connect(eqLow); eqLow.connect(eqMid); eqMid.connect(eqHigh);
   eqHigh.connect(toneLP); toneLP.connect(hp);
-  hp.connect(vDry); vDry.connect(post);
-  hp.connect(split); split.connect(gL, 0); split.connect(gR, 1); gL.connect(vSum); gR.connect(vSum); vSum.connect(post);
+  const postPitch: AudioNode = pitchNode ?? hp;
+  if (pitchNode) hp.connect(pitchNode);
+  postPitch.connect(vDry); vDry.connect(post);
+  postPitch.connect(split); split.connect(gL, 0); split.connect(gR, 1); gL.connect(vSum); gR.connect(vSum); vSum.connect(post);
   post.connect(dry); dry.connect(master);
   post.connect(convolver); convolver.connect(wet); wet.connect(master);
   post.connect(delay); delay.connect(delayMix); delayMix.connect(master);

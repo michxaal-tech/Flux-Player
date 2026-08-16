@@ -10,6 +10,7 @@ import { PresetRow } from "./PresetRow";
 import { chip, Module, NextIcon, PauseIcon, playBtn, PlayIcon, PrevIcon, skipBtn, Toggle } from "./ui";
 
 export function PlayerTab() {
+  const playlists = useStore((s) => s.playlists);
   const playingList = useStore(getPlayingList);
   const track = useStore(getCurrentTrack);
   const current = useStore((s) => s.current);
@@ -209,8 +210,25 @@ export function PlayerTab() {
         <div style={{ width: "100%", maxWidth: 640 }}><PresetRow /></div>
       </div>
 
-      {/* side panel: up next + session pulse */}
+      {/* side panel: playlists + up next + session pulse */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <Module title="📚 PLAYLISTS">
+          <div className="hscroll" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
+            {playlists.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => {
+                  if (p.id === playPl) return;
+                  if (p.tracks.length) playAt(p.id, 0);
+                  else set({ viewMode: { type: "pl", id: p.id }, tab: "library" });
+                }}
+                style={chip(p.id === playPl)}
+              >
+                {p.id === playPl && "▶ "}{p.name} <span style={{ opacity: 0.6 }}>({p.tracks.length})</span>
+              </button>
+            ))}
+          </div>
+        </Module>
         <Module title="⏭ UP NEXT">
           {(() => {
             const list = playingList.tracks;

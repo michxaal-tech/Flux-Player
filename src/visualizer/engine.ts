@@ -326,13 +326,19 @@ export function startRenderLoop(): void {
         c.fillRect(0, 0, w, h);
       }
 
-      // synced lyrics overlay (must leave composite as source-over — the
-      // vignette below and next frame's trail fade depend on it)
-      if (L.lyricsOn && L.lyricLines && !LYRIC_NATIVE_THEMES.has(TH)) {
-        drawLyricOverlay({
-          c, w, h, time: engine.audio.currentTime, beatE: L.beatE, vt, TK,
-          C1, C2, CMix, L,
-        });
+      // synced lyrics on their own overlay canvas — cleared per frame so the
+      // floating text stays crisp instead of smearing into the trail buffer
+      const lc = canvasRefs.lyr;
+      if (lc) {
+        const [lw2, lh2] = sizeCanvas(lc, 1440);
+        const c2 = lc.getContext("2d")!;
+        c2.clearRect(0, 0, lw2, lh2);
+        if (L.lyricsOn && L.lyricLines && !LYRIC_NATIVE_THEMES.has(TH)) {
+          drawLyricOverlay({
+            c: c2, w: lw2, h: lh2, time: engine.audio.currentTime, beatE: L.beatE, vt, TK,
+            C1, C2, CMix, L,
+          });
+        }
       }
 
       // vignette

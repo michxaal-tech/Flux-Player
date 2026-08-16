@@ -21,7 +21,7 @@ export const LEVELS = [
 ];
 
 export const DEFAULT_FX: FxState = {
-  speed: 1, vinyl: false, reverb: 0, size: 2.2,
+  speed: 1, vinyl: false, pitch: 0, reverb: 0, size: 2.2,
   echoMix: 0, echoTime: 0.28, echoFb: 0.35,
   bass: 0, mid: 0, treble: 0, spin: false, spinRate: 0.55,
   crackle: 0, crush: 0, tone: 20000, highpass: 20,
@@ -38,7 +38,9 @@ export const PRESETS: Preset[] = [
   { name: "BASS CANNON", fx: { bass: 9, crush: 0.3, reverb: 0.08, boost: 1.25 } },
   { name: "UNDERWATER", fx: { tone: 750, reverb: 0.4, size: 3.5, speed: 0.92, vinyl: true } },
   { name: "DIAL TONE", fx: { tone: 3400, highpass: 350, bass: -10, treble: -6, crush: 0.4 } },
-  { name: "PHONK", fx: { speed: 0.86, vinyl: true, bass: 6, crackle: 0.3, crush: 0.2, reverb: 0.3 } },
+  // Memphis phonk: slowed tape + pitched-down, heavy saturated bass, dark
+  // rolled-off top, slapback echo, dusty crackle
+  { name: "PHONK", fx: { speed: 0.82, vinyl: true, pitch: -2, bass: 7, mid: -1.5, treble: -4, crackle: 0.45, crush: 0.45, reverb: 0.32, size: 3.2, echoMix: 0.18, echoTime: 0.32, echoFb: 0.42, tone: 5600, highpass: 34, boost: 1.15 } },
   { name: "KARAOKE", fx: { vocalCut: true, reverb: 0.2, size: 2.4 } },
 ];
 

@@ -1,6 +1,8 @@
 export interface FxState {
   speed: number;
   vinyl: boolean;
+  /** independent pitch shift in semitones (0 = off), separate from speed/tape */
+  pitch: number;
   reverb: number;
   size: number;
   echoMix: number;
