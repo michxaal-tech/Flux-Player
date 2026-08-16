@@ -1,9 +1,34 @@
 // FLUX PRO service worker: cache-first app shell so the player works offline.
 // Bump the version to invalidate old caches on deploy.
-const CACHE = "flux-v1";
+const CACHE = "flux-v2";
 
-self.addEventListener("install", () => {
-  self.skipWaiting();
+const PRECACHE = [
+  "/",
+  "/index.html",
+  "/manifest.webmanifest",
+  "/favicon.svg",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/icons/icon-maskable-512.png",
+];
+
+self.addEventListener("install", (e) => {
+  e.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE);
+      // Cache the shell, then discover the hashed bundle assets from its HTML so
+      // a single online visit is enough for the app to work fully offline.
+      const shell = await fetch("/index.html");
+      await cache.put("/index.html", shell.clone());
+      const html = await shell.text();
+      const assets = new Set(PRECACHE);
+      for (const [, url] of html.matchAll(/(?:src|href)="([^"]+)"/g)) {
+        if (url.startsWith("/") || url.includes("fonts.googleapis.com/css")) assets.add(url);
+      }
+      await Promise.all([...assets].map((u) => cache.add(u).catch(() => {})));
+      await self.skipWaiting();
+    })()
+  );
 });
 
 self.addEventListener("activate", (e) => {

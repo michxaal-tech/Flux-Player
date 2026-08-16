@@ -286,7 +286,11 @@ export const useStore = create<StoreState>()(
         name: "flux-store",
         version: 1,
         partialize: (s) => ({
-          playlists: s.playlists,
+          // peaks are cheap to re-decode and too big for localStorage at scale
+          playlists: s.playlists.map((p) => ({
+            ...p,
+            tracks: p.tracks.map(({ peaks: _peaks, ...t }) => t),
+          })),
           viewMode: s.viewMode,
           sortBy: s.sortBy,
           playPl: s.playPl,

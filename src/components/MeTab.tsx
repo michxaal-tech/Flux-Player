@@ -4,6 +4,7 @@ import { deleteTake, startRec, stopRec } from "../audio/recorder";
 import { exportTrack } from "../audio/exporter";
 import { getUrl } from "../store/blobStore";
 import { getCurrentTrack, getFavCount, useStore } from "../store/useStore";
+import { useSleepLeft } from "../hooks/useSleepLeft";
 import type { Take } from "../types";
 import { fmt } from "../utils";
 import { bigBtn, chip, Module, Toggle } from "./ui";
@@ -58,7 +59,7 @@ export function MeTab() {
   const hour = new Date().getHours();
   const greeting = hour < 5 ? "UP LATE" : hour < 12 ? "GOOD MORNING" : hour < 18 ? "GOOD AFTERNOON" : "GOOD EVENING";
 
-  const sleepLabel = sleepEnd ? `${Math.max(0, Math.floor((sleepEnd - Date.now()) / 60000))}m` : "";
+  const sleepLeft = useSleepLeft();
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 6, maxWidth: 640, margin: "0 auto" }}>
@@ -148,7 +149,7 @@ export function MeTab() {
           {[15, 30, 60].map((m) => (
             <button key={m} onClick={() => set({ sleepEnd: Date.now() + m * 60000 })} style={chip(false)}>{m}m</button>
           ))}
-          {sleepEnd && <button onClick={() => set({ sleepEnd: null })} style={chip(true, MAG)}>✕ {sleepLabel}</button>}
+          {sleepEnd && <button onClick={() => set({ sleepEnd: null })} style={chip(true, MAG)}>✕ {sleepLeft}</button>}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 12 }}>
           <button onClick={() => set({ shortcutsOpen: true })} style={chip(false)}>⌨ KEYBOARD SHORTCUTS</button>

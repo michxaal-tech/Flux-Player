@@ -10,8 +10,8 @@ export function useMediaSession(): void {
     if (!("mediaSession" in navigator)) return;
     const ms = navigator.mediaSession;
 
-    ms.setActionHandler("play", () => togglePlay());
-    ms.setActionHandler("pause", () => togglePlay());
+    ms.setActionHandler("play", () => { if (engine.audio.paused) togglePlay(); });
+    ms.setActionHandler("pause", () => { if (!engine.audio.paused) togglePlay(); });
     ms.setActionHandler("previoustrack", () => prevTrack());
     ms.setActionHandler("nexttrack", () => nextTrack());
     try {

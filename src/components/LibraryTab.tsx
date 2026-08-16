@@ -68,7 +68,12 @@ export function LibraryTab({ onLoadClick }: { onLoadClick: () => void }) {
           <button
             key={p.id}
             draggable
-            onDragStart={() => { dragPl.current = pi; }}
+            onDragStart={(e) => {
+              dragPl.current = pi;
+              e.dataTransfer.setData("text/plain", p.id); // required for Firefox to start the drag
+              e.dataTransfer.effectAllowed = "move";
+            }}
+            onDragEnd={() => { dragPl.current = null; }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
@@ -139,7 +144,11 @@ export function LibraryTab({ onLoadClick }: { onLoadClick: () => void }) {
               key={tr.id}
               className={canReorder && dragOver === idx && dragIdx !== idx ? "drag-over" : undefined}
               draggable={canReorder}
-              onDragStart={() => setDragIdx(idx)}
+              onDragStart={(e) => {
+                setDragIdx(idx);
+                e.dataTransfer.setData("text/plain", tr.id); // required for Firefox to start the drag
+                e.dataTransfer.effectAllowed = "move";
+              }}
               onDragOver={(e: React.DragEvent) => {
                 if (!canReorder) return;
                 e.preventDefault();

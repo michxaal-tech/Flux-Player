@@ -29,6 +29,7 @@ let lastVolume = 0.85;
 export function useKeyboard(): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" && (target as HTMLInputElement).type !== "range") return;
       if (target.tagName === "TEXTAREA") return;
@@ -67,6 +68,11 @@ export function useKeyboard(): void {
           if (tr) st.toggleFav(tr.id);
           return;
         }
+        case "l":
+          if (st.loopA === null) useStore.setState({ loopA: st.progress });
+          else if (st.loopB === null && st.progress > st.loopA) useStore.setState({ loopB: st.progress });
+          else useStore.setState({ loopA: null, loopB: null });
+          return;
         case "p": st.togglePinCurrent(); return;
         case "s": useStore.setState({ shuffle: !st.shuffle }); return;
         case "r":
