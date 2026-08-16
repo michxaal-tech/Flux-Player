@@ -1,0 +1,42 @@
+import type { LiveState } from "./live";
+import type { VisCfg } from "../types";
+
+/** Everything a theme needs to draw one frame. */
+export interface ThemeCtx {
+  c: CanvasRenderingContext2D;
+  w: number;
+  h: number;
+  cx: number;
+  cy: number;
+  /** min(w, h) */
+  R: number;
+  /** global frame counter */
+  t: number;
+  /** engine time advanced by cfg.speed each frame */
+  vt: number;
+  freq: Uint8Array;
+  wave: Uint8Array;
+  liveAudio: boolean;
+  bass: number;
+  mid: number;
+  treb: number;
+  /** intensity-scaled bands */
+  bassV: number;
+  midV: number;
+  trebV: number;
+  beat: boolean;
+  cfg: VisCfg;
+  /** cfg.intensity */
+  I: number;
+  /** cfg.thick */
+  TK: number;
+  C1: (a?: number, l?: number) => string;
+  C2: (a?: number, l?: number) => string;
+  CMix: (f: number, a?: number, l?: number) => string;
+  glow: (blur: number, color: string) => void;
+  noGlow: () => void;
+  L: LiveState;
+  trackName: string;
+}
+
+export type ThemeDraw = (x: ThemeCtx) => void;
