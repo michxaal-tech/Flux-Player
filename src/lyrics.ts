@@ -78,28 +78,41 @@ function scoreHit(h: LrclibHit, fileTokens: string[], dur: number): number {
 
 /** Look up synced lyrics: analyzes the filename, runs several query
  * strategies, then scores every candidate on name overlap + duration fit
- * and picks the best confident match. */
-export async function fetchLyrics(tr: Track): Promise<void> {
+ * and picks the best confident match. With `artistHint` (typed by the user
+ * after a failed search) it searches that artist's songs for the track name. */
+export async function fetchLyrics(tr: Track, artistHint?: string): Promise<void> {
   const set = (lyricStatus: string) => useStore.setState({ lyricStatus });
   try {
     set("Searching lyrics…");
     const cleaned = cleanQuery(tr.name);
-    const dash = cleaned.split(/\s*[-–—_]\s*/).map((p) => p.trim()).filter(Boolean);
-    const attempts = new Set<string>([`q=${encodeURIComponent(cleaned)}`]);
-    if (dash.length >= 2) {
-      const a = dash[0], b = dash.slice(1).join(" ");
-      attempts.add(`track_name=${encodeURIComponent(b)}&artist_name=${encodeURIComponent(a)}`);
-      attempts.add(`track_name=${encodeURIComponent(a)}&artist_name=${encodeURIComponent(b)}`);
-      attempts.add(`q=${encodeURIComponent(b)}`);
-      attempts.add(`q=${encodeURIComponent(a)}`);
+    const attempts = new Set<string>();
+    const hint = artistHint?.trim();
+    if (hint) {
+      // title guess = the filename minus the artist's own tokens
+      const at = new Set(tokenize(hint));
+      const titleGuess = tokenize(tr.name).filter((t) => !at.has(t)).join(" ") || cleaned;
+      attempts.add(`track_name=${encodeURIComponent(titleGuess)}&artist_name=${encodeURIComponent(hint)}`);
+      attempts.add(`q=${encodeURIComponent(`${hint} ${titleGuess}`)}`);
+      attempts.add(`artist_name=${encodeURIComponent(hint)}`);
+    } else {
+      attempts.add(`q=${encodeURIComponent(cleaned)}`);
+      const dash = cleaned.split(/\s*[-–—_]\s*/).map((p) => p.trim()).filter(Boolean);
+      if (dash.length >= 2) {
+        const a = dash[0], b = dash.slice(1).join(" ");
+        attempts.add(`track_name=${encodeURIComponent(b)}&artist_name=${encodeURIComponent(a)}`);
+        attempts.add(`track_name=${encodeURIComponent(a)}&artist_name=${encodeURIComponent(b)}`);
+        attempts.add(`q=${encodeURIComponent(b)}`);
+        attempts.add(`q=${encodeURIComponent(a)}`);
+      }
+      // "Title by Artist" phrasing
+      const by = cleaned.match(/^(.+)\s+by\s+(.+)$/i);
+      if (by) attempts.add(`track_name=${encodeURIComponent(by[1])}&artist_name=${encodeURIComponent(by[2])}`);
     }
-    // "Title by Artist" phrasing
-    const by = cleaned.match(/^(.+)\s+by\s+(.+)$/i);
-    if (by) attempts.add(`track_name=${encodeURIComponent(by[1])}&artist_name=${encodeURIComponent(by[2])}`);
 
     const s0 = useStore.getState();
     const dur = getCurrentTrack(s0)?.id === tr.id ? s0.duration : 0;
-    const fileTokens = tokenize(tr.name);
+    // with a typed artist, its tokens count toward the match like the filename's
+    const fileTokens = tokenize(hint ? `${hint} ${tr.name}` : tr.name);
 
     const seen = new Set<string>();
     let best: LrclibHit | null = null;
@@ -119,13 +132,17 @@ export async function fetchLyrics(tr: Track): Promise<void> {
       if (best && bestScore >= 1.0) break; // confident — stop early
     }
     if (!best?.syncedLyrics || bestScore < 0.4) {
-      set("No confident match — rename to 'Artist - Title' or import a .lrc");
-      setTimeout(() => useStore.setState({ lyricStatus: "" }), 6000);
+      useStore.setState({ lyricAskArtist: true });
+      set(hint
+        ? `No match in ${hint}'s songs — check the spelling?`
+        : "No confident match — type the artist name below ↓");
+      setTimeout(() => useStore.setState({ lyricStatus: "" }), 8000);
       return;
     }
     const lines = parseLrc(best.syncedLyrics);
     if (!lines.length) throw new Error("empty lyrics");
     useStore.getState().updateTrack(tr.id, { lyrics: lines });
+    useStore.setState({ lyricAskArtist: false });
     set(`✓ ${best.trackName ?? "matched"} · ${lines.length} lines`);
     setTimeout(() => useStore.setState({ lyricStatus: "" }), 4000);
   } catch (e) {

@@ -53,6 +53,8 @@ export interface StoreState {
   lyricStatus: string;
   /** auto-search lyrics when a track starts (manual FIND when off) */
   lyricAuto: boolean;
+  /** search failed → offer a type-the-artist retry (transient) */
+  lyricAskArtist: boolean;
   // profile
   stats: Stats;
   // ui
@@ -130,6 +132,7 @@ export const useStore = create<StoreState>()(
         lyricStyle: "DRIFT",
         lyricStatus: "",
         lyricAuto: true,
+        lyricAskArtist: false,
         stats: { plays: 0, seconds: 0 },
         tab: "player",
         shortcutsOpen: false,

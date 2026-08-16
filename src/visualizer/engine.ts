@@ -101,6 +101,8 @@ export function startRenderLoop(): void {
   // frame pacing and trade backing resolution for frame rate — under heavy
   // glow the CSS upscale is invisible, dropped frames are not.
   let resScale = 1;
+  let resCeil = 1; // learned "this scale janked" ceiling, re-probed per theme
+  let resTheme = "";
   let slowRun = 0, fastRun = 0, lastResChange = 0;
 
   const draw = () => {
@@ -115,18 +117,27 @@ export function startRenderLoop(): void {
     lastFrame = nowMs;
     t++;
 
+    if (live.visTheme !== resTheme) {
+      // every theme has a different cost profile — re-probe the ceiling
+      resTheme = live.visTheme;
+      resCeil = 1;
+      slowRun = 0;
+      fastRun = 0;
+    }
     // ignore giant deltas (tab was hidden — rAF stops, that isn't slowness)
     if (delta < 250) {
-      if (delta > 26) { slowRun++; fastRun = 0; }
-      else if (delta < 19) { fastRun++; slowRun = 0; }
+      if (delta > 20) { slowRun++; fastRun = 0; } // missing 60fps at all counts
+      else if (delta < 17.5) { fastRun++; slowRun = 0; }
       else { slowRun = 0; fastRun = 0; }
     }
-    if (slowRun > 15 && resScale > 0.4 && nowMs - lastResChange > 1200) {
-      resScale = Math.max(0.4, resScale * 0.8); // ~1s of jank → step down fast
+    if (slowRun > 10 && resScale > 0.35 && nowMs - lastResChange > 900) {
+      // don't let the recovery path climb back into a scale that janked
+      resCeil = Math.min(resCeil, resScale * 0.95);
+      resScale = Math.max(0.35, resScale * 0.75); // jank → step down fast
       lastResChange = nowMs;
       slowRun = 0;
-    } else if (fastRun > 600 && resScale < 1 && nowMs - lastResChange > 8000) {
-      resScale = Math.min(1, resScale * 1.15); // ~10s of headroom → creep back up
+    } else if (fastRun > 600 && resScale < resCeil && nowMs - lastResChange > 8000) {
+      resScale = Math.min(resCeil, resScale * 1.12); // ~10s of headroom → creep up
       lastResChange = nowMs;
       fastRun = 0;
     }

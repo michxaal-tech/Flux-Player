@@ -7,6 +7,27 @@ interface Swell {
   side: -1 | 1;
 }
 
+// Pre-rendered glow dot for spray: drawImage of a sprite is orders of
+// magnitude cheaper than a shadowBlur'd arc per particle, and there can be
+// 100+ particles in flight after a crash.
+let foamSprite: HTMLCanvasElement | null = null;
+let foamKey = "";
+function getFoamSprite(color: string): HTMLCanvasElement {
+  if (foamSprite && foamKey === color) return foamSprite;
+  foamKey = color;
+  const cv = foamSprite ?? document.createElement("canvas");
+  cv.width = cv.height = 48;
+  const g = cv.getContext("2d")!;
+  const rg = g.createRadialGradient(24, 24, 0, 24, 24, 24);
+  rg.addColorStop(0, "rgba(255,255,255,0.95)");
+  rg.addColorStop(0.3, color);
+  rg.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = rg;
+  g.fillRect(0, 0, 48, 48);
+  foamSprite = cv;
+  return cv;
+}
+
 // Glowing ocean under a moon. Swells continuously roll in from both edges at
 // different phases — spawned by the surf itself and extra-large ones by the
 // beat — and each crashes center-screen with a flash and luminous spray.
@@ -63,7 +84,7 @@ export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg
     if (sw.p >= 1) {
       // impact: spray + flash proportional to the swell's size
       S.flash = Math.max(S.flash, 0.5 + sw.amp * 0.5);
-      const count = Math.floor(20 + sw.amp * 40);
+      const count = Math.min(Math.floor(20 + sw.amp * 40), 120 - S.foam.length);
       for (let k = 0; k < count; k++) {
         const a2 = -Math.PI / 2 + (Math.random() - 0.5) * 1.9;
         const sp = h * (0.003 + Math.random() * 0.01) * (0.6 + sw.amp * 0.6);
@@ -86,7 +107,9 @@ export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg
     sw.side === -1 ? -w * 0.06 + sw.p * w * 0.56 : w * 1.06 - sw.p * w * 0.56;
 
   const crestSigma = w * 0.055;
-  const surfaceY = (x: number, f: number, baseY: number, amp: number) => {
+  const cutoff = crestSigma * 3.2; // beyond ~3σ the bump is invisible — skip the exp
+  const inv2Sig = 1 / (2 * crestSigma * crestSigma);
+  const surfaceY = (x: number, f: number, baseY: number, amp: number, bumpAmp: number) => {
     let y =
       baseY +
       Math.sin(x * 0.01 + vt * 0.02 * (1 + f)) * amp +
@@ -94,24 +117,28 @@ export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg
     const fv = liveAudio ? freq[Math.floor((x / w) * 160)] / 255 : 0.15;
     y -= fv * h * 0.02 * I;
     for (const sw of S.swells) {
+      const d = x - crestX(sw);
+      if (d > cutoff || d < -cutoff) continue;
       // ramp the bump in as it enters so it never pops into existence
       const ramp = Math.min(1, sw.p * 6);
-      const d = x - crestX(sw);
-      const bump = h * (0.04 + f * 0.09) * sw.amp * (0.6 + bassV + beatE * 0.4) * ramp;
-      y -= bump * Math.exp(-(d * d) / (2 * crestSigma * crestSigma));
+      y -= bumpAmp * sw.amp * ramp * Math.exp(-d * d * inv2Sig);
     }
     return y;
   };
 
+  // fixed sample count: the wave costs the same in a small window and
+  // full-screen (per-pixel stepping made full-screen do double the math)
   const layers = 3;
-  const STEP = 10;
+  const SEGS = 110;
+  const STEP = w / SEGS;
   for (let ly = 0; ly < layers; ly++) {
     const f = ly / (layers - 1); // 0 back … 1 front
     const baseY = h * (0.58 + f * 0.16);
     const amp = h * (0.018 + f * 0.028) * (1 + bassV * 1.2);
+    const bumpAmp = h * (0.04 + f * 0.09) * (0.6 + bassV + beatE * 0.4);
     // compute the surface once, reuse for fill + crest stroke
     const pts: number[] = [];
-    for (let x = 0; x <= w; x += STEP) pts.push(surfaceY(x, f, baseY, amp));
+    for (let i = 0; i <= SEGS; i++) pts.push(surfaceY(i * STEP, f, baseY, amp, bumpAmp));
     c.beginPath();
     c.moveTo(0, h);
     pts.forEach((y2, i) => c.lineTo(i * STEP, y2));
@@ -122,12 +149,13 @@ export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg
     grad.addColorStop(1, CMix(1 - f, 0.8, 14));
     c.fillStyle = grad;
     c.fill();
-    // glowing crest line
+    // glowing crest line (blur capped — giant blurs on full-width strokes
+    // are the single most expensive canvas op)
     c.beginPath();
     pts.forEach((y2, i) => (i === 0 ? c.moveTo(0, y2) : c.lineTo(i * STEP, y2)));
     c.strokeStyle = CMix(f, 0.45 + beatE * 0.35 + S.flash * 0.4, 66 + S.flash * 18);
     c.lineWidth = (1.2 + f * 1.6 + beatE * 2) * TK;
-    glow((10 + f * 10) * (1 + beatE + S.flash), C1());
+    glow(Math.min(26, (10 + f * 10) * (1 + beatE + S.flash)), C1());
     c.stroke();
   }
   noGlow();
@@ -144,6 +172,7 @@ export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg
     c.arc(w / 2, crashY, h * 0.3, 0, Math.PI * 2);
     c.fill();
   }
+  const spr = getFoamSprite(C1(0.85, 80));
   for (let i = S.foam.length - 1; i >= 0; i--) {
     const p = S.foam[i];
     p.x += p.vx;
@@ -151,11 +180,9 @@ export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg
     p.vy += h * 0.00035; // gravity
     p.a *= 0.965;
     if (p.a < 0.04 || p.y > h) { S.foam.splice(i, 1); continue; }
-    c.fillStyle = C1(p.a * 0.9, 88);
-    glow(12, C1());
-    c.beginPath();
-    c.arc(p.x, p.y, p.sz * (1 + beatE * 0.5) * TK, 0, Math.PI * 2);
-    c.fill();
+    const r = p.sz * (1 + beatE * 0.5) * TK * 3; // sprite halo included
+    c.globalAlpha = p.a;
+    c.drawImage(spr, p.x - r, p.y - r, r * 2, r * 2);
   }
-  noGlow();
+  c.globalAlpha = 1;
 };

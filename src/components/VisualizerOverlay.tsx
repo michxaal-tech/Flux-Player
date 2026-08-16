@@ -18,6 +18,8 @@ export function VisualizerOverlay() {
   const lyricAuto = useStore((s) => s.lyricAuto);
   const lyricStyle = useStore((s) => s.lyricStyle);
   const lyricStatus = useStore((s) => s.lyricStatus);
+  const lyricAskArtist = useStore((s) => s.lyricAskArtist);
+  const [artistText, setArtistText] = useState("");
   const set = useStore((s) => s.set);
   const setV = useStore((s) => s.setVisKey);
   const visChaos = useStore((s) => s.visChaos);
@@ -210,6 +212,33 @@ export function VisualizerOverlay() {
               {lyricStatus || (track?.lyrics ? `${track.lyrics.length} lines loaded` : track ? "no lyrics yet" : "")}
             </span>
           </div>
+          {lyricAskArtist && track && (
+            <div style={{ display: "flex", gap: 5, alignItems: "center", marginTop: 8 }}>
+              <input
+                value={artistText}
+                onChange={(e) => setArtistText(e.target.value)}
+                onKeyDown={async (e) => {
+                  if (e.key === "Enter" && artistText.trim()) {
+                    const { fetchLyrics } = await import("../lyrics");
+                    fetchLyrics(track, artistText);
+                  }
+                }}
+                placeholder="artist name…"
+                style={{
+                  flex: 1, minWidth: 0, background: "rgba(255,255,255,0.06)", border: BORDER,
+                  borderRadius: 9, padding: "8px 10px", fontSize: 11, color: "#fff", outline: "none",
+                }}
+              />
+              <button
+                onClick={async () => {
+                  if (!artistText.trim()) return;
+                  const { fetchLyrics } = await import("../lyrics");
+                  fetchLyrics(track, artistText);
+                }}
+                style={{ ...chip(true, MAG), padding: "8px 12px", fontSize: 9.5, flexShrink: 0 }}
+              >SEARCH ARTIST</button>
+            </div>
+          )}
           <input
             ref={lrcInputRef} type="file" accept=".lrc,.txt" style={{ display: "none" }}
             onChange={async (e) => {

@@ -61,6 +61,7 @@ export function wireAudio(): void {
     (s) => getCurrentTrack(s)?.id,
     (id) => {
       if (!id) return;
+      useStore.setState({ lyricAskArtist: false, lyricStatus: "" });
       setTimeout(async () => {
         const s = useStore.getState();
         const tr = getCurrentTrack(s);
