@@ -225,14 +225,19 @@ export function startRenderLoop(): void {
       if (beat && cfg.shake) L.shakeVal = 7;
       if (L.flashVal > 0) L.flashVal *= 0.86;
       if (L.shakeVal > 0) L.shakeVal *= 0.8;
-      if (cfg.autoCycle && L.playing) {
+      if (cfg.autoMode !== "off" && L.playing) {
         L.cycleT++;
         if (L.cycleT > 60 * 16) {
           L.cycleT = 0;
           const cyc = VIS_THEMES.filter((th) => th !== "CLOCK");
-          const idx = cyc.indexOf(L.visTheme);
-          useStore.setState({ visTheme: cyc[(idx + 1) % cyc.length] });
+          const next =
+            cfg.autoMode === "shuffle"
+              ? cyc.filter((th) => th !== L.visTheme)[Math.floor(Math.random() * (cyc.length - 1))]
+              : cyc[(cyc.indexOf(L.visTheme) + 1) % cyc.length];
+          useStore.setState({ visTheme: next });
         }
+      } else {
+        L.cycleT = 0;
       }
 
       // trail fade + bg wash

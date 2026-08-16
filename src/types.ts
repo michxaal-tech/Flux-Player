@@ -78,7 +78,8 @@ export interface VisCfg {
   mirror: boolean;
   shake: boolean;
   flash: boolean;
-  autoCycle: boolean;
+  /** theme auto-advance every ~16s: off (stay put), cycle (in order), shuffle (random) */
+  autoMode: "off" | "cycle" | "shuffle";
 }
 
 export interface Stats {

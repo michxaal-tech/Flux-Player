@@ -47,8 +47,9 @@ export function VisualizerOverlay() {
             <div
               className="dropin"
               style={{
-                position: "absolute", top: 46, left: 0, width: 200, maxHeight: "62vh", overflowY: "auto",
-                background: "rgba(10,12,18,0.95)", border: BORDER, borderRadius: 14, padding: 6,
+                position: "absolute", top: 46, left: 0, width: "min(94vw, 540px)",
+                display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 2,
+                background: "rgba(10,12,18,0.95)", border: BORDER, borderRadius: 14, padding: 8,
                 backdropFilter: "blur(20px)", zIndex: 6, boxShadow: "0 14px 40px rgba(0,0,0,0.6)",
               }}
             >
@@ -57,15 +58,31 @@ export function VisualizerOverlay() {
                   key={v}
                   onClick={() => { set({ visTheme: v }); setThemeMenu(false); }}
                   style={{
-                    padding: "9px 12px", borderRadius: 9, fontSize: 12, fontWeight: 700, letterSpacing: "0.06em",
-                    cursor: "pointer", marginBottom: 1,
+                    padding: "9px 4px", borderRadius: 9, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.04em",
+                    cursor: "pointer", textAlign: "center", whiteSpace: "nowrap", overflow: "hidden",
                     color: visTheme === v ? BG : "rgba(255,255,255,0.8)",
-                    background: visTheme === v ? CYAN : "transparent",
+                    background: visTheme === v ? CYAN : "rgba(255,255,255,0.03)",
                   }}
                 >
                   {v}
                 </div>
               ))}
+              {/* auto-advance mode — OFF keeps the current theme forever */}
+              <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 6, padding: "8px 4px 2px", borderTop: BORDER, marginTop: 6 }}>
+                <span style={{ fontSize: 9.5, letterSpacing: "0.18em", color: "rgba(255,255,255,0.45)", flexShrink: 0 }}>AUTO</span>
+                {(["off", "cycle", "shuffle"] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setV("autoMode", m)}
+                    style={{ ...chip(visCfg.autoMode === m, m === "shuffle" ? MAG : CYAN), flex: 1, padding: "7px 4px", fontSize: 10, textAlign: "center" }}
+                  >
+                    {m === "off" ? "✕ OFF" : m === "cycle" ? "⟳ CYCLE" : "🔀 SHUFFLE"}
+                  </button>
+                ))}
+              </div>
+              <div style={{ gridColumn: "1 / -1", fontSize: 9, color: "rgba(255,255,255,0.35)", padding: "2px 4px 0" }}>
+                CYCLE / SHUFFLE change the theme every ~16s while playing. OFF stays put.
+              </div>
             </div>
           )}
         </div>
@@ -129,10 +146,9 @@ export function VisualizerOverlay() {
             <Toggle label="BEAT FLASH" on={visCfg.flash} onChange={(v) => setV("flash", v)} />
             <Toggle label="BEAT SHAKE" on={visCfg.shake} onChange={(v) => setV("shake", v)} />
             <Toggle label="MIRROR" on={visCfg.mirror} onChange={(v) => setV("mirror", v)} />
-            <Toggle label="AUTO-CYCLE" on={visCfg.autoCycle} onChange={(v) => setV("autoCycle", v)} color={MAG} />
           </div>
           <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", marginTop: 8, lineHeight: 1.5 }}>
-            🎲 randomizes the whole look. Auto-cycle rotates themes every ~16s.
+            🎲 randomizes the whole look. Theme auto-cycle/shuffle lives in the theme menu (top left).
           </div>
         </div>
       )}

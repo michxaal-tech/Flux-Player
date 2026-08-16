@@ -307,11 +307,17 @@ export const useStore = create<StoreState>()(
         }),
         merge: (persisted, current) => {
           const p = (persisted ?? {}) as Partial<StoreState>;
+          const legacyCfg = p.visCfg as (Partial<VisCfg> & { autoCycle?: boolean }) | undefined;
           return {
             ...current,
             ...p,
             fx: { ...DEFAULT_FX, ...(p.fx ?? {}) },
-            visCfg: { ...DEFAULT_VIS_CFG, ...(p.visCfg ?? {}) },
+            visCfg: {
+              ...DEFAULT_VIS_CFG,
+              ...(legacyCfg ?? {}),
+              // migrate the old boolean autoCycle to the three-way mode
+              autoMode: legacyCfg?.autoMode ?? (legacyCfg?.autoCycle ? "cycle" : DEFAULT_VIS_CFG.autoMode),
+            },
             // never resume in a transient state
             playing: false,
             visOpen: false,

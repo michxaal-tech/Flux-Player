@@ -79,7 +79,7 @@ export const DEFAULT_VIS_CFG: VisCfg = {
   palette: "NEON", h1: 187, h2: 317,
   glow: 0.7, trail: 0.55, particles: 0.35, pStyle: "RISE",
   speed: 1, intensity: 1, zoom: 1, spinV: 0, bgWash: 0.3, thick: 1,
-  mirror: false, shake: false, flash: true, autoCycle: false,
+  mirror: false, shake: false, flash: true, autoMode: "off",
 };
 
 export const MONO = "'JetBrains Mono', monospace";
