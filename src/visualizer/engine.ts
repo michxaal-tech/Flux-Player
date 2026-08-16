@@ -51,7 +51,9 @@ function syncLive(): void {
  * upscale is what keeps the visualizer smooth at full size (the glow hides
  * the upscale entirely).
  */
-function sizeCanvas(cv: HTMLCanvasElement, maxEdge = Infinity): [number, number] {
+const snapCv = document.createElement("canvas"); // scratch for resize-preserve
+
+function sizeCanvas(cv: HTMLCanvasElement, maxEdge = Infinity, preserve = false): [number, number] {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const cw = cv.clientWidth, chh = cv.clientHeight;
   let scale = dpr;
@@ -59,8 +61,21 @@ function sizeCanvas(cv: HTMLCanvasElement, maxEdge = Infinity): [number, number]
   if (long > maxEdge) scale = dpr * (maxEdge / long);
   const W = Math.round(cw * scale), H = Math.round(chh * scale);
   if (cv.width !== W || cv.height !== H) {
-    cv.width = W;
-    cv.height = H;
+    // trail buffers live in the backing store; carry them across adaptive
+    // resolution steps so a step never reads as a flash to black
+    if (preserve && cv.width > 0 && cv.height > 0 && W > 0 && H > 0) {
+      snapCv.width = cv.width;
+      snapCv.height = cv.height;
+      snapCv.getContext("2d")!.drawImage(cv, 0, 0);
+      cv.width = W;
+      cv.height = H;
+      const c = cv.getContext("2d")!;
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.drawImage(snapCv, 0, 0, W, H);
+    } else {
+      cv.width = W;
+      cv.height = H;
+    }
   }
   cv.getContext("2d")!.setTransform(scale, 0, 0, scale, 0, 0);
   return [cw, chh];
@@ -80,6 +95,14 @@ export function startRenderLoop(): void {
   let t = 0;
   let lastFrame = 0;
 
+  // Adaptive resolution: a full-screen high-DPR canvas is more pixels than
+  // many devices can raster at 60fps (shadowBlur cost scales with area), which
+  // is why the visualizer felt smooth small but choppy full-screen. Watch real
+  // frame pacing and trade backing resolution for frame rate — under heavy
+  // glow the CSS upscale is invisible, dropped frames are not.
+  let resScale = 1;
+  let slowRun = 0, fastRun = 0, lastResChange = 0;
+
   const draw = () => {
     // cap at ~60fps: animation constants are tuned per-frame, so 120Hz
     // displays (iPad Pro) would otherwise run everything double speed
@@ -88,8 +111,25 @@ export function startRenderLoop(): void {
       requestAnimationFrame(draw);
       return;
     }
+    const delta = nowMs - lastFrame;
     lastFrame = nowMs;
     t++;
+
+    // ignore giant deltas (tab was hidden — rAF stops, that isn't slowness)
+    if (delta < 250) {
+      if (delta > 26) { slowRun++; fastRun = 0; }
+      else if (delta < 19) { fastRun++; slowRun = 0; }
+      else { slowRun = 0; fastRun = 0; }
+    }
+    if (slowRun > 15 && resScale > 0.4 && nowMs - lastResChange > 1200) {
+      resScale = Math.max(0.4, resScale * 0.8); // ~1s of jank → step down fast
+      lastResChange = nowMs;
+      slowRun = 0;
+    } else if (fastRun > 600 && resScale < 1 && nowMs - lastResChange > 8000) {
+      resScale = Math.min(1, resScale * 1.15); // ~10s of headroom → creep back up
+      lastResChange = nowMs;
+      fastRun = 0;
+    }
     const n = engine.nodes;
     const L = live;
     const cfg = L.cfg;
@@ -160,7 +200,7 @@ export function startRenderLoop(): void {
     // ── ambient background + edge spectrum meters ──
     const bg = canvasRefs.bg;
     if (bg) {
-      const [w, h] = sizeCanvas(bg, 1000); // soft ambient layer — low res is invisible
+      const [w, h] = sizeCanvas(bg, 1000 * resScale); // soft ambient layer — low res is invisible
       const c = bg.getContext("2d")!;
       c.fillStyle = "rgba(8,9,13,0.3)";
       c.fillRect(0, 0, w, h);
@@ -219,7 +259,7 @@ export function startRenderLoop(): void {
     // ── fullscreen visual engine ──
     const vc = canvasRefs.vis;
     if (vc && L.visOpen) {
-      const [w, h] = sizeCanvas(vc, 1440);
+      const [w, h] = sizeCanvas(vc, 1440 * resScale, true);
       const c = vc.getContext("2d")!;
       const cx = w / 2, cy = h / 2, R = Math.min(w, h);
 
@@ -332,7 +372,7 @@ export function startRenderLoop(): void {
       const lc = canvasRefs.lyr;
       const lyricActive = !!(L.lyricsOn && L.lyricLines && !LYRIC_NATIVE_THEMES.has(TH));
       if (lc && (lyricActive || lyricWasActive)) {
-        const [lw2, lh2] = sizeCanvas(lc, 1440);
+        const [lw2, lh2] = sizeCanvas(lc, 1440 * resScale);
         const c2 = lc.getContext("2d")!;
         c2.clearRect(0, 0, lw2, lh2);
         if (lyricActive) {

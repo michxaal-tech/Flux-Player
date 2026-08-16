@@ -28,9 +28,13 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
   wind) are synthesized in the audio graph, no samples.
 - **DJ deck** — live BPM detection, output meter, 4 hot cues, hold-to-stutter
   (⅛/¼/½), tape brake & spin-up, speed nudge.
-- **Visualizer** — 43 canvas themes × 15 palettes (+ custom hue pair), 15 tune
+- **Visualizer** — 43 canvas themes × 26 palettes (+ custom hue pair), 15 tune
   controls (glow, trails, particles w/ 4 styles, reactivity, zoom, scene spin,
   mirror, beat flash/shake, auto-cycle), edge spectrum meters on every tab.
+  Adaptive resolution keeps full-screen rendering at 60fps on any device.
+- **Synced lyrics** — lrclib.net lookup with filename analysis + confidence
+  scoring, auto-search per track, .lrc import, 14 animation styles drawn on
+  a dedicated canvas layer.
 - **Recorder** — captures the master output (FX, stutters, ambience included)
   via MediaRecorder; takes are stored and downloadable.
 - **Offline export** — renders a whole track through the FX graph with

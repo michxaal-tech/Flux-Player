@@ -28,7 +28,8 @@ export function wireAudio(): void {
   useStore.subscribe((s) => s.amb, (amb) => engine.applyAmb(amb));
   useStore.subscribe((s) => s.volume, (v) => { el.volume = v; });
 
-  // listening-time ticker (coarse 5s steps — every store write has a cost)
+  // listening-time ticker (coarse 15s steps — each write re-persists state,
+  // and persistence during playback is exactly what we're trying to avoid)
   let statTick: ReturnType<typeof setInterval> | null = null;
   useStore.subscribe(
     (s) => s.playing,
@@ -36,8 +37,8 @@ export function wireAudio(): void {
       if (statTick) { clearInterval(statTick); statTick = null; }
       if (playing) {
         statTick = setInterval(
-          () => useStore.setState((st) => ({ stats: { ...st.stats, seconds: st.stats.seconds + 5 } })),
-          5000
+          () => useStore.setState((st) => ({ stats: { ...st.stats, seconds: st.stats.seconds + 15 } })),
+          15000
         );
       }
     },

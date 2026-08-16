@@ -73,6 +73,18 @@ export const PALETTES: Palette[] = [
   { id: "ROSE", h: [340, 18], s: 90 },
   { id: "TOXIC", h: [82, 300], s: 100 },
   { id: "GHOST", h: [0, 0], s: 4 },
+  { id: "MIDNIGHT", h: [230, 285], s: 80 },
+  { id: "SAKURA", h: [335, 355], s: 70 },
+  { id: "CYBER", h: [300, 180], s: 95 },
+  { id: "MINT", h: [158, 195], s: 65 },
+  { id: "ROYAL", h: [255, 45], s: 85 },
+  { id: "BLOOD", h: [352, 10], s: 92 },
+  { id: "SUNRISE", h: [35, 205], s: 90 },
+  { id: "COSMOS", h: [272, 205], s: 88 },
+  { id: "PEACH", h: [22, 342], s: 82 },
+  { id: "ARCTIC", h: [198, 168], s: 55 },
+  { id: "VOLT", h: [62, 122], s: 100 },
+  { id: "NOIR", h: [222, 222], s: 22 },
   { id: "CUSTOM", h: null, s: 100 },
 ];
 

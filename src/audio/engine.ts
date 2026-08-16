@@ -101,7 +101,15 @@ class AudioEngine {
       return;
     }
     const Ctx = window.AudioContext || (window as any).webkitAudioContext;
-    const ctx: AudioContext = new Ctx();
+    // "playback" asks for large render buffers: a music player doesn't need
+    // interactive (tiny-buffer) latency, and small buffers are what make the
+    // output crackle and cut out the moment the device is under load
+    let ctx: AudioContext;
+    try {
+      ctx = new Ctx({ latencyHint: "playback" });
+    } catch {
+      ctx = new Ctx();
+    }
     const src = ctx.createMediaElementSource(this.audio);
 
     const shaper = ctx.createWaveShaper();
