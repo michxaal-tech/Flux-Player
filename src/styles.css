@@ -1,0 +1,14 @@
+* { box-sizing: border-box; margin: 0; }
+html, body, #root { height: 100%; }
+body { background: #08090D; }
+button { font-family: 'Space Grotesk', sans-serif; }
+input[type=range] { -webkit-appearance: none; appearance: none; background: transparent; height: 22px; width: 100%; }
+input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: #22252d; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%; background: #53E9FF; margin-top: -5.5px; cursor: pointer; box-shadow: 0 0 10px rgba(83,233,255,.55); }
+input[type=text], textarea { font-family: 'Space Grotesk', sans-serif; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-thumb { background: #2a2e38; border-radius: 3px; }
+.hscroll::-webkit-scrollbar { display: none; }
+.pgrid { display: grid; grid-template-columns: 1fr; gap: 16px; max-width: 1020px; margin: 0 auto; width: 100%; }
+@media (min-width: 760px) { .pgrid { grid-template-columns: 1fr 310px; align-items: start; } }
+.drag-over { outline: 1px dashed #53E9FF; outline-offset: -1px; }
