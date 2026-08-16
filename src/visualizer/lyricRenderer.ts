@@ -187,34 +187,37 @@ export function drawLyricOverlay(x: LyricCtx): void {
   }
 
   if (style === "CASCADE") {
-    // one word at a time: each word owns a slice of the line's duration,
+    // 2-3 words at a time: each chunk owns a slice of the line's duration,
     // fading out as the next fades in at a fresh spot
     if (cur.text) {
       const words = cur.text.split(" ").filter(Boolean);
-      const n = words.length;
+      const per = words.length <= 4 ? 2 : 3;
+      const chunks: string[] = [];
+      for (let i = 0; i < words.length; i += per) chunks.push(words.slice(i, i + per).join(" "));
+      const n = chunks.length;
       const pos2 = cur.frac * n;
       const active = Math.min(n - 1, Math.floor(pos2));
       const local = Math.min(1, pos2 - active);
-      const drawWord = (k: number, alpha: number, scl: number) => {
+      const drawChunk = (k: number, alpha: number, scl: number) => {
         if (k < 0 || k >= n || alpha <= 0.02) return;
         const [wx, wy] = posFor(cur.index * 13 + k * 5, w, h);
-        drawBlock(c, words[k], {
+        drawBlock(c, chunks[k], {
           x: wx,
           y: wy,
           alpha,
           scale: scl,
           rot: angFor(cur.index + k),
-          maxW: w * 0.7,
-          size: size * 1.4,
+          maxW: w * 0.62,
+          size: size * 1.22,
           glowAmt: 18 + beatE * 22,
           glowColor: CMix(((cur.index + k) % 9) / 9),
         }, w);
       };
-      // outgoing previous word overlaps the incoming one briefly
-      drawWord(active - 1, (1 - smooth(local * 2.4)) * 0.7, 1.02);
+      // outgoing previous chunk overlaps the incoming one briefly
+      drawChunk(active - 1, (1 - smooth(local * 2.4)) * 0.7, 1.02);
       const appear = smooth(local * 2.6);
       const out = local > 0.72 ? smooth((local - 0.72) / 0.28) : 0;
-      drawWord(active, appear * (1 - out * 0.85), 0.86 + appear * 0.14 + beatE * 0.04);
+      drawChunk(active, appear * (1 - out * 0.85), 0.86 + appear * 0.14 + beatE * 0.04);
     }
     c.restore();
     return;
