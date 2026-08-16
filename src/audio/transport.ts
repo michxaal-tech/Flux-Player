@@ -13,7 +13,8 @@ export async function playAt(plId: string, i: number): Promise<void> {
   const tr = pl?.tracks[i];
   if (!pl || !tr) return;
   engine.ensure();
-  const url = await getUrl(tr.fileId);
+  const wantInst = s.instMode && tr.hasInst;
+  const url = (wantInst ? await getUrl(`inst-${tr.fileId}`) : null) ?? (await getUrl(tr.fileId));
   if (!url) {
     console.warn(`Audio for "${tr.name}" is missing from storage.`);
     return;
@@ -192,6 +193,26 @@ export function launch(): void {
   requestAnimationFrame(anim);
 }
 
+/** Toggle instrumental mode, hot-swapping the current track's source in place. */
+export async function setInstMode(on: boolean): Promise<void> {
+  useStore.setState({ instMode: on });
+  const s = S();
+  const tr = s.playlists.find((p) => p.id === s.playPl)?.tracks[s.current];
+  if (!tr || !tr.hasInst) return;
+  const url = await getUrl(on ? `inst-${tr.fileId}` : tr.fileId);
+  if (!url) return;
+  const el = engine.audio;
+  if (!el.src) return;
+  const pos = el.currentTime;
+  const wasPlaying = !el.paused;
+  el.src = url;
+  el.currentTime = pos;
+  const fx = S().fx;
+  el.playbackRate = fx.speed;
+  engine.setPreservesPitch(!fx.vinyl);
+  if (wasPlaying) el.play().catch(() => {});
+}
+
 // ── library ops with blob cleanup ───────────────────────────────
 function fileIdRefCount(fileId: string): number {
   return S().playlists.flatMap((p) => p.tracks).filter((t) => t.fileId === fileId).length;
@@ -203,6 +224,8 @@ export function removeTrack(trackId: string, plId: string): void {
   if (tr && fileIdRefCount(tr.fileId) === 0) {
     dropUrl(tr.fileId);
     blobStore.del(tr.fileId);
+    dropUrl(`inst-${tr.fileId}`);
+    blobStore.del(`inst-${tr.fileId}`);
   }
 }
 
@@ -225,6 +248,8 @@ export function deletePlaylist(plId: string): void {
     if (fileIdRefCount(tr.fileId) === 0) {
       dropUrl(tr.fileId);
       blobStore.del(tr.fileId);
+      dropUrl(`inst-${tr.fileId}`);
+      blobStore.del(`inst-${tr.fileId}`);
     }
   }
 }

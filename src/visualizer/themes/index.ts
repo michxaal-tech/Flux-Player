@@ -36,11 +36,18 @@ import { TERMINAL } from "./terminal";
 import { GLITCH } from "./glitch";
 import { PIXEL } from "./pixel";
 import { BRUTAL } from "./brutal";
+import { VINYL } from "./vinyl";
+import { THUNDER } from "./thunder";
+import { KOI } from "./koi";
+import { CASSETTE } from "./cassette";
+import { MARQUEE } from "./marquee";
+import { NEONSIGN } from "./neonsign";
 import { CLOCK } from "./clock";
 
 export const themes: Record<string, ThemeDraw> = {
   RING, KALEIDO, HELIX, WAVES, LASERS, GRID, ORB, RIPPLES, SPIRAL, FIREFLIES,
   CITY, VORTEX, SCOPE, AURORA, DOTGRID, BARS, NEBULA, TUNNEL, STARFIELD,
   TIDE, NOVA, HALO, COMETS, FIREWORKS, LANTERNS, JELLY, CRYSTAL, BLOOM,
-  ECLIPSE, GALAXY, SILK, LIQUID, TERMINAL, GLITCH, PIXEL, BRUTAL, CLOCK,
+  ECLIPSE, GALAXY, SILK, LIQUID, TERMINAL, GLITCH, PIXEL, BRUTAL,
+  VINYL, THUNDER, KOI, CASSETTE, MARQUEE, NEONSIGN, CLOCK,
 };

@@ -37,6 +37,10 @@ export interface Track {
   lastPlayedAt: number;
   fxPin?: FxState;
   peaks?: number[];
+  /** an on-device AI instrumental exists as blob `inst-<fileId>` */
+  hasInst?: boolean;
+  /** synced lyrics (LRC), sorted by time */
+  lyrics?: { t: number; text: string }[];
 }
 
 export interface Playlist {

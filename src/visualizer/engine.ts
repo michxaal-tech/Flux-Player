@@ -9,6 +9,10 @@ import { ac1, ac2 } from "../theme";
 import { canvasRefs, live } from "./live";
 import { themes } from "./themes";
 import type { ThemeCtx } from "./themeTypes";
+import { drawLyricOverlay } from "./lyricRenderer";
+
+/** themes that render lyrics themselves — the shared overlay stays out of their way */
+const LYRIC_NATIVE_THEMES = new Set(["MARQUEE", "NEONSIGN", "CLOCK"]);
 
 function syncLive(): void {
   const sub = useStore.subscribe;
@@ -32,19 +36,33 @@ function syncLive(): void {
     (tr) => {
       live.trackName = tr?.name ?? "";
       live.peaks = tr?.peaks ?? null;
+      live.lyricLines = tr?.lyrics ?? null;
     },
     { fireImmediately: true }
   );
+  sub((s) => s.lyricsOn, (v) => { live.lyricsOn = v; }, { fireImmediately: true });
+  sub((s) => s.lyricStyle, (v) => { live.lyricStyle = v; }, { fireImmediately: true });
 }
 
-function sizeCanvas(cv: HTMLCanvasElement): [number, number] {
+/**
+ * Sizes a canvas's backing store, capping the internal long edge at maxEdge.
+ * Full-screen canvases on high-DPR displays are otherwise 8-15M pixels per
+ * frame, and shadowBlur cost scales with pixels — capping and letting CSS
+ * upscale is what keeps the visualizer smooth at full size (the glow hides
+ * the upscale entirely).
+ */
+function sizeCanvas(cv: HTMLCanvasElement, maxEdge = Infinity): [number, number] {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const cw = cv.clientWidth, chh = cv.clientHeight;
-  if (cv.width !== cw * dpr || cv.height !== chh * dpr) {
-    cv.width = cw * dpr;
-    cv.height = chh * dpr;
-    cv.getContext("2d")!.setTransform(dpr, 0, 0, dpr, 0, 0);
+  let scale = dpr;
+  const long = Math.max(cw, chh) * dpr;
+  if (long > maxEdge) scale = dpr * (maxEdge / long);
+  const W = Math.round(cw * scale), H = Math.round(chh * scale);
+  if (cv.width !== W || cv.height !== H) {
+    cv.width = W;
+    cv.height = H;
   }
+  cv.getContext("2d")!.setTransform(scale, 0, 0, scale, 0, 0);
   return [cw, chh];
 }
 
@@ -141,7 +159,7 @@ export function startRenderLoop(): void {
     // ── ambient background + edge spectrum meters ──
     const bg = canvasRefs.bg;
     if (bg) {
-      const [w, h] = sizeCanvas(bg);
+      const [w, h] = sizeCanvas(bg, 1000); // soft ambient layer — low res is invisible
       const c = bg.getContext("2d")!;
       c.fillStyle = "rgba(8,9,13,0.3)";
       c.fillRect(0, 0, w, h);
@@ -200,7 +218,7 @@ export function startRenderLoop(): void {
     // ── fullscreen visual engine ──
     const vc = canvasRefs.vis;
     if (vc && L.visOpen) {
-      const [w, h] = sizeCanvas(vc);
+      const [w, h] = sizeCanvas(vc, 1440);
       const c = vc.getContext("2d")!;
       const cx = w / 2, cy = h / 2, R = Math.min(w, h);
 
@@ -306,6 +324,15 @@ export function startRenderLoop(): void {
       if (L.flashVal > 0.01) {
         c.fillStyle = C1(L.flashVal * 0.3, 80);
         c.fillRect(0, 0, w, h);
+      }
+
+      // synced lyrics overlay (must leave composite as source-over — the
+      // vignette below and next frame's trail fade depend on it)
+      if (L.lyricsOn && L.lyricLines && !LYRIC_NATIVE_THEMES.has(TH)) {
+        drawLyricOverlay({
+          c, w, h, time: engine.audio.currentTime, beatE: L.beatE, vt, TK,
+          C1, C2, CMix, L,
+        });
       }
 
       // vignette

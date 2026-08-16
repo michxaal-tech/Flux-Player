@@ -5,6 +5,7 @@ import { nextTrack, prevTrack, togglePlay } from "../audio/transport";
 import { getCurrentTrack, useStore } from "../store/useStore";
 import { mix } from "../theme";
 import { canvasRefs } from "../visualizer/live";
+import { LYRIC_STYLES } from "../visualizer/lyricRenderer";
 import { chip, NextIcon, PauseIcon, playBtn, PlayIcon, PrevIcon, skipBtn, Slider, Toggle } from "./ui";
 
 export function VisualizerOverlay() {
@@ -13,9 +14,13 @@ export function VisualizerOverlay() {
   const visPanel = useStore((s) => s.visPanel);
   const playing = useStore((s) => s.playing);
   const track = useStore(getCurrentTrack);
+  const lyricsOn = useStore((s) => s.lyricsOn);
+  const lyricStyle = useStore((s) => s.lyricStyle);
+  const lyricStatus = useStore((s) => s.lyricStatus);
   const set = useStore((s) => s.set);
   const setV = useStore((s) => s.setVisKey);
   const visChaos = useStore((s) => s.visChaos);
+  const lrcInputRef = useRef<HTMLInputElement>(null);
 
   const [themeMenu, setThemeMenu] = useState(false);
   const visRef = useRef<HTMLCanvasElement>(null);
@@ -31,14 +36,6 @@ export function VisualizerOverlay() {
     const i = VIS_THEMES.indexOf(visTheme);
     set({ visTheme: VIS_THEMES[(i + dir + VIS_THEMES.length) % VIS_THEMES.length] });
   };
-
-  const arrowStyle = (side: "left" | "right"): CSSProperties => ({
-    position: "absolute", [side]: 10, top: "50%", transform: "translateY(-50%)",
-    width: 38, height: 72, borderRadius: 12, cursor: "pointer", zIndex: 4,
-    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
-    color: "rgba(255,255,255,0.35)", fontSize: 26, lineHeight: "72px", textAlign: "center",
-    backdropFilter: "blur(4px)", padding: 0, userSelect: "none",
-  });
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "#05060A" }}>
@@ -58,9 +55,13 @@ export function VisualizerOverlay() {
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "pan-y" }}
       />
 
-      {/* translucent prev/next theme arrows */}
-      <button onClick={() => stepTheme(-1)} style={arrowStyle("left")} aria-label="Previous theme">‹</button>
-      <button onClick={() => stepTheme(1)} style={arrowStyle("right")} aria-label="Next theme">›</button>
+      {/* prev/next theme arrows — hidden until the edge is hovered */}
+      <div className="viszone left">
+        <button className="visarrow" onClick={() => stepTheme(-1)} aria-label="Previous theme">‹</button>
+      </div>
+      <div className="viszone right">
+        <button className="visarrow" onClick={() => stepTheme(1)} aria-label="Next theme">›</button>
+      </div>
 
       <div style={{ position: "absolute", top: 14, left: 16, right: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
         {/* compact theme picker: one chip + fluid dropdown, no chip clutter */}
@@ -116,6 +117,7 @@ export function VisualizerOverlay() {
           )}
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          <button onClick={() => set({ lyricsOn: !lyricsOn })} style={chip(lyricsOn)} title="Lyrics on/off">♪</button>
           <button onClick={visChaos} style={chip(false, MAG)}>🎲</button>
           <button onClick={() => set({ visPanel: !visPanel })} style={chip(visPanel, MAG)}>⚙ TUNE</button>
           <button onClick={() => set({ visOpen: false })} style={{ ...chip(false), fontSize: 14 }}>✕</button>
@@ -176,8 +178,41 @@ export function VisualizerOverlay() {
             <Toggle label="BEAT SHAKE" on={visCfg.shake} onChange={(v) => setV("shake", v)} />
             <Toggle label="MIRROR" on={visCfg.mirror} onChange={(v) => setV("mirror", v)} />
           </div>
+          <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 8px" }}>♪ LYRICS</div>
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
+            <Toggle label={lyricsOn ? "ON" : "OFF"} on={lyricsOn} onChange={(v) => set({ lyricsOn: v })} />
+            {LYRIC_STYLES.map((s2) => (
+              <button key={s2} onClick={() => set({ lyricStyle: s2 })} style={{ ...chip(lyricStyle === s2), padding: "6px 10px", fontSize: 9.5 }}>{s2}</button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+            <button
+              onClick={async () => {
+                if (!track) return;
+                const { fetchLyrics } = await import("../lyrics");
+                fetchLyrics(track);
+              }}
+              style={{ ...chip(false, MAG), padding: "7px 11px", fontSize: 9.5, opacity: track ? 1 : 0.4 }}
+            >🔍 FIND LYRICS</button>
+            <button onClick={() => lrcInputRef.current?.click()} style={{ ...chip(false), padding: "7px 11px", fontSize: 9.5, opacity: track ? 1 : 0.4 }}>＋ .LRC FILE</button>
+            <span style={{ fontSize: 9.5, color: CYAN }}>
+              {lyricStatus || (track?.lyrics ? `${track.lyrics.length} lines loaded` : track ? "no lyrics yet" : "")}
+            </span>
+          </div>
+          <input
+            ref={lrcInputRef} type="file" accept=".lrc,.txt" style={{ display: "none" }}
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (f && track) {
+                const { importLrcFile } = await import("../lyrics");
+                importLrcFile(track, f);
+              }
+              e.target.value = "";
+            }}
+          />
           <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", marginTop: 8, lineHeight: 1.5 }}>
             🎲 randomizes the whole look. Theme auto-cycle/shuffle lives in the theme menu (top left).
+            MARQUEE and NEONSIGN themes are built around lyrics.
           </div>
         </div>
       )}

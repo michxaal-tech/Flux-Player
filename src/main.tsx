@@ -11,6 +11,8 @@ wireAudio();
 startRenderLoop();
 applyAccentTheme(useStore.getState().visCfg);
 useStore.subscribe((s) => s.visCfg, applyAccentTheme);
+// debug/test handle
+(window as unknown as { __fluxStore: typeof useStore }).__fluxStore = useStore;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

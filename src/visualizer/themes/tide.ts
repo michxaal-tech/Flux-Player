@@ -104,13 +104,17 @@ export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg
   };
 
   const layers = 3;
+  const STEP = 10;
   for (let ly = 0; ly < layers; ly++) {
     const f = ly / (layers - 1); // 0 back … 1 front
     const baseY = h * (0.58 + f * 0.16);
     const amp = h * (0.018 + f * 0.028) * (1 + bassV * 1.2);
+    // compute the surface once, reuse for fill + crest stroke
+    const pts: number[] = [];
+    for (let x = 0; x <= w; x += STEP) pts.push(surfaceY(x, f, baseY, amp));
     c.beginPath();
     c.moveTo(0, h);
-    for (let x = 0; x <= w; x += 8) c.lineTo(x, surfaceY(x, f, baseY, amp));
+    pts.forEach((y2, i) => c.lineTo(i * STEP, y2));
     c.lineTo(w, h);
     c.closePath();
     const grad = c.createLinearGradient(0, baseY - h * 0.12, 0, h);
@@ -120,10 +124,7 @@ export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg
     c.fill();
     // glowing crest line
     c.beginPath();
-    for (let x = 0; x <= w; x += 8) {
-      const y = surfaceY(x, f, baseY, amp);
-      x === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
-    }
+    pts.forEach((y2, i) => (i === 0 ? c.moveTo(0, y2) : c.lineTo(i * STEP, y2)));
     c.strokeStyle = CMix(f, 0.45 + beatE * 0.35 + S.flash * 0.4, 66 + S.flash * 18);
     c.lineWidth = (1.2 + f * 1.6 + beatE * 2) * TK;
     glow((10 + f * 10) * (1 + beatE + S.flash), C1());

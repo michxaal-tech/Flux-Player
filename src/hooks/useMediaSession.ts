@@ -18,12 +18,11 @@ export function useMediaSession(): void {
       ms.setActionHandler("seekto", (d) => {
         if (d.seekTime != null) seek(d.seekTime);
       });
-      ms.setActionHandler("seekbackward", (d) => {
-        seek(Math.max(0, engine.audio.currentTime - (d.seekOffset || 10)));
-      });
-      ms.setActionHandler("seekforward", (d) => {
-        seek(engine.audio.currentTime + (d.seekOffset || 10));
-      });
+      // deliberately NOT registering seekbackward/seekforward: when those
+      // handlers exist, iOS replaces the prev/next track buttons in Control
+      // Center and on the lock screen with ±10s skip buttons
+      ms.setActionHandler("seekbackward", null);
+      ms.setActionHandler("seekforward", null);
     } catch { /* optional actions */ }
 
     const unsubTrack = useStore.subscribe(

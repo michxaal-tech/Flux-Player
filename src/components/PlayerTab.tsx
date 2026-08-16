@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
 import { BG, BORDER, CYAN, LEVELS, MAG, MONO, TAGS } from "../constants";
-import { nextTrack, prevTrack, playAt, seek, togglePlay } from "../audio/transport";
+import { nextTrack, prevTrack, playAt, seek, setInstMode, togglePlay } from "../audio/transport";
 import { getCurrentTrack, getFavCount, getPlayingList, useStore } from "../store/useStore";
 import { canvasRefs } from "../visualizer/live";
 import { mix } from "../theme";
@@ -24,6 +24,8 @@ export function PlayerTab() {
   const loopB = useStore((s) => s.loopB);
   const fx = useStore((s) => s.fx);
   const activePreset = useStore((s) => s.activePreset);
+  const instMode = useStore((s) => s.instMode);
+  const stemProgress = useStore((s) => s.stemProgress);
   const stats = useStore((s) => s.stats);
   const favCount = useStore(getFavCount);
   const set = useStore((s) => s.set);
@@ -125,6 +127,32 @@ export function PlayerTab() {
                 <button onClick={() => setNoteOpen((x) => !x)} style={{ fontFamily: MONO, fontSize: 10, cursor: "pointer", color: track.note ? BG : "rgba(255,255,255,0.6)", background: track.note ? CYAN : "transparent", border: `1px solid rgba(255,255,255,0.25)`, borderRadius: 6, padding: "2px 7px" }}>
                   ✎ NOTE
                 </button>
+                {stemProgress ? (
+                  <span style={{ fontFamily: MONO, fontSize: 10, color: CYAN, border: `1px solid ${mix(CYAN, 33)}`, borderRadius: 6, padding: "2px 7px" }}>⏳ {stemProgress}</span>
+                ) : track.hasInst ? (
+                  <button
+                    onClick={() => setInstMode(!instMode)}
+                    style={{ fontFamily: MONO, fontSize: 10, cursor: "pointer", color: instMode ? BG : CYAN, background: instMode ? CYAN : "transparent", border: `1px solid ${mix(CYAN, 40)}`, borderRadius: 6, padding: "2px 7px" }}
+                  >
+                    🎸 {instMode ? "INSTRUMENTAL ON" : "INSTRUMENTAL OFF"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      if (
+                        confirm(
+                          "Generate an instrumental (vocals removed) version of this track?\n\nRuns entirely on this device — nothing is uploaded. First use downloads a ~64MB AI model (kept for later). Processing takes a few minutes per song."
+                        )
+                      ) {
+                        const { generateInstrumental } = await import("../audio/stems/separator");
+                        generateInstrumental(track);
+                      }
+                    }}
+                    style={{ fontFamily: MONO, fontSize: 10, cursor: "pointer", color: "rgba(255,255,255,0.6)", background: "transparent", border: `1px solid rgba(255,255,255,0.25)`, borderRadius: 6, padding: "2px 7px" }}
+                  >
+                    🎸 MAKE INSTRUMENTAL
+                  </button>
+                )}
               </div>
               {noteOpen && (
                 <textarea

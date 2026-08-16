@@ -42,6 +42,14 @@ export interface StoreState {
   recTime: number;
   takes: Take[];
   exporting: string;
+  // on-device stem separation
+  /** play AI instrumentals (when a track has one) instead of the original */
+  instMode: boolean;
+  stemProgress: string;
+  // lyrics
+  lyricsOn: boolean;
+  lyricStyle: string;
+  lyricStatus: string;
   // profile
   stats: Stats;
   // ui
@@ -113,6 +121,11 @@ export const useStore = create<StoreState>()(
         recTime: 0,
         takes: [],
         exporting: "",
+        instMode: false,
+        stemProgress: "",
+        lyricsOn: true,
+        lyricStyle: "FADE",
+        lyricStatus: "",
         stats: { plays: 0, seconds: 0 },
         tab: "player",
         shortcutsOpen: false,
@@ -304,6 +317,9 @@ export const useStore = create<StoreState>()(
           visCfg: s.visCfg,
           takes: s.takes,
           stats: s.stats,
+          instMode: s.instMode,
+          lyricsOn: s.lyricsOn,
+          lyricStyle: s.lyricStyle,
         }),
         merge: (persisted, current) => {
           const p = (persisted ?? {}) as Partial<StoreState>;
