@@ -19,7 +19,7 @@ export interface LyricCtx {
   L: LiveState;
 }
 
-export const LYRIC_STYLES = ["DRIFT", "POP", "ORBIT", "CASCADE", "KARAOKE"];
+export const LYRIC_STYLES = ["DRIFT", "SCATTER", "POP", "RISE", "SPIN", "ORBIT", "CASCADE", "TYPE", "KARAOKE"];
 
 export interface CurrentLyric {
   prev: string;
@@ -59,6 +59,15 @@ const posFor = (i: number, w: number, h: number): [number, number] => {
   const fx = (i * 0.618033988 + 0.31) % 1;
   const fy = (i * 0.381966011 + 0.12) % 1;
   return [w * (0.24 + fx * 0.52), h * (0.2 + fy * 0.46)];
+};
+
+/** deterministic gentle tilt per line, ±0.12 rad, never harsh */
+const angFor = (i: number): number => (((i * 2654435761) % 97) / 97 - 0.5) * 0.24;
+
+/** ease-out cubic — the "settles softly" curve */
+const easeOut = (x: number) => {
+  const t = Math.min(1, Math.max(0, x));
+  return 1 - Math.pow(1 - t, 3);
 };
 
 interface LineOpts {
@@ -153,7 +162,8 @@ export function drawLyricOverlay(x: LyricCtx): void {
 
   // ── fluid, position-scattered styles ──
   // ghost of the previous line, still drifting away from its own spot
-  if (cur.prev && cur.index >= 1) {
+  // (SCATTER keeps its own multi-line collage, so no extra ghost there)
+  if (style !== "SCATTER" && cur.prev && cur.index >= 1) {
     const [px, py] = posFor(cur.index - 1, w, h);
     const gone = smooth(cur.age * 0.7);
     drawLine(c, cur.prev, {
@@ -176,6 +186,36 @@ export function drawLyricOverlay(x: LyricCtx): void {
   const appear = smooth(cur.age * 2.2);
   const leave = cur.frac > 0.86 ? smooth((cur.frac - 0.86) / 0.14) : 0;
   const alpha = appear * (1 - leave * 0.9);
+
+  if (style === "SCATTER") {
+    // lines pop in one at a time at scattered spots with gentle tilts and
+    // stay up as a collage — newest brightest, older ones melt away
+    const KEEP = 4;
+    for (let k = KEEP - 1; k >= 0; k--) {
+      const idx = cur.index - k;
+      if (idx < 0 || !lines[idx]) continue;
+      const text = lines[idx].text;
+      const [sx, sy] = posFor(idx, w, h);
+      const lineAge = time - lines[idx].t;
+      const pop = easeOut(lineAge * 2.6);
+      const depth = k / KEEP;
+      const fade = k === 0 ? 1 : Math.max(0, 1 - depth * 1.1 - cur.age * 0.12);
+      if (fade <= 0.02) continue;
+      drawLine(c, text, {
+        x: sx,
+        y: sy + (1 - pop) * 26 - lineAge * 2.2,
+        alpha: (k === 0 ? 0.95 * pop : 0.5 * fade),
+        scale: (0.8 + pop * 0.2) * (1 - depth * 0.16) + (k === 0 ? beatE * 0.025 : 0),
+        rot: angFor(idx) * pop,
+        maxW: w * 0.52,
+        size: size * (k === 0 ? 1 : 0.82),
+        glowAmt: k === 0 ? 16 + beatE * 22 : 6,
+        glowColor: CMix((idx % 9) / 9),
+      }, w);
+    }
+    c.restore();
+    return;
+  }
 
   if (style === "DRIFT") {
     drawLine(c, cur.text, {
@@ -217,6 +257,52 @@ export function drawLyricOverlay(x: LyricCtx): void {
       maxW: w * 0.5,
       size: size * 0.92,
       glowAmt: 16 + beatE * 20,
+      glowColor: C1(),
+    }, w);
+  } else if (style === "RISE") {
+    // line rises from below, settles softly at its spot, then floats off the top
+    const settle = easeOut(cur.age * 1.7);
+    const exitY = leave * h * 0.28;
+    drawLine(c, cur.text, {
+      x: lx,
+      y: h * 0.85 + (ly - h * 0.85) * settle - exitY,
+      alpha: Math.min(1, cur.age * 3) * (1 - leave),
+      scale: 0.88 + settle * 0.12 + beatE * 0.02,
+      rot: angFor(cur.index) * 0.5 * settle,
+      maxW: w * 0.6,
+      size,
+      glowAmt: 16 + beatE * 20,
+      glowColor: C1(),
+    }, w);
+  } else if (style === "SPIN") {
+    // swings in with a soft rotation, unwinds while it sits, spins away
+    const inn = easeOut(cur.age * 2);
+    const rot = (1 - inn) * -0.4 + angFor(cur.index) * inn + leave * 0.45;
+    drawLine(c, cur.text, {
+      x: lx,
+      y: ly,
+      alpha,
+      scale: (0.6 + inn * 0.4) * (1 - leave * 0.25) + beatE * 0.03,
+      rot,
+      maxW: w * 0.58,
+      size,
+      glowAmt: 16 + beatE * 22,
+      glowColor: CMix((cur.index % 7) / 7),
+    }, w);
+  } else if (style === "TYPE") {
+    // typewriter with a soft glow cursor, centered
+    const chars = [...cur.text];
+    const shown = Math.min(chars.length, Math.floor(cur.age * Math.max(12, chars.length * 1.6)));
+    const text = chars.slice(0, shown).join("");
+    const cursorOn = (Math.floor(vt / 14) % 2 === 0 && shown < chars.length) || shown === 0;
+    drawLine(c, text + (cursorOn ? "▌" : shown < chars.length ? " " : ""), {
+      x: w / 2,
+      y: h * 0.45,
+      alpha: 1 - leave,
+      scale: 1 + beatE * 0.02,
+      maxW: w * 0.8,
+      size,
+      glowAmt: 14 + beatE * 16,
       glowColor: C1(),
     }, w);
   } else if (style === "CASCADE") {

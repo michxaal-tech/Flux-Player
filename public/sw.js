@@ -1,6 +1,6 @@
 // FLUX PRO service worker: cache-first app shell so the player works offline.
 // Bump the version to invalidate old caches on deploy.
-const CACHE = "flux-v2";
+const CACHE = "flux-v3";
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -20,6 +20,11 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (!url.protocol.startsWith("http")) return;
+  // Only handle our own assets and the font CDN. Everything else (the AI
+  // model from HuggingFace, lyric lookups, …) goes straight to the network —
+  // caching a 66MB model download here caused huge duplicate writes.
+  const fontHost = url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com";
+  if (url.origin !== location.origin && !fontHost) return;
 
   // SPA navigations: network first, fall back to the cached shell offline.
   if (req.mode === "navigate") {

@@ -26,7 +26,8 @@ export async function ensurePeaks(tr: Track): Promise<void> {
       pk.push(m);
     }
     const mx = Math.max(...pk, 0.01);
-    useStore.getState().updateTrack(tr.id, { peaks: pk.map((p) => p / mx) });
+    // 3 decimals is plenty for a seekbar and keeps the persisted store small
+    useStore.getState().updateTrack(tr.id, { peaks: pk.map((p) => Math.round((p / mx) * 1000) / 1000) });
   } catch {
     /* undecodable file — waveform stays synthetic */
   } finally {

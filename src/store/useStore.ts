@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist, subscribeWithSelector } from "zustand/middleware";
+import { lazyJsonStorage } from "./lazyStorage";
 import type {
   AmbState, FxState, Playlist, Preset, RecState, RepeatMode, SortBy, Stats, TabId,
   Take, Track, ViewMode, VisCfg,
@@ -301,6 +302,7 @@ export const useStore = create<StoreState>()(
       {
         name: "flux-store",
         version: 1,
+        storage: lazyJsonStorage(1500),
         partialize: (s) => ({
           playlists: s.playlists,
           viewMode: s.viewMode,

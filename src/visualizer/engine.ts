@@ -76,6 +76,7 @@ export function startRenderLoop(): void {
   const freq = new Uint8Array(512);
   const beatFreq = new Uint8Array(512);
   const wave = new Uint8Array(1024);
+  let lyricWasActive = false;
   let t = 0;
   let lastFrame = 0;
 
@@ -329,17 +330,19 @@ export function startRenderLoop(): void {
       // synced lyrics on their own overlay canvas — cleared per frame so the
       // floating text stays crisp instead of smearing into the trail buffer
       const lc = canvasRefs.lyr;
-      if (lc) {
+      const lyricActive = !!(L.lyricsOn && L.lyricLines && !LYRIC_NATIVE_THEMES.has(TH));
+      if (lc && (lyricActive || lyricWasActive)) {
         const [lw2, lh2] = sizeCanvas(lc, 1440);
         const c2 = lc.getContext("2d")!;
         c2.clearRect(0, 0, lw2, lh2);
-        if (L.lyricsOn && L.lyricLines && !LYRIC_NATIVE_THEMES.has(TH)) {
+        if (lyricActive) {
           drawLyricOverlay({
             c: c2, w: lw2, h: lh2, time: engine.audio.currentTime, beatE: L.beatE, vt, TK,
             C1, C2, CMix, L,
           });
         }
       }
+      lyricWasActive = lyricActive;
 
       // vignette
       const vg = c.createRadialGradient(cx, cy, R * 0.35, cx, cy, Math.max(w, h) * 0.75);

@@ -51,20 +51,25 @@ export async function addFiles(fileList: FileList | File[]): Promise<void> {
   if (!audioFiles.length) return;
   const s = S();
   const targetId = (s.viewMode.type === "pl" ? s.viewMode.id : null) || s.playPl;
-  const items: Track[] = [];
-  for (const f of audioFiles) {
-    const id = uid();
-    cacheUrl(id, f); // playable immediately, even before the write below lands
-    await blobStore.put(id, f).catch((e) => console.warn("Failed to persist audio:", e));
-    items.push({
+  const pairs = audioFiles.map((f) => ({ f, id: uid() }));
+  const items: Track[] = pairs.map(({ f, id }) => {
+    cacheUrl(id, f); // playable immediately, even before the writes below land
+    return {
       id, fileId: id, name: cleanName(f.name),
       plays: 0, fav: false, tags: [], note: "", addedAt: Date.now(), lastPlayedAt: 0,
-    });
-  }
+    };
+  });
   const wasEmpty = S().current < 0;
   const before = S().playlists.find((p) => p.id === targetId)?.tracks.length ?? 0;
   S().addTracks(targetId, items);
   if (wasEmpty) setTimeout(() => playAt(targetId, before), 60);
+  // persist to storage in the background — importing an album must not
+  // freeze the UI while every file is written to IndexedDB
+  void (async () => {
+    for (const { f, id } of pairs) {
+      await blobStore.put(id, f).catch((e) => console.warn("Failed to persist audio:", e));
+    }
+  })();
 }
 
 export function togglePlay(): void {
