@@ -449,8 +449,19 @@ export function startRenderLoop(): void {
       L.vt += cfg.speed;
       const vt = L.vt;
 
-      if (beat && cfg.flash) L.flashVal = 0.28;
-      if (beat && cfg.shake) L.shakeVal = 7;
+      const IMP = new Set(cfg.impacts ?? []);
+      if (beat && (cfg.flash || IMP.has("FLASH"))) L.flashVal = 0.28;
+      if (beat && (cfg.shake || IMP.has("SHAKE"))) L.shakeVal = 7;
+      if (beat) {
+        if (IMP.has("RINGS") && L.impRings.length < 8) L.impRings.push(0);
+        if (IMP.has("SCANLINE")) L.impScan = 0;
+      }
+      if (L.impScan >= 0) L.impScan += 0.055;
+      if (L.impScan > 1.2) L.impScan = -1;
+      for (let i = L.impRings.length - 1; i >= 0; i--) {
+        L.impRings[i] += 0.028;
+        if (L.impRings[i] > 1.25) L.impRings.splice(i, 1);
+      }
       if (L.flashVal > 0) L.flashVal *= 0.86;
       if (L.shakeVal > 0) L.shakeVal *= 0.8;
       if (cfg.autoMode !== "off" && L.playing) {
@@ -485,7 +496,9 @@ export function startRenderLoop(): void {
       if (L.shakeVal > 0.3) c.translate((Math.random() - 0.5) * L.shakeVal, (Math.random() - 0.5) * L.shakeVal);
       c.translate(cx, cy);
       if (TH !== "CLOCK") c.rotate(cfg.spinV * vt * 0.0018);
-      c.scale(cfg.zoom, cfg.zoom);
+      const punch = IMP.has("PUNCH") ? 1 + L.beatE * 0.09 : 1;
+      const squeezeY = IMP.has("SQUEEZE") ? 1 - L.beatE * 0.07 : 1;
+      c.scale(cfg.zoom * punch, cfg.zoom * punch * squeezeY);
       c.translate(-cx, -cy);
       c.globalCompositeOperation = "lighter";
 
@@ -503,19 +516,64 @@ export function startRenderLoop(): void {
       if (L.vparts.length > targetCount) L.vparts.length = targetCount;
       for (const p of L.vparts) {
         const st = cfg.pStyle;
-        if (st === "RISE") { p.y -= p.sp * (1 + bassV * 8) * cfg.speed; p.x += Math.sin(vt * 0.01 + p.ph) * 0.0006; }
-        if (st === "SNOW") { p.y += p.sp * (0.8 + midV * 3) * cfg.speed; p.x += Math.sin(vt * 0.02 + p.ph) * 0.0012; }
-        if (st === "DUST") { p.x += Math.sin(vt * 0.008 + p.ph) * 0.0007; p.y += Math.cos(vt * 0.006 + p.ph * 2) * 0.0005; }
-        if (st === "EMBERS") { p.y -= p.sp * (2.2 + bassV * 12) * cfg.speed; p.x += Math.sin(vt * 0.03 + p.ph) * 0.0014; }
+        const sp = cfg.speed;
+        switch (st) {
+          case "RISE": p.y -= p.sp * (1 + bassV * 8) * sp; p.x += Math.sin(vt * 0.01 + p.ph) * 0.0006; break;
+          case "SNOW": p.y += p.sp * (0.8 + midV * 3) * sp; p.x += Math.sin(vt * 0.02 + p.ph) * 0.0012; break;
+          case "DUST": p.x += Math.sin(vt * 0.008 + p.ph) * 0.0007; p.y += Math.cos(vt * 0.006 + p.ph * 2) * 0.0005; break;
+          case "EMBERS": p.y -= p.sp * (2.2 + bassV * 12) * sp; p.x += Math.sin(vt * 0.03 + p.ph) * 0.0014; break;
+          case "RAIN": p.y += p.sp * (6 + midV * 5) * sp; p.x += 0.0004 * sp; break;
+          case "BUBBLES": p.y -= p.sp * (1.4 + midV * 3) * sp; p.x += Math.sin(vt * 0.04 + p.ph) * 0.0016; break;
+          case "SPARKS": p.y += Math.sin(p.ph * 3) * p.sp * 4 * sp; p.x += Math.cos(p.ph * 3) * p.sp * 4 * sp * (1 + L.beatE * 3); break;
+          case "FIREFLY": p.x += Math.sin(vt * 0.02 + p.ph * 2) * 0.0011; p.y += Math.cos(vt * 0.017 + p.ph * 3) * 0.0009; break;
+          case "PETALS": p.y += p.sp * (1.1 + midV * 2) * sp; p.x += Math.sin(vt * 0.012 + p.ph) * 0.0022; break;
+          case "STARS": p.y += p.sp * 0.25 * sp; break;
+          case "ASH": p.y += p.sp * (0.7 + bassV) * sp; p.x += Math.sin(vt * 0.005 + p.ph) * 0.0016; break;
+          case "PLASMA": { const a = vt * 0.01 + p.ph; p.x += Math.cos(a) * 0.0018 * (1 + bassV * 2); p.y += Math.sin(a * 1.3) * 0.0018 * (1 + bassV * 2); break; }
+          case "CONFETTI": p.y += p.sp * (2.4 + midV * 3) * sp; p.x += Math.sin(vt * 0.05 + p.ph * 4) * 0.0026; break;
+          case "SWARM": { const dx = 0.5 - p.x, dy = 0.5 - p.y; const d = Math.hypot(dx, dy) || 1;
+            p.x += (dx / d) * 0.0009 * sp + Math.sin(vt * 0.03 + p.ph) * 0.0014;
+            p.y += (dy / d) * 0.0009 * sp + Math.cos(vt * 0.03 + p.ph) * 0.0014; break; }
+          case "DRIFT": p.x += 0.0009 * sp * (1 + trebV); p.y += Math.sin(vt * 0.006 + p.ph) * 0.0004; break;
+          case "VORTEX": { const dx = p.x - 0.5, dy = p.y - 0.5; const r = Math.hypot(dx, dy) || 0.001;
+            const a2 = Math.atan2(dy, dx) + (0.012 + bassV * 0.02) * sp;
+            const nr = Math.max(0.02, r - 0.0007 * sp);
+            p.x = 0.5 + Math.cos(a2) * nr; p.y = 0.5 + Math.sin(a2) * nr;
+            if (nr <= 0.025) { const ang = Math.random() * 6.28; p.x = 0.5 + Math.cos(ang) * 0.62; p.y = 0.5 + Math.sin(ang) * 0.62; }
+            break; }
+          case "METEOR": p.x -= p.sp * (5 + bassV * 6) * sp; p.y += p.sp * (3.4 + bassV * 4) * sp; break;
+          case "POLLEN": p.x += Math.sin(vt * 0.004 + p.ph) * 0.0006; p.y += Math.sin(vt * 0.0032 + p.ph * 1.7) * 0.0006; break;
+          case "GLITTER": p.y += p.sp * 0.9 * sp; p.x += Math.sin(vt * 0.11 + p.ph * 5) * 0.0012; break;
+          case "STATIC": if ((t + Math.floor(p.ph * 97)) % 7 === 0) { p.x = Math.random(); p.y = Math.random(); } break;
+        }
         if (p.y < -0.02) { p.y = 1.02; p.x = Math.random(); }
         if (p.y > 1.02) { p.y = -0.02; p.x = Math.random(); }
         if (p.x < -0.02) p.x = 1.02;
         if (p.x > 1.02) p.x = -0.02;
-        const tw = st === "EMBERS" ? 0.3 + Math.abs(Math.sin(vt * 0.09 + p.ph)) * 0.7 : 0.4 + Math.sin(vt * 0.05 + p.ph) * 0.3;
-        c.fillStyle = CMix((p.ph % 6.28) / 6.28, (0.28 + bassV * 0.5 + L.beatE * 0.3) * tw, st === "EMBERS" ? 60 : 68);
-        c.beginPath();
-        c.arc(p.x * w, p.y * h, p.sz * (1 + bassV * 1.6 + L.beatE * 0.8) * (st === "SNOW" ? 1.3 : 1) * TK, 0, Math.PI * 2);
-        c.fill();
+        const fast = st === "EMBERS" || st === "SPARKS" || st === "GLITTER" || st === "STATIC";
+        const tw = fast
+          ? 0.3 + Math.abs(Math.sin(vt * 0.09 + p.ph)) * 0.7
+          : st === "FIREFLY" || st === "STARS"
+            ? 0.15 + Math.abs(Math.sin(vt * 0.03 + p.ph * 2)) * 0.85
+            : 0.4 + Math.sin(vt * 0.05 + p.ph) * 0.3;
+        const big = st === "SNOW" || st === "BUBBLES" || st === "PETALS" ? 1.3 : st === "STARS" ? 0.8 : 1;
+        c.fillStyle = CMix((p.ph % 6.28) / 6.28, (0.28 + bassV * 0.5 + L.beatE * 0.3) * tw, fast ? 60 : 68);
+        const pr = p.sz * (1 + bassV * 1.6 + L.beatE * 0.8) * big * TK;
+        if (st === "RAIN" || st === "METEOR") {
+          // streaks read as motion far better than dots at these speeds
+          c.strokeStyle = c.fillStyle;
+          c.lineWidth = Math.max(0.6, pr * 0.7);
+          c.beginPath();
+          c.moveTo(p.x * w, p.y * h);
+          c.lineTo(p.x * w - (st === "METEOR" ? pr * 5 : 0), p.y * h - pr * (st === "METEOR" ? 3.4 : 6));
+          c.stroke();
+        } else if (st === "CONFETTI") {
+          c.fillRect(p.x * w - pr, p.y * h - pr * 0.5, pr * 2, pr);
+        } else {
+          c.beginPath();
+          c.arc(p.x * w, p.y * h, pr, 0, Math.PI * 2);
+          c.fill();
+        }
       }
 
       c.restore();
@@ -528,6 +586,66 @@ export function startRenderLoop(): void {
         c.scale(-1, 1);
         c.drawImage(vc, 0, 0, vc.width / 2, vc.height, 0, 0, w / 2, h);
         c.restore();
+      }
+
+      // ── per-beat impact layer ──
+      if (IMP.has("CHROMA") && L.beatE > 0.04) {
+        // split the frame into colour-fringed copies, like a hard camera cut
+        const off = L.beatE * Math.min(14, R * 0.02);
+        c.save();
+        c.globalCompositeOperation = "lighter";
+        c.globalAlpha = 0.4 * L.beatE;
+        c.drawImage(vc, -off, 0, w, h);
+        c.drawImage(vc, off, 0, w, h);
+        c.restore();
+      }
+      if (IMP.has("BLOOM") && L.beatE > 0.02) {
+        const bg2 = c.createRadialGradient(cx, cy, 0, cx, cy, R * (0.25 + L.beatE * 0.55));
+        bg2.addColorStop(0, C1(L.beatE * 0.34, 82));
+        bg2.addColorStop(0.5, C2(L.beatE * 0.16, 70));
+        bg2.addColorStop(1, "transparent");
+        c.fillStyle = bg2;
+        c.fillRect(0, 0, w, h);
+      }
+      if (IMP.has("RINGS")) {
+        c.save();
+        c.globalCompositeOperation = "lighter";
+        for (const rr of L.impRings) {
+          const a = Math.max(0, 1 - rr) ** 2;
+          c.strokeStyle = C2(a * 0.55, 74);
+          c.lineWidth = (1.5 + a * 3.5) * TK;
+          c.beginPath();
+          c.arc(cx, cy, rr * R * 0.78, 0, Math.PI * 2);
+          c.stroke();
+        }
+        c.restore();
+      }
+      if (IMP.has("SCANLINE") && L.impScan >= 0 && L.impScan <= 1) {
+        const y = L.impScan * h;
+        const sg = c.createLinearGradient(0, y - h * 0.05, 0, y + h * 0.05);
+        sg.addColorStop(0, "transparent");
+        sg.addColorStop(0.5, C1(0.32, 84));
+        sg.addColorStop(1, "transparent");
+        c.fillStyle = sg;
+        c.fillRect(0, y - h * 0.05, w, h * 0.1);
+      }
+      if (IMP.has("STROBE") && beat) {
+        c.fillStyle = `rgba(255,255,255,0.16)`;
+        c.fillRect(0, 0, w, h);
+      }
+      if (IMP.has("INVERT") && L.beatE > 0.55) {
+        c.save();
+        c.globalCompositeOperation = "difference";
+        c.fillStyle = C1((L.beatE - 0.55) * 0.9, 70);
+        c.fillRect(0, 0, w, h);
+        c.restore();
+      }
+      if (IMP.has("VIGNETTE")) {
+        const vg = c.createRadialGradient(cx, cy, R * (0.42 - L.beatE * 0.1), cx, cy, R * 0.82);
+        vg.addColorStop(0, "transparent");
+        vg.addColorStop(1, `rgba(0,0,0,${0.38 + L.beatE * 0.22})`);
+        c.fillStyle = vg;
+        c.fillRect(0, 0, w, h);
       }
 
       // beat flash

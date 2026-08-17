@@ -59,6 +59,10 @@ export interface LiveState {
   energy: number;
   playerTheme: string;
   playerBgOn: boolean;
+  /** expanding beat rings (IMPACTS "RINGS"), 0..1.25 each */
+  impRings: number[];
+  /** sweeping scanline position (IMPACTS "SCANLINE"), -1 when idle */
+  impScan: number;
   /** total A/V compensation currently applied, ms (measured + user offset) */
   syncMs: number;
   /** Per-theme scratch buckets keyed by theme; new themes park their state here. */
@@ -72,7 +76,7 @@ export const live: LiveState = {
   rot: 0, vt: 0, tunnel: [], stars: [], vparts: [], specHist: [], ripples: [],
   flies: [], vort: [], cityH: [], shakeVal: 0,
   beatAvg: 0, prevBass: 0, fluxAvg: 0, fluxDev: 0, lastBeatAt: 0, beats: [], bpm: 0, flashVal: 0, cycleT: 0,
-  beatE: 0, energy: 0.35, syncMs: 0, playerTheme: "AURORA", playerBgOn: true, scratch: {},
+  beatE: 0, energy: 0.35, impRings: [], impScan: -1, syncMs: 0, playerTheme: "AURORA", playerBgOn: true, scratch: {},
 };
 
 // Debug handle: inspect the render-loop state from the console (window.__flux).

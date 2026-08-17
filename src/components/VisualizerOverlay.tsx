@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { BG, BORDER, CYAN, MAG, P_STYLES, PALETTES, VIS_THEMES } from "../constants";
+import { BG, BORDER, CYAN, IMPACTS, MAG, P_STYLES, PALETTES, VIS_THEMES } from "../constants";
 import { nextTrack, prevTrack, togglePlay } from "../audio/transport";
 import { getCurrentTrack, useStore } from "../store/useStore";
 import { mix } from "../theme";
@@ -227,6 +227,24 @@ export function VisualizerOverlay() {
             <Toggle label="BEAT FLASH" on={visCfg.flash} onChange={(v) => setV("flash", v)} />
             <Toggle label="BEAT SHAKE" on={visCfg.shake} onChange={(v) => setV("shake", v)} />
             <Toggle label="MIRROR" on={visCfg.mirror} onChange={(v) => setV("mirror", v)} />
+          </div>
+          <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", margin: "8px 0 5px" }}>
+            Stack as many as you like — each fires on the beat.
+          </div>
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+            {IMPACTS.map((im) => {
+              const on = (visCfg.impacts ?? []).includes(im);
+              return (
+                <button
+                  key={im}
+                  onClick={() => setV("impacts", on ? (visCfg.impacts ?? []).filter((x) => x !== im) : [...(visCfg.impacts ?? []), im])}
+                  style={{ ...chip(on, MAG), padding: "6px 10px", fontSize: 9.5 }}
+                >{im}</button>
+              );
+            })}
+            {(visCfg.impacts ?? []).length > 0 && (
+              <button onClick={() => setV("impacts", [])} style={{ ...chip(false), padding: "6px 10px", fontSize: 9.5 }}>✕ CLEAR</button>
+            )}
             <Toggle label="MAX SHARPNESS" on={visCfg.hiRes} onChange={(v) => setV("hiRes", v)} />
           </div>
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 4px" }}>BEAT SYNC</div>

@@ -108,13 +108,23 @@ export const PLAYER_THEMES = [
   "WORMHOLE",
 ];
 
-export const P_STYLES = ["RISE", "SNOW", "DUST", "EMBERS"];
+export const P_STYLES = [
+  "RISE", "SNOW", "DUST", "EMBERS", "RAIN", "BUBBLES", "SPARKS", "FIREFLY",
+  "PETALS", "STARS", "ASH", "PLASMA", "CONFETTI", "SWARM", "DRIFT", "VORTEX",
+  "METEOR", "POLLEN", "GLITTER", "STATIC",
+];
+
+/** Per-beat impact effects, layered over whatever the theme drew. */
+export const IMPACTS = [
+  "FLASH", "SHAKE", "MIRROR", "PUNCH", "CHROMA", "BLOOM", "STROBE",
+  "RINGS", "SCANLINE", "INVERT", "SQUEEZE", "VIGNETTE",
+];
 
 export const DEFAULT_VIS_CFG: VisCfg = {
   palette: "NEON", h1: 187, h2: 317,
   glow: 0.7, trail: 0.55, particles: 0.35, pStyle: "RISE",
   speed: 1, intensity: 1, zoom: 1, spinV: 0, bgWash: 0.3, thick: 1,
-  mirror: false, shake: false, flash: true, autoMode: "off", hiRes: false, syncMs: 0,
+  mirror: false, shake: false, flash: true, impacts: [], autoMode: "off", hiRes: false, syncMs: 0,
 };
 
 export const MONO = "'JetBrains Mono', monospace";

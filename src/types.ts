@@ -84,6 +84,8 @@ export interface VisCfg {
   mirror: boolean;
   shake: boolean;
   flash: boolean;
+  /** additional per-beat impact effects, by name (see IMPACTS) */
+  impacts: string[];
   /** theme auto-advance every ~16s: off (stay put), cycle (in order), shuffle (random) */
   autoMode: "off" | "cycle" | "shuffle";
   /** force maximum backing resolution, disabling adaptive quality scaling */
