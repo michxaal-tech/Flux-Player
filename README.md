@@ -39,7 +39,7 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
   fills and text treatments — compose with the 20 line animations. 15 tune
   controls (glow, trails, particles w/ 4 styles, reactivity, zoom, scene spin,
   mirror, beat flash/shake, auto-cycle), starrable favourites pinned to the top
-  of the theme picker, 34 stackable beat impacts (including a signature set with a frame
+  of the theme picker, saveable looks with self-contained share codes, 34 stackable beat impacts (including a signature set with a frame
   history behind it — ghosting, datamosh, melt, fracture), 20 particle drifts × 12
   silhouettes × 3 size spreads × a size multiplier, edge spectrum meters on every tab.
   Adaptive resolution keeps full-screen rendering at 60fps on any device (or

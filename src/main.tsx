@@ -29,6 +29,10 @@ useStore.subscribe((s) => s.visCfg, applyAccentTheme);
 import("./visualizer/live").then((m) => {
   (window as unknown as { __fluxLive: unknown }).__fluxLive = m.live;
 });
+// look encode/decode, so the share-code round trip can be asserted end to end
+import("./visualPresets").then((m) => {
+  (window as unknown as { __fluxLook: unknown }).__fluxLook = m;
+});
 import("./audio/transport").then((m) => {
   (window as unknown as { __fluxPlayAt: unknown }).__fluxPlayAt = m.playAt;
 });

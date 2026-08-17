@@ -7,6 +7,7 @@ import { mix } from "../theme";
 import { canvasRefs, live } from "../visualizer/live";
 import { MODE_3D_HELP, MODES_3D } from "../visualizer/project3d";
 import { DROP_LADDER } from "../visualizer/dropFx";
+import { applyLook, captureLook, copyText, decodeLook, encodeLook } from "../visualPresets";
 import { LYRIC_FX, LYRIC_FX_GROUPS } from "../visualizer/lyricFx";
 import { startVideoExport, stopVideoExport, videoExportSupported } from "../audio/videoRecorder";
 import { fmt } from "../utils";
@@ -35,6 +36,9 @@ export function VisualizerOverlay() {
   const [artistText, setArtistText] = useState("");
   const set = useStore((s) => s.set);
   const favThemes = useStore((s) => s.favThemes);
+  const visPresets = useStore((s) => s.visPresets);
+  const saveVisPreset = useStore((s) => s.saveVisPreset);
+  const deleteVisPreset = useStore((s) => s.deleteVisPreset);
   const toggleFavTheme = useStore((s) => s.toggleFavTheme);
   const setV = useStore((s) => s.setVisKey);
   const visChaos = useStore((s) => s.visChaos);
@@ -50,6 +54,10 @@ export function VisualizerOverlay() {
   const [themeMenu, setThemeMenu] = useState(false);
   const [panelTab, setPanelTab] = useState<string>("LOOK");
   const [fixOpen, setFixOpen] = useState(false);
+  const [lookName, setLookName] = useState("");
+  const [lookMsg, setLookMsg] = useState("");
+  const [codeOpen, setCodeOpen] = useState(false);
+  const [codeText, setCodeText] = useState("");
   const [fixTitle, setFixTitle] = useState("");
   const [fixArtist, setFixArtist] = useState("");
   const visRef = useRef<HTMLCanvasElement>(null);
@@ -309,7 +317,83 @@ export function VisualizerOverlay() {
           </div>
 
           {panelTab === "LOOK" && (<>
-          <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", marginBottom: 8 }}>COLOR PALETTE — {PALETTES.length - 1} + CUSTOM</div>
+          <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", marginBottom: 6 }}>
+            SAVED LOOKS <NewTag />
+          </div>
+          <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, marginBottom: 7 }}>
+            Saves everything — theme, palette, 3D mode, impacts, particles, lyric effects. SHARE
+            copies a code you can paste to someone else; it carries the whole look, no account needed.
+          </div>
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 7 }}>
+            <button
+              data-savelook
+              onClick={() => { saveVisPreset({ name: lookName.trim() || `LOOK ${visPresets.length + 1}`, look: captureLook() }); setLookName(""); }}
+              style={{ ...chip(false, MAG), padding: "7px 11px", fontSize: 9.5 }}
+            >＋ SAVE THIS LOOK</button>
+            <button
+              onClick={async () => {
+                const ok = await copyText(encodeLook(captureLook()));
+                setLookMsg(ok ? "Code copied — paste it to anyone" : "Couldn't copy; long-press the box below");
+                setTimeout(() => setLookMsg(""), 5000);
+              }}
+              style={{ ...chip(false), padding: "7px 11px", fontSize: 9.5 }}
+            >⧉ SHARE</button>
+            <button
+              onClick={() => setCodeOpen((v) => !v)}
+              style={{ ...chip(codeOpen), padding: "7px 11px", fontSize: 9.5 }}
+            >⇥ LOAD CODE</button>
+          </div>
+          {codeOpen && (
+            <div style={{ display: "flex", gap: 5, marginBottom: 7 }}>
+              <input
+                data-lookcode
+                value={codeText}
+                onChange={(e) => setCodeText(e.target.value)}
+                placeholder="paste a FLUX1-… code"
+                style={{ flex: 1, minWidth: 0, background: "rgba(255,255,255,0.06)", border: BORDER, borderRadius: 9, padding: "8px 10px", fontSize: 11, color: "#fff", outline: "none" }}
+              />
+              <button
+                onClick={() => {
+                  const look = decodeLook(codeText);
+                  if (!look) { setLookMsg("That doesn't look like a FLUX code"); setTimeout(() => setLookMsg(""), 5000); return; }
+                  applyLook(look);
+                  setCodeText("");
+                  setCodeOpen(false);
+                  setLookMsg(`✓ loaded — ${look.theme}`);
+                  setTimeout(() => setLookMsg(""), 4000);
+                }}
+                style={{ ...chip(true, MAG), padding: "8px 12px", fontSize: 9.5, flexShrink: 0 }}
+              >LOAD</button>
+            </div>
+          )}
+          {visPresets.length > 0 && (
+            <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 7 }}>
+              {visPresets.map((pr, i) => (
+                <span key={`${pr.name}-${i}`} style={{ position: "relative", display: "inline-flex" }}>
+                  <button
+                    data-look={pr.name}
+                    onClick={() => applyLook(pr.look)}
+                    style={{ ...chip(false), padding: "7px 20px 7px 10px", fontSize: 9.5 }}
+                  >{pr.name}</button>
+                  <span
+                    role="button"
+                    aria-label={`Delete ${pr.name}`}
+                    onClick={(e) => { e.stopPropagation(); deleteVisPreset(i); }}
+                    style={{ position: "absolute", right: 5, top: 0, height: "100%", display: "flex", alignItems: "center", fontSize: 10, cursor: "pointer", color: "rgba(255,255,255,0.4)" }}
+                  >✕</span>
+                </span>
+              ))}
+            </div>
+          )}
+          <input
+            value={lookName}
+            onChange={(e) => setLookName(e.target.value)}
+            placeholder="name for the next save (optional)"
+            style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.05)", border: BORDER, borderRadius: 9, padding: "7px 10px", fontSize: 11, color: "#fff", outline: "none", marginBottom: 6 }}
+          />
+          {!!lookMsg && <div style={{ fontSize: 10, color: MAG, marginBottom: 8 }}>{lookMsg}</div>}
+
+          <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 8px" }}>COLOR PALETTE — {PALETTES.length - 1} + CUSTOM</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
             {PALETTES.map((p) => {
               const ph1 = p.h ? p.h[0] : visCfg.h1;

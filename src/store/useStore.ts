@@ -119,6 +119,12 @@ export interface StoreState {
   /** starred visualizer themes, pinned to the top of the theme picker */
   favThemes: string[];
   toggleFavTheme: (name: string) => void;
+  /** saved visual looks (theme + every visualizer setting) */
+  visPresets: import("../visualPresets").VisualPreset[];
+  /** Takes a fully-built preset rather than capturing one itself: visualPresets
+   * imports the store, so importing it back here would be a cycle. */
+  saveVisPreset: (preset: import("../visualPresets").VisualPreset) => void;
+  deleteVisPreset: (i: number) => void;
   applyPreset: (p: Preset) => void;
   saveUserPreset: () => void;
   deleteUserPreset: (i: number) => void;
@@ -222,6 +228,9 @@ export const useStore = create<StoreState>()(
         setVisKey: (k, v) => set((s) => ({ visCfg: { ...s.visCfg, [k]: v } })),
 
         favThemes: [],
+        visPresets: [],
+        saveVisPreset: (preset) => set((s) => ({ visPresets: [...s.visPresets, preset] })),
+        deleteVisPreset: (i) => set((s) => ({ visPresets: s.visPresets.filter((_, j) => j !== i) })),
         toggleFavTheme: (name) =>
           set((s) => ({
             favThemes: s.favThemes.includes(name)
@@ -422,6 +431,7 @@ export const useStore = create<StoreState>()(
           lyricFx: s.lyricFx,
           lyricFxMatch: s.lyricFxMatch,
           favThemes: s.favThemes,
+          visPresets: s.visPresets,
           lyricAuto: s.lyricAuto,
           trackBpm: s.trackBpm,
           radioMode: s.radioMode,
