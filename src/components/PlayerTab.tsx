@@ -8,8 +8,10 @@ import { mix } from "../theme";
 import { fmt } from "../utils";
 import { PresetRow } from "./PresetRow";
 import { chip, Module, NextIcon, PauseIcon, playBtn, PlayIcon, PrevIcon, skipBtn, Toggle } from "./ui";
+import { Cover } from "./ai/Cover";
 
 export function PlayerTab() {
+  const aiReady = useStore((s) => s.aiReady);
   const playlists = useStore((s) => s.playlists);
   const playingList = useStore(getPlayingList);
   const track = useStore(getCurrentTrack);
@@ -93,6 +95,7 @@ export function PlayerTab() {
             {track && <span style={{ color: CYAN }}>BPM <span ref={bpmRef}>––</span></span>}
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            {track && aiReady && <Cover kind="track" id={track.id} subject={track.name} size={40} />}
             {track && (
               <button onClick={() => toggleFav(track.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: track.fav ? MAG : "rgba(255,255,255,0.3)" }}>
                 {track.fav ? "♥" : "♡"}

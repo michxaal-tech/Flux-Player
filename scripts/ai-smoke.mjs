@@ -69,6 +69,14 @@ await page.route("https://api.anthropic.com/**", async (route) => {
     if (malformedOnce) { malformedOnce = false; return route.fulfill(reply("sorry, here you go: {broken json,,,")); }
     return route.fulfill(reply({ reply: "repaired ok", actions: [{ type: "fx", payload: { name: "REPAIRED", fx: { reverb: 0.5 } } }] }));
   }
+  if (userText.includes("searched with only these emoji")) {
+    // answer with real ids lifted out of the context we were given
+    const ids = [...userText.matchAll(/id=(\S+)/g)].map((m) => m[1]).slice(0, 2);
+    return route.fulfill(reply({ trackIds: ids }));
+  }
+  if (body.system?.includes("album cover art")) {
+    return route.fulfill(reply(`<svg viewBox="0 0 400 400"><script>window.__pwned=1</script><rect width="400" height="400" fill="#111" onload="window.__pwned=2"/><image xlink:href="http://evil/x.png"/><circle cx="200" cy="200" r="90" fill="#0ff"/></svg>`));
+  }
   if (userText.includes("COVERTEST")) {
     return route.fulfill(reply(`<svg viewBox="0 0 400 400"><script>window.__pwned=1</script><rect width="400" height="400" fill="#111" onload="window.__pwned=2"/><a href="javascript:alert(1)"><circle cx="200" cy="200" r="90" fill="#0ff"/></a></svg>`));
   }
@@ -188,6 +196,30 @@ await step("cover art round-trips through storage sanitized", async () => {
   ));
   if (!svg || !svg.includes("linearGradient")) throw new Error("in-document gradient refs must survive");
   if (!svg.includes("url(#g)")) throw new Error("fragment url() reference was stripped");
+});
+
+await step("library AI surfaces render and emoji search returns hits", async () => {
+  // the docked copilot covers the lower half of the screen — close it first
+  await page.evaluate(() => window.__fluxStore.getState().set({ aiPanel: false }));
+  await page.click("button:has(div:text-is('LIBRARY'))");
+  await page.waitForSelector("input[placeholder*='emoji only']");
+  await page.waitForSelector("input[placeholder*='describe a playlist']");
+  await page.fill("input[placeholder*='emoji only']", "🌧️🌃");
+  await page.click("button:has-text('✦ FIND')");
+  await page.waitForSelector("text=TAP TO PLAY", { timeout: 10000 });
+});
+
+await step("AI cover art renders inline after generation", async () => {
+  await page.waitForSelector("button[title='Generate AI cover art']", { timeout: 5000 });
+  await page.click("button[title='Generate AI cover art']");
+  await page.waitForSelector("div[title*='AI cover'] svg", { timeout: 12000 });
+  const bad = await page.evaluate(() => {
+    const el = document.querySelector("div[title*='AI cover']");
+    return el ? /script|onload|xlink:href/i.test(el.innerHTML) : "no cover";
+  });
+  if (bad === "no cover") throw new Error("cover did not render");
+  if (bad) throw new Error("unsanitized markup reached the DOM");
+  if (await page.evaluate(() => window.__pwned)) throw new Error("injected script executed");
 });
 
 await step("removing the key hides every AI surface again", async () => {

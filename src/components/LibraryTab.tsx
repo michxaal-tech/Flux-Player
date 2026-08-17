@@ -6,8 +6,12 @@ import { exportTrack } from "../audio/exporter";
 import { getCurrentTrack, getFavCount, getViewEntries, getViewingPlId, useStore } from "../store/useStore";
 import { mix } from "../theme";
 import { chip } from "./ui";
+import { Cover } from "./ai/Cover";
+import { EmojiSearch, LibraryAiBar, TrackAiMenu } from "./ai/LibraryAi";
 
 export function LibraryTab({ onLoadClick }: { onLoadClick: () => void }) {
+  const aiReady = useStore((s) => s.aiReady);
+  const [aiRow, setAiRow] = useState<string | null>(null);
   const playlists = useStore((s) => s.playlists);
   const viewMode = useStore((s) => s.viewMode);
   const search = useStore((s) => s.search);
@@ -56,6 +60,8 @@ export function LibraryTab({ onLoadClick }: { onLoadClick: () => void }) {
         type="text" value={search} onChange={(e) => set({ search: e.target.value })} placeholder="🔎 Search your library…"
         style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: BORDER, borderRadius: 10, color: "#fff", padding: "11px 13px", fontSize: 13, marginBottom: 10 }}
       />
+      {aiReady && <EmojiSearch />}
+      {aiReady && <LibraryAiBar />}
 
       <div className="hscroll" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8 }}>
         <button onClick={() => set({ viewMode: { type: "fav" } })} style={chip(viewMode.type === "fav", MAG)}>♥ FAVORITES ({favCount})</button>
@@ -136,8 +142,8 @@ export function LibraryTab({ onLoadClick }: { onLoadClick: () => void }) {
         {entries.map(({ tr, plId, idx }) => {
           const isPlaying = playPl === plId && currentTrack?.id === tr.id;
           return (
+            <div key={tr.id}>
             <div
-              key={tr.id}
               className={canReorder && dragOver === idx && dragIdx !== idx ? "drag-over" : undefined}
               draggable={canReorder}
               onDragStart={() => setDragIdx(idx)}
@@ -167,6 +173,7 @@ export function LibraryTab({ onLoadClick }: { onLoadClick: () => void }) {
               <button onClick={() => toggleFav(tr.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15, color: tr.fav ? MAG : "rgba(255,255,255,0.25)", padding: 0 }}>
                 {tr.fav ? "♥" : "♡"}
               </button>
+              {aiReady && <Cover kind="track" id={tr.id} subject={tr.name} size={34} />}
               <span onClick={() => playAt(plId, idx)} style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", cursor: "pointer", color: isPlaying ? CYAN : "rgba(255,255,255,0.85)" }}>
                 {tr.fxPin && "📌 "}{tr.name}
                 {tr.tags?.length > 0 && <span style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", marginLeft: 6 }}>{tr.tags.map((t2) => `#${t2}`).join(" ")}</span>}
@@ -186,10 +193,13 @@ export function LibraryTab({ onLoadClick }: { onLoadClick: () => void }) {
                     {playlists.filter((p) => p.id !== plId).map((p) => (
                       <div key={p.id} onClick={() => { copyTrack(tr, p.id); setRowMenu(null); }} style={{ padding: "7px 8px", fontSize: 12.5, cursor: "pointer", color: CYAN }}>→ {p.name}</div>
                     ))}
+                    {aiReady && <div onClick={() => { setAiRow(tr.id); setRowMenu(null); }} style={{ padding: "8px", fontSize: 12.5, cursor: "pointer", color: MAG, borderTop: BORDER, marginTop: 4 }}>✦ AI: notes &amp; cover</div>}
                     <div onClick={() => { removeTrack(tr.id, plId); setRowMenu(null); }} style={{ padding: "8px", fontSize: 12.5, cursor: "pointer", color: "#FF6B6B", borderTop: BORDER, marginTop: 4 }}>✕ Remove</div>
                   </div>
                 )}
               </div>
+            </div>
+            {aiRow === tr.id && <TrackAiMenu track={tr} onClose={() => setAiRow(null)} />}
             </div>
           );
         })}
