@@ -1,4 +1,4 @@
-// End-to-end test of the BYOK AI layer against a mocked api.anthropic.com.
+// End-to-end test of the BYOK AI layer against mocked provider endpoints.
 // Verifies: AI UI is absent without a key, key validation + storage, the
 // command schema executes real app changes, malformed JSON is repaired on
 // retry, and model-authored SVG is sanitized.
@@ -46,10 +46,36 @@ page.on("console", (m) => { if (m.type() === "error") errors.push(`console: ${m.
 
 // ── mock Anthropic ────────────────────────────────────────────────────────
 const seen = [];
+const geminiSeen = [];
 let malformedOnce = true;
 const reply = (obj) => ({
   contentType: "application/json",
   body: JSON.stringify({ content: [{ type: "text", text: typeof obj === "string" ? obj : JSON.stringify(obj) }] }),
+});
+
+// Gemini speaks a different request/response shape — mock it too so the
+// provider abstraction is exercised, not just Anthropic's.
+const geminiReply = (obj) => ({
+  contentType: "application/json",
+  body: JSON.stringify({ candidates: [{ content: { parts: [{ text: typeof obj === "string" ? obj : JSON.stringify(obj) }] } }] }),
+});
+
+await page.route("https://generativelanguage.googleapis.com/**", async (route) => {
+  const req = route.request();
+  const headers = req.headers();
+  const body = JSON.parse(req.postData() || "{}");
+  const userText = body.contents?.[0]?.parts?.[0]?.text ?? "";
+  const system = body.system_instruction?.parts?.[0]?.text ?? "";
+  geminiSeen.push({ headers, url: req.url(), userText, system, cfg: body.generationConfig });
+
+  if (headers["x-goog-api-key"] === "AIzaBAD") {
+    return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: { code: 400, message: "API key not valid. Please pass a valid API key.", status: "INVALID_ARGUMENT" } }) });
+  }
+  if (userText === "ping") return route.fulfill(geminiReply("ok"));
+  return route.fulfill(geminiReply({
+    reply: "Gemini set the mood.",
+    actions: [{ type: "fx", payload: { name: "GEMINI VIBE", fx: { speed: 0.9, reverb: 0.4 } } }],
+  }));
 });
 
 await page.route("https://api.anthropic.com/**", async (route) => {
@@ -111,17 +137,52 @@ await step("no AI surfaces exist without a key", async () => {
   if (ready) throw new Error("aiReady true with no key");
 });
 
-await step("bad key is rejected with a clear message", async () => {
+await step("Gemini is the default provider and its free key flow works", async () => {
   await page.click("button:has(div:text-is('ME'))");
+  const prov = await page.evaluate(() => window.__fluxStore.getState().aiProvider);
+  if (prov !== "gemini") throw new Error(`default provider is ${prov}, expected gemini`);
+  await page.fill("input[placeholder='AIza…']", "AIzaBAD");
+  await page.click("button:has-text('CONNECT')");
+  await page.waitForSelector("text=isn't valid", { timeout: 8000 });
+  await page.fill("input[placeholder='AIza…']", "AIzaGOOD");
+  await page.click("button:has-text('CONNECT')");
+  await page.waitForSelector("text=Connected to Google Gemini", { timeout: 8000 });
+  const g = [...geminiSeen].reverse().find((x) => x.userText === "ping");
+  if (!g) throw new Error("no Gemini call was made");
+  if (g.headers["x-goog-api-key"] !== "AIzaGOOD") throw new Error("key not sent in x-goog-api-key");
+  if (!g.url.includes("gemini-2.5-flash:generateContent")) throw new Error(`wrong endpoint: ${g.url}`);
+});
+
+await step("Gemini executes commands through the same schema", async () => {
+  await page.click("button[title='FLUX Copilot']");
+  await page.fill("input[placeholder='tell FLUX what you want…']", "set a mood");
+  await page.click("button:has-text('SEND')");
+  await page.waitForSelector("text=Gemini set the mood", { timeout: 10000 });
+  const preset = await page.evaluate(() => window.__fluxStore.getState().activePreset);
+  if (preset !== "GEMINI VIBE") throw new Error(`preset=${preset}`);
+  const jsonCall = geminiSeen.find((x) => x.cfg?.responseMimeType === "application/json");
+  if (!jsonCall) throw new Error("native JSON mode was not requested");
+  await page.evaluate(() => window.__fluxStore.getState().set({ aiPanel: false }));
+});
+
+await step("switching to Anthropic keeps each provider's key separate", async () => {
+  await page.click("button:has(div:text-is('ME'))");
+  await page.click("button:has-text('Anthropic (Claude)')");
+  await page.waitForSelector("input[placeholder='sk-ant-…']", { timeout: 5000 });
+  const ready = await page.evaluate(() => window.__fluxStore.getState().aiReady);
+  if (ready) throw new Error("aiReady should be false — no Anthropic key stored yet");
+});
+
+await step("bad key is rejected with a clear message", async () => {
   await page.fill("input[placeholder='sk-ant-…']", "sk-ant-badkey");
   await page.click("button:has-text('CONNECT')");
-  await page.waitForSelector("text=API key rejected", { timeout: 8000 });
+  await page.waitForSelector("text=rejected the key", { timeout: 8000 });
 });
 
 await step("valid key connects, persists, and unlocks AI UI", async () => {
   await page.fill("input[placeholder='sk-ant-…']", "sk-ant-goodkey");
   await page.click("button:has-text('CONNECT')");
-  await page.waitForSelector("text=AI features unlocked", { timeout: 8000 });
+  await page.waitForSelector("text=Connected to Anthropic", { timeout: 8000 });
   await page.waitForSelector("text=AI STUDIO");
   const h = seen.find((s) => s.userText === "ping")?.headers ?? {};
   if (h["anthropic-version"] !== "2023-06-01") throw new Error("missing anthropic-version header");
@@ -220,6 +281,15 @@ await step("AI cover art renders inline after generation", async () => {
   if (bad === "no cover") throw new Error("cover did not render");
   if (bad) throw new Error("unsanitized markup reached the DOM");
   if (await page.evaluate(() => window.__pwned)) throw new Error("injected script executed");
+});
+
+await step("each provider's key is remembered independently", async () => {
+  await page.click("button:has(div:text-is('ME'))");
+  await page.click("button:has-text('Google Gemini')");
+  await page.waitForFunction(() => window.__fluxStore.getState().aiReady === true, { timeout: 6000 });
+  await page.waitForSelector("text=REMOVE KEY");
+  await page.click("button:has-text('Anthropic (Claude)')");
+  await page.waitForFunction(() => window.__fluxStore.getState().aiReady === true, { timeout: 6000 });
 });
 
 await step("removing the key hides every AI surface again", async () => {

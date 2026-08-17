@@ -1,44 +1,45 @@
-// Anthropic API client. Strictly BYOK: the key lives only in this browser
-// (IndexedDB) and is sent only to api.anthropic.com. No proxy, no telemetry.
+// Provider-agnostic AI client. Strictly BYOK: keys live only in this browser
+// (IndexedDB) and are sent only to the provider the user chose. No proxy, no
+// telemetry, no backend of any kind.
 import { blobStore } from "../store/blobStore";
 import { useStore } from "../store/useStore";
+import { getProvider, resolveEndpoint } from "./providers";
+import type { AskShape } from "./providers";
 
-const KEY_BLOB = "ai-key";
-export const AI_MODEL = "claude-sonnet-4-6";
-const ENDPOINT = "https://api.anthropic.com/v1/messages";
+const keyBlob = (providerId: string) => `ai-key-${providerId}`;
 
-let cachedKey: string | null = null;
-let loaded = false;
+// keys are cached per provider so switching back and forth doesn't re-prompt
+const cache = new Map<string, string | null>();
 
-/** Key is stored as a Blob beside the audio so it never touches localStorage
- * (which is trivially readable by any injected script and synced by some
- * browsers). Still client-side secret material — documented in the UI. */
-export async function loadKey(): Promise<string | null> {
-  if (loaded) return cachedKey;
-  loaded = true;
+/** Keys are stored as Blobs beside the audio rather than in localStorage.
+ * Still client-side secret material — the settings UI says so plainly. */
+export async function loadKey(providerId?: string): Promise<string | null> {
+  const id = providerId ?? useStore.getState().aiProvider;
+  if (cache.has(id)) return cache.get(id) ?? null;
+  let key: string | null = null;
   try {
-    const b = await blobStore.get(KEY_BLOB);
-    cachedKey = b ? (await b.text()).trim() || null : null;
+    const b = await blobStore.get(keyBlob(id));
+    key = b ? (await b.text()).trim() || null : null;
   } catch {
-    cachedKey = null;
+    key = null;
   }
-  return cachedKey;
+  cache.set(id, key);
+  return key;
 }
 
-export async function saveKey(key: string): Promise<void> {
+export async function saveKey(key: string, providerId?: string): Promise<void> {
+  const id = providerId ?? useStore.getState().aiProvider;
   const k = key.trim();
-  cachedKey = k || null;
-  loaded = true;
-  if (!k) {
-    await blobStore.del(KEY_BLOB);
-  } else {
-    await blobStore.put(KEY_BLOB, new Blob([k], { type: "text/plain" }));
-  }
-  useStore.setState({ aiReady: !!k });
+  cache.set(id, k || null);
+  if (!k) await blobStore.del(keyBlob(id));
+  else await blobStore.put(keyBlob(id), new Blob([k], { type: "text/plain" }));
+  if (id === useStore.getState().aiProvider) useStore.setState({ aiReady: !!k });
 }
 
-export function hasKeyLoaded(): boolean {
-  return !!cachedKey;
+/** Refresh aiReady after a provider switch. */
+export async function refreshReady(): Promise<void> {
+  const k = await loadKey();
+  useStore.setState({ aiReady: !!k });
 }
 
 export class AiError extends Error {
@@ -62,60 +63,87 @@ function setBusy(delta: number, label = "") {
   useStore.setState({ aiBusy: busyCount > 0, aiLabel: busyCount > 0 ? label : "" });
 }
 
-async function rawCall(key: string, o: AskOpts, signal?: AbortSignal): Promise<string> {
+interface CallCfg {
+  providerId: string;
+  model: string;
+  baseUrl: string;
+  key: string;
+}
+
+function currentCfg(key: string): CallCfg {
+  const s = useStore.getState();
+  const p = getProvider(s.aiProvider);
+  return {
+    providerId: p.id,
+    model: s.aiModel || p.defaultModel,
+    baseUrl: s.aiBaseUrl,
+    key,
+  };
+}
+
+async function rawCall(cfg: CallCfg, o: AskOpts, json: boolean): Promise<string> {
+  const p = getProvider(cfg.providerId);
+  const shape: AskShape = {
+    system: o.system,
+    user: o.user,
+    maxTokens: o.maxTokens ?? 1200,
+    temperature: o.temperature ?? 1,
+    json,
+  };
   let resp: Response;
   try {
-    resp = await fetch(ENDPOINT, {
+    resp = await fetch(resolveEndpoint(p, cfg.model, cfg.baseUrl), {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
-      },
-      signal,
-      body: JSON.stringify({
-        model: AI_MODEL,
-        max_tokens: o.maxTokens ?? 1200,
-        temperature: o.temperature ?? 1,
-        system: o.system,
-        messages: [{ role: "user", content: o.user }],
-      }),
+      headers: p.headers(cfg.key),
+      body: JSON.stringify(p.body(shape, cfg.model)),
     });
-  } catch (e) {
-    if ((e as Error).name === "AbortError") throw e;
-    throw new AiError("Network error reaching Anthropic — offline?", "network");
+  } catch {
+    throw new AiError(`Couldn't reach ${p.label} — offline, or the endpoint blocked the request`, "network");
   }
   if (!resp.ok) {
     const body = await resp.text().catch(() => "");
-    if (resp.status === 401 || resp.status === 403) throw new AiError("API key rejected — check the key in ME → AI", "key");
-    if (resp.status === 429) throw new AiError("Rate limited by Anthropic — wait a moment and retry", "rate");
-    if (resp.status === 529 || resp.status === 503) throw new AiError("Anthropic is overloaded — try again shortly", "rate");
-    throw new AiError(`Anthropic error ${resp.status}: ${body.slice(0, 140)}`, "other");
+    const custom = p.errorMessage?.(resp.status, body);
+    if (custom) throw new AiError(custom, resp.status === 429 ? "rate" : "key");
+    if (resp.status === 401 || resp.status === 403) throw new AiError(`${p.label} rejected the key — check it in ME → AI`, "key");
+    if (resp.status === 429) throw new AiError(`${p.label} rate limit reached — wait a moment and retry`, "rate");
+    if (resp.status === 529 || resp.status === 503) throw new AiError(`${p.label} is overloaded — try again shortly`, "rate");
+    throw new AiError(`${p.label} error ${resp.status}: ${body.slice(0, 140)}`, "other");
   }
-  const data = await resp.json();
-  const text = (data?.content ?? [])
-    .filter((b: { type: string }) => b.type === "text")
-    .map((b: { text: string }) => b.text)
-    .join("");
-  if (!text) throw new AiError("Empty response from Claude", "format");
+  let data: unknown;
+  try {
+    data = await resp.json();
+  } catch {
+    throw new AiError(`${p.label} returned a malformed response`, "format");
+  }
+  let text: string;
+  try {
+    text = p.parse(data);
+  } catch (e) {
+    throw new AiError((e as Error).message || "Unreadable response", "format");
+  }
+  if (!text) throw new AiError(`${p.label} returned an empty response`, "format");
   return text;
+}
+
+async function requireCfg(): Promise<CallCfg> {
+  const key = await loadKey();
+  if (!key) throw new AiError("No API key set — add one in ME → AI", "key");
+  return currentCfg(key);
 }
 
 /** Plain-text call. */
 export async function askText(o: AskOpts): Promise<string> {
-  const key = await loadKey();
-  if (!key) throw new AiError("No API key set — add one in ME → AI", "key");
+  const cfg = await requireCfg();
   setBusy(1, o.label ?? "thinking");
   try {
-    return await rawCall(key, o);
+    return await rawCall(cfg, o, false);
   } finally {
     setBusy(-1);
   }
 }
 
 /**
- * Extracts a JSON value from a model reply that may be wrapped in prose or a
+ * Extracts a JSON value from a reply that may be wrapped in prose or a
  * ```json fence. Falls back to brace/bracket matching so a stray sentence
  * around valid JSON doesn't fail the whole call.
  */
@@ -135,7 +163,6 @@ export function extractJson<T>(text: string): T | null {
     const v = tryParse(fence[1].trim());
     if (v) return v;
   }
-  // widest balanced {...} or [...] span
   for (const [open, close] of [["{", "}"], ["[", "]"]] as const) {
     const a = text.indexOf(open);
     const b = text.lastIndexOf(close);
@@ -149,36 +176,45 @@ export function extractJson<T>(text: string): T | null {
 
 /**
  * JSON call with one automatic repair retry: if the reply doesn't parse (or
- * fails the caller's validator), Claude is shown its own bad output and asked
- * for strict JSON only.
+ * fails the caller's validator), the model is shown its own bad output and
+ * asked for strict JSON only. Providers with a native JSON mode (Gemini) get
+ * it switched on, which makes the retry path rare.
  */
 export async function askJson<T>(o: AskOpts & { validate?: (v: unknown) => v is T }): Promise<T> {
-  const key = await loadKey();
-  if (!key) throw new AiError("No API key set — add one in ME → AI", "key");
+  const cfg = await requireCfg();
   const system = `${o.system}\n\nOutput rules: reply with a single valid JSON value and NOTHING else. No prose, no markdown fences, no comments, no trailing commas.`;
   setBusy(1, o.label ?? "thinking");
   try {
-    const first = await rawCall(key, { ...o, system });
+    const first = await rawCall(cfg, { ...o, system }, true);
     const parsed = extractJson<T>(first);
     if (parsed && (!o.validate || o.validate(parsed))) return parsed;
 
-    const repair = await rawCall(key, {
+    const repair = await rawCall(cfg, {
       ...o,
       system,
       user: `${o.user}\n\n---\nYour previous reply could not be parsed as the required JSON${o.validate ? " (or did not match the required shape)" : ""}. Here it is verbatim:\n<<<\n${first.slice(0, 2000)}\n>>>\nReply again with ONLY the corrected JSON value.`,
-    });
+    }, true);
     const parsed2 = extractJson<T>(repair);
     if (parsed2 && (!o.validate || o.validate(parsed2))) return parsed2;
-    throw new AiError("Claude returned malformed JSON twice", "format");
+    throw new AiError("The model returned malformed JSON twice", "format");
   } finally {
     setBusy(-1);
   }
 }
 
 /** Cheap round-trip used by the settings panel to validate a pasted key. */
-export async function validateKey(key: string): Promise<{ ok: true } | { ok: false; msg: string }> {
+export async function validateKey(
+  key: string,
+  providerId: string,
+  model: string,
+  baseUrl: string
+): Promise<{ ok: true } | { ok: false; msg: string }> {
   try {
-    await rawCall(key, { system: "Reply with the single word: ok", user: "ping", maxTokens: 8 });
+    await rawCall(
+      { providerId, model: model || getProvider(providerId).defaultModel, baseUrl, key },
+      { system: "Reply with the single word: ok", user: "ping", maxTokens: 16 },
+      false
+    );
     return { ok: true };
   } catch (e) {
     return { ok: false, msg: e instanceof AiError ? e.message : String(e) };

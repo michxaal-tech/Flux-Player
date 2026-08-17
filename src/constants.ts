@@ -88,6 +88,11 @@ export const PALETTES: Palette[] = [
   { id: "ARCTIC", h: [198, 168], s: 55 },
   { id: "VOLT", h: [62, 122], s: 100 },
   { id: "NOIR", h: [222, 222], s: 22 },
+  { id: "BOREAL", h: [140, 280], s: 85 },
+  { id: "RUST", h: [16, 198], s: 72 },
+  { id: "ULTRA", h: [286, 322], s: 100 },
+  { id: "HONEY", h: [38, 12], s: 88 },
+  { id: "ABYSS", h: [206, 172], s: 78 },
   { id: "CUSTOM", h: null, s: 100 },
 ];
 
@@ -97,7 +102,7 @@ export const DEFAULT_VIS_CFG: VisCfg = {
   palette: "NEON", h1: 187, h2: 317,
   glow: 0.7, trail: 0.55, particles: 0.35, pStyle: "RISE",
   speed: 1, intensity: 1, zoom: 1, spinV: 0, bgWash: 0.3, thick: 1,
-  mirror: false, shake: false, flash: true, autoMode: "off", hiRes: false,
+  mirror: false, shake: false, flash: true, autoMode: "off", hiRes: false, syncMs: 0,
 };
 
 export const MONO = "'JetBrains Mono', monospace";

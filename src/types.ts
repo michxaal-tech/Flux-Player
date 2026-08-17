@@ -88,6 +88,9 @@ export interface VisCfg {
   autoMode: "off" | "cycle" | "shuffle";
   /** force maximum backing resolution, disabling adaptive quality scaling */
   hiRes: boolean;
+  /** extra A/V sync offset in ms on top of the measured output latency —
+   * raise it for Bluetooth headphones, which delay sound but not the screen */
+  syncMs: number;
 }
 
 export interface Stats {

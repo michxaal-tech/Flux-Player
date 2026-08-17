@@ -7,6 +7,7 @@ import type {
 } from "../types";
 import { DEFAULT_FX, DEFAULT_VIS_CFG, P_STYLES, PALETTES, VIS_THEMES } from "../constants";
 import { uid } from "../utils";
+import { DEFAULT_PROVIDER } from "../ai/providers";
 
 export interface ChatMsg {
   role: "user" | "ai";
@@ -65,8 +66,13 @@ export interface StoreState {
   // profile
   stats: Stats;
   // ── AI layer (all optional; the app is fully functional with no API key) ──
-  /** a validated Anthropic key exists in this browser */
+  /** a validated key for the active provider exists in this browser */
   aiReady: boolean;
+  /** which AI provider to call (see src/ai/providers.ts) */
+  aiProvider: string;
+  aiModel: string;
+  /** base URL for the OpenAI-compatible provider */
+  aiBaseUrl: string;
   /** a request is in flight (drives the ✦ spinner) */
   aiBusy: boolean;
   aiLabel: string;
@@ -156,6 +162,9 @@ export const useStore = create<StoreState>()(
         lyricAskArtist: false,
         stats: { plays: 0, seconds: 0 },
         aiReady: false,
+        aiProvider: DEFAULT_PROVIDER,
+        aiModel: "",
+        aiBaseUrl: "",
         aiBusy: false,
         aiLabel: "",
         aiPanel: false,
@@ -361,6 +370,9 @@ export const useStore = create<StoreState>()(
           lyricAuto: s.lyricAuto,
           trackBpm: s.trackBpm,
           radioMode: s.radioMode,
+          aiProvider: s.aiProvider,
+          aiModel: s.aiModel,
+          aiBaseUrl: s.aiBaseUrl,
         }),
         merge: (persisted, current) => {
           const p = (persisted ?? {}) as Partial<StoreState>;

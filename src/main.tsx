@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
-import { loadKey } from "./ai/client";
+import { refreshReady } from "./ai/client";
 import { engine } from "./audio/engine";
 import { wireAudio } from "./audio/wire";
 import { startRenderLoop } from "./visualizer/engine";
@@ -12,7 +12,7 @@ import "./styles.css";
 wireAudio();
 startRenderLoop();
 // unlock AI surfaces if this browser already holds a key (BYOK, local only)
-loadKey().then((k) => useStore.setState({ aiReady: !!k }));
+refreshReady();
 applyAccentTheme(useStore.getState().visCfg);
 useStore.subscribe((s) => s.visCfg, applyAccentTheme);
 // debug/test handle

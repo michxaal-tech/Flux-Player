@@ -97,8 +97,33 @@ export function startRenderLoop(): void {
 
   const freq = new Uint8Array(512);
   const beatFreq = new Uint8Array(512);
+  const prevSpec = new Uint8Array(512); // previous frame, for spectral flux
   const wave = new Uint8Array(1024);
   let lyricWasActive = false;
+
+  // ── A/V sync ────────────────────────────────────────────────────────────
+  // An AnalyserNode reports audio at the point it is tapped in the graph,
+  // which is BEFORE that audio reaches the speakers. The gap is
+  // baseLatency + outputLatency (~95ms on desktop, more with a large playback
+  // buffer), and Bluetooth adds 150-250ms that the browser never reports at
+  // all. Uncompensated, every flash and pulse fires that far ahead of the
+  // sound — which reads as "the visuals are off" even when beat detection is
+  // perfectly correct.
+  //
+  // So analysis is written into a ring buffer and rendered a few frames late,
+  // lining the picture up with what the ear actually hears.
+  const RING = 40;
+  interface Snap {
+    freq: Uint8Array; wave: Uint8Array;
+    bass: number; mid: number; treb: number; rms: number;
+    beat: boolean; live: boolean;
+  }
+  const ring: Snap[] = Array.from({ length: RING }, () => ({
+    freq: new Uint8Array(512), wave: new Uint8Array(1024),
+    bass: 0, mid: 0, treb: 0, rms: 0, beat: false, live: false,
+  }));
+  let ringHead = 0;
+  let frameMs = 16.7;
   let t = 0;
   let lastFrame = 0;
 
@@ -169,8 +194,22 @@ export function startRenderLoop(): void {
       kick /= 12 * 255;
       // lagged reference (~2 frames behind) so onsets that ramp over a few
       // frames still register as one strong flux spike
-      const flux = Math.max(0, kick - L.prevBass);
+      const kickFlux = Math.max(0, kick - L.prevBass);
       L.prevBass = L.prevBass * 0.5 + kick * 0.5;
+      // Broadband half-wave-rectified spectral flux, the standard onset
+      // function: sum only the bins that got louder. The kick band alone
+      // misses snares, chord stabs and anything guitar- or piano-led, which
+      // is why acoustic tracks used to barely register a beat at all.
+      let sf = 0;
+      for (let i = 1; i < 96; i++) {
+        const d = beatFreq[i] - prevSpec[i];
+        if (d > 0) sf += d;
+        prevSpec[i] = beatFreq[i];
+      }
+      sf /= 95 * 255;
+      // whichever cue is stronger wins: kicks drive electronic music, the
+      // broadband onset carries everything else
+      const flux = Math.max(kickFlux, sf * 0.85);
       L.fluxAvg = L.fluxAvg * 0.95 + flux * 0.05;
       L.fluxDev = L.fluxDev * 0.95 + Math.abs(flux - L.fluxAvg) * 0.05;
       const now = performance.now();
@@ -211,6 +250,34 @@ export function startRenderLoop(): void {
       // idle demo pulse so themes still show their beat effects
       if (L.visOpen && t % 75 === 0) beat = true;
     }
+    // ── hand this frame's analysis to the delay ring, then read back the
+    // frame matching what is leaving the speakers right now. Everything below
+    // this point renders the delayed picture, so the beat envelope, the
+    // spectrum and the waveform all stay locked to what the ear hears. ──
+    {
+      const cur = ring[ringHead];
+      cur.freq.set(freq);
+      cur.wave.set(wave);
+      cur.bass = bass; cur.mid = mid; cur.treb = treb; cur.rms = rms;
+      cur.beat = beat; cur.live = liveAudio;
+      ringHead = (ringHead + 1) % RING;
+
+      if (delta < 250) frameMs += (delta - frameMs) * 0.05;
+      const ctx = n?.ctx;
+      const autoMs = ctx ? ((ctx.baseLatency || 0) + (ctx.outputLatency || 0)) * 1000 : 0;
+      // the offset covers what the browser cannot see: Bluetooth, soundbars,
+      // TV pass-through — all of which delay sound but not the screen
+      const totalMs = Math.max(0, Math.min(500, autoMs + (cfg.syncMs ?? 0)));
+      const back = Math.max(0, Math.min(RING - 2, Math.round(totalMs / Math.max(8, frameMs))));
+      L.syncMs = Math.round(totalMs);
+      const out = ring[(ringHead - 1 - back + RING * 2) % RING];
+      freq.set(out.freq);
+      wave.set(out.wave);
+      bass = out.bass; mid = out.mid; treb = out.treb; rms = out.rms;
+      beat = out.beat;
+      liveAudio = out.live;
+    }
+
     // beat envelope decays faster at high speed too, so back-to-back beats
     // read as separate hits instead of one smeared glow
     L.beatE = beat ? 1 : L.beatE * (L.playing ? Math.pow(0.9, Math.max(0.5, Math.min(2, L.speed || 1))) : 0.9);

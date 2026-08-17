@@ -195,6 +195,17 @@ export function VisualizerOverlay() {
             <Toggle label="MIRROR" on={visCfg.mirror} onChange={(v) => setV("mirror", v)} />
             <Toggle label="MAX SHARPNESS" on={visCfg.hiRes} onChange={(v) => setV("hiRes", v)} />
           </div>
+          <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 4px" }}>BEAT SYNC</div>
+          <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, marginBottom: 6 }}>
+            FLUX already compensates for the audio output delay it can measure. Add offset here if
+            the visuals still run ahead of the sound — Bluetooth headphones usually need +150 to +250ms.
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <Slider
+              label="OFFSET" value={visCfg.syncMs} min={-100} max={400} step={10}
+              format={(v) => `${v > 0 ? "+" : ""}${v}ms`} onChange={(v) => setV("syncMs", v)}
+            />
+          </div>
           {aiReady && (
             <>
               <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 8px" }}>✦ VIBE TO VISUALS</div>
