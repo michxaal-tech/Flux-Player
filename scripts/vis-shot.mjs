@@ -98,6 +98,22 @@ if (LFX.length) {
   process.exit(0);
 }
 
+// PICKER=1 captures the theme dropdown with a few favourites starred
+if (process.env.PICKER) {
+  await page.evaluate(() => {
+    const st = window.__fluxStore.getState();
+    for (const n of ["TIDE", "MONOLITH", "PRISM", "SINGULARITY", "AURORA"]) st.toggleFavTheme(n);
+  });
+  await page.click("button[data-themechip]");
+  await page.waitForTimeout(600);
+  const p = join(OUT, "theme-picker.png");
+  await page.screenshot({ path: p });
+  console.log(`saved ${p}`);
+  await browser.close();
+  preview.kill();
+  process.exit(0);
+}
+
 // IMP=SHARDS,MELT,... captures one frame per impact effect
 const IMPS = (process.env.IMP || "").split(",").filter(Boolean);
 if (IMPS.length) {

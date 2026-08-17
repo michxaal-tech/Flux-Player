@@ -146,12 +146,9 @@ export const IMPACTS = [
  * Clear this and refill it with the next batch — the badge is meant to say
  * "new since you last looked", so leaving old entries in makes it meaningless.
  */
-export const NEW_ITEMS = new Set([
-  // themes
-  "MONOLITH", "ORRERY", "CANYON", "GYROSCOPE", "SINGULARITY",
-  // signature impacts
-  "MELT", "RIPPLE", "GHOST", "DATAMOSH", "HALFTONE",
-  "PRISM", "CRT", "STAMP", "SHARDS", "BREATH",
+export const NEW_ITEMS = new Set<string>([
+  // Nothing list-shaped this time: the change is the favourites section itself,
+  // which carries its own badge in the theme picker.
 ]);
 
 /** Particle silhouettes. MIXED assigns one per particle, so a single drift can

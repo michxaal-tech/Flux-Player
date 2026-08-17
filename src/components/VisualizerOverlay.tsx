@@ -34,6 +34,8 @@ export function VisualizerOverlay() {
   const lyricAskArtist = useStore((s) => s.lyricAskArtist);
   const [artistText, setArtistText] = useState("");
   const set = useStore((s) => s.set);
+  const favThemes = useStore((s) => s.favThemes);
+  const toggleFavTheme = useStore((s) => s.toggleFavTheme);
   const setV = useStore((s) => s.setVisKey);
   const visChaos = useStore((s) => s.visChaos);
   const aiReady = useStore((s) => s.aiReady);
@@ -61,6 +63,61 @@ export function VisualizerOverlay() {
       if (canvasRefs.lyr === lyrRef.current) canvasRefs.lyr = null;
     };
   }, []);
+
+  /** One entry in the theme grid. Rendered both in the favourites strip and in
+   * the full list, so it lives here rather than being inlined twice. */
+  const ThemeCell = ({ v, fav }: { v: string; fav?: boolean }) => {
+    const on = visTheme === v;
+    const starred = favThemes.includes(v);
+    // Four columns on a phone leaves ~80px of text per cell. Rather than
+    // truncating the long names (CONSTELLATION, SINGULARITY) — which makes them
+    // unreadable — the type shrinks to fit. The ◈ prefix counts toward the
+    // length since it takes the same room as two characters.
+    const len = v.length + (STAGED_THEMES.has(v) ? 2 : 0);
+    const fs = len > 12 ? 8.2 : len > 10 ? 9 : len > 8 ? 9.8 : 10.5;
+    return (
+      <div
+        data-th={fav ? undefined : v}
+        data-thfav={fav ? v : undefined}
+        onClick={() => { set({ visTheme: v }); setThemeMenu(false); }}
+        style={{
+          position: "relative",
+          // right padding clears the star's 18px column, and the long names
+          // (CONSTELLATION, SINGULARITY) ellipsis rather than running under it
+          padding: "9px 17px 9px 4px", borderRadius: 9, fontSize: fs, fontWeight: 700,
+          letterSpacing: len > 10 ? "0" : "0.04em",
+          cursor: "pointer", textAlign: "center", whiteSpace: "nowrap",
+          overflow: "hidden", textOverflow: "ellipsis",
+          color: on ? BG : "rgba(255,255,255,0.8)",
+          // staged themes get a faint tinted plate so the ◈ row reads
+          // as a family rather than as scattered stray glyphs
+          background: on ? CYAN
+            : STAGED_THEMES.has(v) ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)",
+          boxShadow: !on && STAGED_THEMES.has(v) ? `inset 0 0 0 1px ${MAG}44` : "none",
+        }}
+        title={STAGED_THEMES.has(v) ? "Staged theme — effects layer in as the track builds, with a set-piece on drops" : undefined}
+      >
+        {STAGED_THEMES.has(v) && (
+          <span style={{ color: on ? BG : MAG, marginRight: 3 }}>{STAGED_MARK}</span>
+        )}
+        {v}
+        {NEW_ITEMS.has(v) && <NewTag />}
+        <span
+          data-star={v}
+          role="button"
+          aria-label={starred ? `Unfavourite ${v}` : `Favourite ${v}`}
+          // the star must not also pick the theme, or favouriting closes the menu
+          onClick={(e) => { e.stopPropagation(); toggleFavTheme(v); }}
+          style={{
+            position: "absolute", top: 0, right: 0, width: 18, height: "100%",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 10, lineHeight: 1, cursor: "pointer",
+            color: starred ? (on ? BG : MAG) : on ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.25)",
+          }}
+        >{starred ? "★" : "☆"}</span>
+      </div>
+    );
+  };
 
   const stepTheme = (dir: 1 | -1) => {
     const i = VIS_THEMES.indexOf(visTheme);
@@ -142,30 +199,31 @@ export function VisualizerOverlay() {
                 backdropFilter: "blur(20px)", zIndex: 6, boxShadow: "0 14px 40px rgba(0,0,0,0.6)",
               }}
             >
+              {/* Favourites are pinned above the full list. With 80 themes the
+                  grid is a long scroll, so the ones you actually use need to be
+                  reachable without hunting for them. */}
+              {favThemes.length > 0 && (
+                <>
+                  <div style={{ gridColumn: "1 / -1", fontSize: 9, letterSpacing: "0.18em", color: MAG, padding: "1px 4px 4px" }}>
+                    ★ FAVORITES <NewTag />
+                  </div>
+                  {favThemes.filter((v) => VIS_THEMES.includes(v)).map((v) => (
+                    <ThemeCell key={`fav-${v}`} v={v} fav />
+                  ))}
+                  <div style={{ gridColumn: "1 / -1", borderTop: BORDER, margin: "6px 0 2px" }} />
+                  <div style={{ gridColumn: "1 / -1", fontSize: 9, letterSpacing: "0.18em", color: "rgba(255,255,255,0.32)", padding: "1px 4px 4px" }}>
+                    ALL THEMES
+                  </div>
+                </>
+              )}
               {VIS_THEMES.map((v) => (
-                <div
-                  key={v}
-                  data-th={v}
-                  onClick={() => { set({ visTheme: v }); setThemeMenu(false); }}
-                  style={{
-                    padding: "9px 4px", borderRadius: 9, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.04em",
-                    cursor: "pointer", textAlign: "center", whiteSpace: "nowrap", overflow: "hidden",
-                    color: visTheme === v ? BG : "rgba(255,255,255,0.8)",
-                    // staged themes get a faint tinted plate so the ◈ row reads
-                    // as a family rather than as scattered stray glyphs
-                    background: visTheme === v ? CYAN
-                      : STAGED_THEMES.has(v) ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)",
-                    boxShadow: visTheme !== v && STAGED_THEMES.has(v) ? `inset 0 0 0 1px ${MAG}44` : "none",
-                  }}
-                  title={STAGED_THEMES.has(v) ? "Staged theme — effects layer in as the track builds, with a set-piece on drops" : undefined}
-                >
-                  {STAGED_THEMES.has(v) && (
-                    <span style={{ color: visTheme === v ? BG : MAG, marginRight: 3 }}>{STAGED_MARK}</span>
-                  )}
-                  {v}
-                  {NEW_ITEMS.has(v) && <NewTag />}
-                </div>
+                <ThemeCell key={v} v={v} />
               ))}
+              {favThemes.length === 0 && (
+                <div style={{ gridColumn: "1 / -1", fontSize: 9, color: "rgba(255,255,255,0.3)", padding: "6px 4px 0", lineHeight: 1.5 }}>
+                  Tap a theme's ☆ to favourite it — favourites get pinned to the top of this list.
+                </div>
+              )}
               {/* auto-advance mode — OFF keeps the current theme forever */}
               <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 6, padding: "8px 4px 2px", borderTop: BORDER, marginTop: 6 }}>
                 <span style={{ fontSize: 9.5, letterSpacing: "0.18em", color: "rgba(255,255,255,0.45)", flexShrink: 0 }}>AUTO</span>

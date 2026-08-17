@@ -116,6 +116,9 @@ export interface StoreState {
   set: (partial: Partial<StoreState>) => void;
   setFxKey: <K extends keyof FxState>(k: K, v: FxState[K]) => void;
   setVisKey: <K extends keyof VisCfg>(k: K, v: VisCfg[K]) => void;
+  /** starred visualizer themes, pinned to the top of the theme picker */
+  favThemes: string[];
+  toggleFavTheme: (name: string) => void;
   applyPreset: (p: Preset) => void;
   saveUserPreset: () => void;
   deleteUserPreset: (i: number) => void;
@@ -217,6 +220,15 @@ export const useStore = create<StoreState>()(
 
         setFxKey: (k, v) => set((s) => ({ fx: { ...s.fx, [k]: v }, activePreset: "" })),
         setVisKey: (k, v) => set((s) => ({ visCfg: { ...s.visCfg, [k]: v } })),
+
+        favThemes: [],
+        toggleFavTheme: (name) =>
+          set((s) => ({
+            favThemes: s.favThemes.includes(name)
+              ? s.favThemes.filter((n) => n !== name)
+              // newest first, so a theme you just starred is easy to find again
+              : [name, ...s.favThemes],
+          })),
 
         applyPreset: (p) => set({ fx: { ...DEFAULT_FX, ...p.fx }, activePreset: p.name }),
 
@@ -409,6 +421,7 @@ export const useStore = create<StoreState>()(
           lyricStyle: s.lyricStyle,
           lyricFx: s.lyricFx,
           lyricFxMatch: s.lyricFxMatch,
+          favThemes: s.favThemes,
           lyricAuto: s.lyricAuto,
           trackBpm: s.trackBpm,
           radioMode: s.radioMode,

@@ -106,10 +106,7 @@ await step("visualizer opens, theme dropdown works, tune panel works", async () 
   await page.click("button:has-text('◉ VISUALS')");
   await page.click("button:has-text('◉ RING')"); // theme picker dropdown
   await page.waitForSelector("div:text-is('KALEIDO')");
-  // options added in the latest change carry a NEW badge in the pickers
-  const newCell = await page.$('[data-th="MONOLITH"]');
-  if (!newCell || !(await newCell.innerText()).includes("NEW")) throw new Error("NEW badge missing on a newly added theme");
-  await page.click("div:text-is('TUNNEL')");
+  await page.click('[data-th="TUNNEL"]');
   await page.waitForSelector("button:has-text('◉ TUNNEL')");
   await page.click("button:has-text('⚙ TUNE')");
   await page.waitForSelector("text=COLOR PALETTE");
@@ -140,6 +137,30 @@ await step("3D projection applies to any theme", async () => {
   await page.waitForSelector('button[data-lfx="NONE-COLOR"]');
   await page.waitForSelector("input[data-lfxmatch]");
   await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await page.waitForSelector("button[data-themechip]", { state: "detached" });
+});
+
+await step("favourite themes pin to the top of the picker", async () => {
+  await page.click("button:has-text('◉ VISUALS')");
+  await page.click("button[data-themechip]");
+  await page.waitForSelector('[data-th="ORRERY"]');
+  // starring must favourite without also selecting the theme and closing the menu
+  await page.click('[data-th="ORRERY"] [data-star="ORRERY"]');
+  await page.waitForSelector('[data-thfav="ORRERY"]', { timeout: 5000 });
+  if (await page.$("button:has-text('◉ ORRERY')")) throw new Error("starring a theme also selected it");
+  // the section header is badged as the newest feature
+  const hdr = await page.$("text=★ FAVORITES");
+  if (!hdr) throw new Error("favourites section missing");
+  // and it survives a reload
+  await page.keyboard.press("Escape");
+  await page.reload({ waitUntil: "networkidle" });
+  await page.click("button:has-text('◉ VISUALS')");
+  await page.click("button[data-themechip]");
+  await page.waitForSelector('[data-thfav="ORRERY"]', { timeout: 5000 });
+  // un-starring removes it again
+  await page.click('[data-thfav="ORRERY"] [data-star="ORRERY"]');
+  await page.waitForSelector('[data-thfav="ORRERY"]', { state: "detached", timeout: 5000 });
   await page.keyboard.press("Escape");
   await page.waitForSelector("button[data-themechip]", { state: "detached" });
 });
