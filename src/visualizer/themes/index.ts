@@ -77,6 +77,11 @@ import { SYNAPSE } from "./synapse";
 // natively 3D themes — real perspective projection, not the project3d wrapper
 import { VOXEL } from "./voxel";
 import { TESSERACT } from "./tesseract";
+import { MONOLITH } from "./monolith";
+import { ORRERY } from "./orrery";
+import { CANYON } from "./canyon";
+import { GYROSCOPE } from "./gyroscope";
+import { SINGULARITY } from "./singularity";
 
 export const themes: Record<string, ThemeDraw> = {
   RING, KALEIDO, HELIX, WAVES, LASERS, GRID, ORB, RIPPLES, SPIRAL, FIREFLIES,
@@ -90,4 +95,5 @@ export const themes: Record<string, ThemeDraw> = {
   MARQUEE, NEONSIGN, CLOCK,
   ASCENSION, LEVIATHAN, CATHODE, CITADEL, SYNAPSE,
   VOXEL, TESSERACT,
+  MONOLITH, ORRERY, CANYON, GYROSCOPE, SINGULARITY,
 };

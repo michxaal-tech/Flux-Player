@@ -171,6 +171,14 @@ interface BlockOpts {
   glowAmt: number;
   color?: string;
   glowColor: string;
+  /**
+   * Progress through *this* block's own line, 0..1, for the letter effects that
+   * key off it (karaoke fills, sweeps, type-on). A finished line passes 1 and a
+   * preview passes 0. Without this they all read the current line's progress,
+   * so a type-on effect drove the previous line's letters to zero alpha the
+   * instant a new line began and it vanished instead of fading.
+   */
+  fxFrac?: number;
 }
 
 /** geometry of a laid-out block, exactly as drawBlock would place it. Leaves
@@ -270,7 +278,11 @@ function drawBlockLetters(
       const ch = row[ci];
       const adv = c.measureText(ch).width;
       if (ch !== " ") {
-        const st = letterFx(fx, { ...base, i: seen, n: Math.max(1, total), row: ri });
+        const st = letterFx(fx, {
+          ...base,
+          frac: o.fxFrac ?? base.frac,
+          i: seen, n: Math.max(1, total), row: ri,
+        });
         const a = (st.alpha ?? 1) * o.alpha;
         if (a > 0.01) {
           c.save();
@@ -495,6 +507,8 @@ export function drawLyricOverlay(x: LyricCtx): void {
         size: e.hot ? size : size * 0.85,
         glowAmt: e.hot ? 16 + beatE * 20 : 4,
         glowColor: e.hot ? C1() : C2(),
+        // only the live line is mid-progress; the ones stacked above it are done
+        fxFrac: e.hot ? undefined : 1,
       }, w);
     }
     c.restore();
@@ -510,7 +524,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
       alpha: 0.35 * (1 - gone),
       scale: 0.8 - gone * 0.08,
       maxW: w * 0.42, size: size * 0.72,
-      glowAmt: 6, glowColor: C2(),
+      glowAmt: 6, glowColor: C2(), fxFrac: 1,
     }, w);
   }
 

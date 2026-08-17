@@ -75,6 +75,10 @@ export interface VisCfg {
   trail: number;
   particles: number;
   pStyle: string;
+  /** particle silhouette (see P_SHAPES); MIXED varies it per particle */
+  pShape: string;
+  /** how widely particle sizes vary within one drift (see P_SIZES) */
+  pSize: string;
   speed: number;
   intensity: number;
   zoom: number;

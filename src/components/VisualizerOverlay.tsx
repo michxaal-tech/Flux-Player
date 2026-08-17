@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { BG, BORDER, CYAN, IMPACTS, MAG, P_STYLES, PALETTES, STAGED_MARK, STAGED_THEMES, VIS_THEMES } from "../constants";
+import { BG, BORDER, CYAN, IMPACTS, MAG, P_SHAPES, P_SIZES, P_STYLES, PALETTES, STAGED_MARK, STAGED_THEMES, VIS_THEMES } from "../constants";
 import { nextTrack, prevTrack, togglePlay } from "../audio/transport";
 import { getCurrentTrack, useStore } from "../store/useStore";
 import { mix } from "../theme";
@@ -339,10 +339,37 @@ export function VisualizerOverlay() {
           {panelTab === "MOTION" && (<>
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "10px 0 8px" }}>PARTICLES</div>
           <Slider label="COUNT" value={visCfg.particles} min={0} max={1} step={0.01} format={(v) => `${Math.round(v * 150)}`} onChange={(v) => setV("particles", v)} />
+          <div style={{ fontSize: 9, letterSpacing: "0.16em", color: "rgba(255,255,255,0.32)", margin: "2px 0 4px" }}>DRIFT</div>
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
             {P_STYLES.map((s) => (
               <button key={s} onClick={() => setV("pStyle", s)} style={{ ...chip(visCfg.pStyle === s), padding: "6px 11px", fontSize: 9.5 }}>{s}</button>
             ))}
+          </div>
+          <div style={{ fontSize: 9, letterSpacing: "0.16em", color: "rgba(255,255,255,0.32)", margin: "2px 0 4px" }}>SHAPE</div>
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
+            {P_SHAPES.map((sh) => (
+              <button
+                key={sh}
+                data-pshape={sh}
+                onClick={() => setV("pShape", sh)}
+                style={{ ...chip((visCfg.pShape ?? "MIXED") === sh, sh === "MIXED" ? CYAN : MAG), padding: "6px 10px", fontSize: 9 }}
+              >{sh}</button>
+            ))}
+          </div>
+          <div style={{ fontSize: 9, letterSpacing: "0.16em", color: "rgba(255,255,255,0.32)", margin: "2px 0 4px" }}>SIZE SPREAD</div>
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 4 }}>
+            {P_SIZES.map((sz) => (
+              <button
+                key={sz}
+                data-psize={sz}
+                onClick={() => setV("pSize", sz)}
+                style={{ ...chip((visCfg.pSize ?? "VARIED") === sz), padding: "6px 11px", fontSize: 9.5 }}
+              >{sz}</button>
+            ))}
+          </div>
+          <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, marginBottom: 8 }}>
+            MIXED gives every particle its own silhouette. A wider size spread reads as depth,
+            since bigger particles look nearer.
           </div>
 
           </>)}
@@ -440,13 +467,6 @@ export function VisualizerOverlay() {
             Applies on top of whichever animation you picked above — colour ramps, per-letter
             motion, karaoke fills and text treatments.
           </div>
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
-            <button
-              data-lfx="NONE"
-              onClick={() => set({ lyricFx: "NONE" })}
-              style={{ ...chip(lyricFx === "NONE"), padding: "6px 10px", fontSize: 9.5 }}
-            >✕ NONE</button>
-          </div>
           {LYRIC_FX_GROUPS.map((g) => (
             <div key={g.name} style={{ marginBottom: 8 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, marginBottom: 4 }}>
@@ -470,6 +490,13 @@ export function VisualizerOverlay() {
                 )}
               </div>
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {/* every group carries its own NONE, so turning one off never
+                    means scrolling back to a single switch somewhere else */}
+                <button
+                  data-lfx={`NONE-${g.name}`}
+                  onClick={() => set({ lyricFx: "NONE" })}
+                  style={{ ...chip(lyricFx === "NONE"), padding: "6px 9px", fontSize: 9 }}
+                >✕ NONE</button>
                 {g.items.map((f) => (
                   <button
                     key={f}

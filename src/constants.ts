@@ -57,6 +57,7 @@ export const VIS_THEMES = [
   "MARQUEE", "NEONSIGN", "CLOCK",
   "ASCENSION", "LEVIATHAN", "CATHODE", "CITADEL", "SYNAPSE",
   "VOXEL", "TESSERACT",
+  "MONOLITH", "ORRERY", "CANYON", "GYROSCOPE", "SINGULARITY",
 ];
 
 /** Staged themes: instead of one look reacting to volume, these build in layers.
@@ -66,6 +67,7 @@ export const VIS_THEMES = [
  * The picker marks them with STAGED_MARK. */
 export const STAGED_THEMES = new Set([
   "ASCENSION", "LEVIATHAN", "CATHODE", "CITADEL", "SYNAPSE",
+  "MONOLITH", "ORRERY", "CANYON", "GYROSCOPE", "SINGULARITY",
 ]);
 
 export const STAGED_MARK = "◈";
@@ -127,15 +129,27 @@ export const P_STYLES = [
   "METEOR", "POLLEN", "GLITTER", "STATIC",
 ];
 
-/** Per-beat impact effects, layered over whatever the theme drew. */
+/** Per-beat impact effects, layered over whatever the theme drew. Stack freely. */
 export const IMPACTS = [
   "FLASH", "SHAKE", "MIRROR", "PUNCH", "CHROMA", "BLOOM", "STROBE",
   "RINGS", "SCANLINE", "INVERT", "SQUEEZE", "VIGNETTE",
+  "ZOOM", "TILT", "SLICE", "PIXELATE", "FLARE", "BARS", "TWIST",
+  "SHOCK", "SPOTLIGHT", "SMEAR", "GRAIN", "EDGE",
 ];
+
+/** Particle silhouettes. MIXED assigns one per particle, so a single drift can
+ * carry several shapes at once. */
+export const P_SHAPES = [
+  "MIXED", "DOT", "SQUARE", "TRIANGLE", "DIAMOND", "STAR", "RING",
+  "CROSS", "HEX", "SHARD", "PETAL", "BAR",
+];
+
+/** Size spread presets: how much particle sizes vary within one drift. */
+export const P_SIZES = ["UNIFORM", "VARIED", "WILD"];
 
 export const DEFAULT_VIS_CFG: VisCfg = {
   palette: "NEON", h1: 187, h2: 317,
-  glow: 0.7, trail: 0.55, particles: 0.35, pStyle: "RISE",
+  glow: 0.7, trail: 0.55, particles: 0.35, pStyle: "RISE", pShape: "MIXED", pSize: "VARIED",
   speed: 1, intensity: 1, zoom: 1, spinV: 0, bgWash: 0.3, thick: 1,
   mirror: false, shake: false, flash: true, impacts: [], autoMode: "off", hiRes: false, fastBeats: true, syncMs: 0,
   vis3d: "OFF", vis3dAmt: 0.5, dropFx: 0.6,

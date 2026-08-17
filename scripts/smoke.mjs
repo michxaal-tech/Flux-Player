@@ -134,6 +134,7 @@ await step("3D projection applies to any theme", async () => {
   await page.click('button[data-ptab="LYRICS"]');
   await page.waitForSelector("text=LETTER FX");
   await page.click('button[data-lfx="RAINBOW WAVE"]');
+  await page.waitForSelector('button[data-lfx="NONE-COLOR"]');
   await page.waitForSelector("input[data-lfxmatch]");
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");

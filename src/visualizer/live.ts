@@ -77,6 +77,8 @@ export interface LiveState {
   analHit: number;
   /** expanding beat rings (IMPACTS "RINGS"), 0..1.25 each */
   impRings: number[];
+  /** expanding SHOCK rings, 0..1 each */
+  impShock: number[];
   /** sweeping scanline position (IMPACTS "SCANLINE"), -1 when idle */
   impScan: number;
   /** total A/V compensation currently applied, ms (measured + user offset) */
@@ -109,7 +111,7 @@ export const live: LiveState = {
   rot: 0, vt: 0, tunnel: [], stars: [], vparts: [], specHist: [], ripples: [],
   flies: [], vort: [], cityH: [], shakeVal: 0,
   beatAvg: 0, prevBass: 0, fluxAvg: 0, fluxDev: 0, lastBeatAt: 0, beats: [], bpm: 0, flashVal: 0, cycleT: 0,
-  beatE: 0, energy: 0.35, anal: null, analOn: false, analBeat: 0, dropE: 0, prevBassSlow: 0, hitE: 0, section: 0, analHit: 0, impRings: [], impScan: -1, syncMs: 0, playerTheme: "AURORA", playerBgOn: true, scratch: {},
+  beatE: 0, energy: 0.35, anal: null, analOn: false, analBeat: 0, dropE: 0, prevBassSlow: 0, hitE: 0, section: 0, analHit: 0, impRings: [], impScan: -1, impShock: [], syncMs: 0, playerTheme: "AURORA", playerBgOn: true, scratch: {},
   flow: 0, lastDropAt: -9999, dropIdx: 0, dropNew: false, dropTier: 0, dropBang: 0, dropRings: [], dropTiles: [],
 };
 

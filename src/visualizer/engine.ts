@@ -22,6 +22,98 @@ const sceneCv = document.createElement("canvas");
 // itself read from a copy instead of from their own output.
 const fxSnapCv = document.createElement("canvas");
 
+// tiny buffer for the PIXELATE impact (downscale, then blit back unsmoothed)
+const pixCv = document.createElement("canvas");
+
+/** Shapes MIXED draws from. Kept out of P_SHAPES' "MIXED"/"DOT" entries so the
+ * pool is all *distinct* silhouettes. */
+const SHAPE_POOL = ["DOT", "SQUARE", "TRIANGLE", "DIAMOND", "STAR", "RING", "CROSS", "HEX", "SHARD", "PETAL"];
+
+/**
+ * Draws one particle. Everything is a path around (x, y) with radius r, so the
+ * caller's fillStyle, alpha and shadow all still apply and shapes cost the same
+ * as the circles they replace.
+ */
+function drawParticle(c: CanvasRenderingContext2D, shape: string, x: number, y: number, r: number, rot: number): void {
+  if (shape === "DOT") {
+    c.beginPath();
+    c.arc(x, y, r, 0, Math.PI * 2);
+    c.fill();
+    return;
+  }
+  if (shape === "RING") {
+    c.beginPath();
+    c.arc(x, y, r, 0, Math.PI * 2);
+    c.lineWidth = Math.max(0.6, r * 0.34);
+    c.strokeStyle = c.fillStyle as string;
+    c.stroke();
+    return;
+  }
+  c.save();
+  c.translate(x, y);
+  c.rotate(rot);
+  c.beginPath();
+  switch (shape) {
+    case "SQUARE":
+      c.rect(-r, -r, r * 2, r * 2);
+      break;
+    case "BAR":
+      c.rect(-r * 1.6, -r * 0.5, r * 3.2, r);
+      break;
+    case "TRIANGLE":
+      c.moveTo(0, -r * 1.2);
+      c.lineTo(r * 1.05, r * 0.7);
+      c.lineTo(-r * 1.05, r * 0.7);
+      c.closePath();
+      break;
+    case "DIAMOND":
+      c.moveTo(0, -r * 1.3);
+      c.lineTo(r * 0.85, 0);
+      c.lineTo(0, r * 1.3);
+      c.lineTo(-r * 0.85, 0);
+      c.closePath();
+      break;
+    case "STAR":
+      // 5 points, alternating outer and inner radius
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+        const rr = i % 2 === 0 ? r * 1.35 : r * 0.55;
+        const px = Math.cos(a) * rr, py = Math.sin(a) * rr;
+        if (i === 0) c.moveTo(px, py); else c.lineTo(px, py);
+      }
+      c.closePath();
+      break;
+    case "CROSS": {
+      const t2 = r * 0.36;
+      c.rect(-t2, -r * 1.2, t2 * 2, r * 2.4);
+      c.rect(-r * 1.2, -t2, r * 2.4, t2 * 2);
+      break;
+    }
+    case "HEX":
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const px = Math.cos(a) * r * 1.12, py = Math.sin(a) * r * 1.12;
+        if (i === 0) c.moveTo(px, py); else c.lineTo(px, py);
+      }
+      c.closePath();
+      break;
+    case "SHARD":
+      c.moveTo(0, -r * 1.7);
+      c.lineTo(r * 0.5, r * 0.2);
+      c.lineTo(0, r * 1.1);
+      c.lineTo(-r * 0.42, r * 0.1);
+      c.closePath();
+      break;
+    case "PETAL":
+      c.ellipse(0, 0, r * 0.62, r * 1.45, 0, 0, Math.PI * 2);
+      break;
+    default:
+      c.arc(0, 0, r, 0, Math.PI * 2);
+  }
+  c.fill();
+  c.restore();
+}
+
 /** themes that render lyrics themselves — the shared overlay stays out of their way */
 const LYRIC_NATIVE_THEMES = new Set(["MARQUEE", "NEONSIGN", "CLOCK"]);
 
@@ -674,9 +766,19 @@ export function startRenderLoop(): void {
       themes[TH]?.(themeCtx);
 
       // particle overlay w/ styles
+      const pShapeCfg = cfg.pShape ?? "MIXED";
+      // Size spread. Every particle being near-identical is what made drifts
+      // read as static; a wide spread gives a foreground/background feel for
+      // free, because bigger reads as nearer.
+      const spread = cfg.pSize === "UNIFORM" ? 0 : cfg.pSize === "WILD" ? 1 : 0.5;
       const targetCount = Math.floor(cfg.particles * 150);
-      while (L.vparts.length < targetCount)
-        L.vparts.push({ x: Math.random(), y: Math.random(), sp: 0.0004 + Math.random() * 0.0012, sz: 0.8 + Math.random() * 2.4, ph: Math.random() * Math.PI * 2 });
+      while (L.vparts.length < targetCount) {
+        const r = Math.random();
+        // r^3 keeps most particles small with a few much larger ones, which
+        // looks far more natural than a flat distribution
+        const sz = 0.9 + (spread === 0 ? 1.1 : Math.pow(r, 3) * (spread * 9) + r * 1.4);
+        L.vparts.push({ x: Math.random(), y: Math.random(), sp: 0.0004 + Math.random() * 0.0012, sz, ph: Math.random() * Math.PI * 2 });
+      }
       if (L.vparts.length > targetCount) L.vparts.length = targetCount;
       for (const p of L.vparts) {
         const st = cfg.pStyle;
@@ -723,20 +825,22 @@ export function startRenderLoop(): void {
         const big = st === "SNOW" || st === "BUBBLES" || st === "PETALS" ? 1.3 : st === "STARS" ? 0.8 : 1;
         c.fillStyle = CMix((p.ph % 6.28) / 6.28, (0.28 + bassV * 0.5 + L.beatE * 0.3) * tw, fast ? 60 : 68);
         const pr = p.sz * (1 + bassV * 1.6 + L.beatE * 0.8) * big * TK;
+        const cxp = p.x * w, cyp = p.y * h;
         if (st === "RAIN" || st === "METEOR") {
           // streaks read as motion far better than dots at these speeds
           c.strokeStyle = c.fillStyle;
           c.lineWidth = Math.max(0.6, pr * 0.7);
           c.beginPath();
-          c.moveTo(p.x * w, p.y * h);
-          c.lineTo(p.x * w - (st === "METEOR" ? pr * 5 : 0), p.y * h - pr * (st === "METEOR" ? 3.4 : 6));
+          c.moveTo(cxp, cyp);
+          c.lineTo(cxp - (st === "METEOR" ? pr * 5 : 0), cyp - pr * (st === "METEOR" ? 3.4 : 6));
           c.stroke();
-        } else if (st === "CONFETTI") {
-          c.fillRect(p.x * w - pr, p.y * h - pr * 0.5, pr * 2, pr);
         } else {
-          c.beginPath();
-          c.arc(p.x * w, p.y * h, pr, 0, Math.PI * 2);
-          c.fill();
+          // MIXED gives each particle its own silhouette, chosen from its
+          // stable phase so it never changes shape mid-flight
+          const shp = pShapeCfg === "MIXED"
+            ? SHAPE_POOL[Math.floor(p.ph * 1000) % SHAPE_POOL.length]
+            : pShapeCfg;
+          drawParticle(c, shp === "DOT" && st === "CONFETTI" ? "BAR" : shp, cxp, cyp, pr, p.ph + vt * 0.01);
         }
       }
 
@@ -859,6 +963,151 @@ export function startRenderLoop(): void {
         vg.addColorStop(1, `rgba(0,0,0,${0.38 + L.beatE * 0.22})`);
         c.fillStyle = vg;
         c.fillRect(0, 0, w, h);
+      }
+
+      // ── extended impact set ──
+      // All screen-space and all driven by beatE, so they layer with each other
+      // and with the theme without any of them knowing about the rest.
+      const BE = L.beatE;
+      if (IMP.has("ZOOM") && BE > 0.02) {
+        // a hard punch-in copy over the top, like a camera slam
+        c.save();
+        c.globalCompositeOperation = "lighter";
+        c.globalAlpha = 0.3 * BE;
+        const z = 1 + BE * 0.16;
+        c.drawImage(vc, 0, 0, vc.width, vc.height, (w - w * z) / 2, (h - h * z) / 2, w * z, h * z);
+        c.restore();
+      }
+      if (IMP.has("TILT") && BE > 0.02) {
+        c.save();
+        c.globalCompositeOperation = "lighter";
+        c.globalAlpha = 0.26 * BE;
+        c.translate(cx, cy);
+        c.rotate(BE * 0.05 * (L.beats.length % 2 ? 1 : -1));
+        c.drawImage(vc, 0, 0, vc.width, vc.height, -cx, -cy, w, h);
+        c.restore();
+      }
+      if (IMP.has("SLICE") && BE > 0.25) {
+        // horizontal bands shoved sideways, like a torn signal
+        c.save();
+        const bands = 7;
+        for (let i = 0; i < bands; i++) {
+          const by = (i / bands) * h;
+          const bh = h / bands;
+          const off = (Math.random() - 0.5) * BE * R * 0.12;
+          c.drawImage(vc, 0, (by / h) * vc.height, vc.width, (bh / h) * vc.height, off, by, w, bh);
+        }
+        c.restore();
+      }
+      if (IMP.has("PIXELATE") && BE > 0.15) {
+        // downscale and blit back with smoothing off — cheap true pixelation
+        const px = Math.max(8, Math.round(80 / (0.3 + BE)));
+        pixCv.width = px;
+        pixCv.height = Math.max(4, Math.round(px * (h / w)));
+        const pc = pixCv.getContext("2d")!;
+        pc.clearRect(0, 0, pixCv.width, pixCv.height);
+        pc.drawImage(vc, 0, 0, pixCv.width, pixCv.height);
+        c.save();
+        c.imageSmoothingEnabled = false;
+        c.globalAlpha = Math.min(1, BE * 1.4);
+        c.drawImage(pixCv, 0, 0, pixCv.width, pixCv.height, 0, 0, w, h);
+        c.restore();
+      }
+      if (IMP.has("FLARE") && BE > 0.05) {
+        // anamorphic streak across the centre
+        const fg = c.createLinearGradient(0, cy, w, cy);
+        fg.addColorStop(0, "transparent");
+        fg.addColorStop(0.5, C1(BE * 0.4, 78));
+        fg.addColorStop(1, "transparent");
+        c.save();
+        c.globalCompositeOperation = "lighter";
+        c.fillStyle = fg;
+        c.fillRect(0, cy - h * 0.012 * (1 + BE), w, h * 0.024 * (1 + BE));
+        c.restore();
+      }
+      if (IMP.has("BARS")) {
+        // letterbox bars that snap in on the beat
+        const bh = h * 0.09 * BE;
+        if (bh > 0.5) {
+          c.fillStyle = "rgba(0,0,0,0.85)";
+          c.fillRect(0, 0, w, bh);
+          c.fillRect(0, h - bh, w, bh);
+        }
+      }
+      if (IMP.has("TWIST") && BE > 0.03) {
+        // concentric rings each rotated a little more — a swirl without a shader
+        c.save();
+        c.globalCompositeOperation = "lighter";
+        for (let i = 1; i <= 3; i++) {
+          const k = i / 3;
+          c.save();
+          c.globalAlpha = 0.16 * BE * (1 - k * 0.4);
+          c.translate(cx, cy);
+          c.rotate(BE * 0.28 * k);
+          c.scale(1 - k * 0.12, 1 - k * 0.12);
+          c.drawImage(vc, 0, 0, vc.width, vc.height, -cx, -cy, w, h);
+          c.restore();
+        }
+        c.restore();
+      }
+      if (IMP.has("SHOCK") && beat) L.impShock.push(0);
+      if (L.impShock.length) {
+        c.save();
+        c.globalCompositeOperation = "lighter";
+        for (let i = L.impShock.length - 1; i >= 0; i--) {
+          L.impShock[i] += beatStep * 0.6;
+          const rr = L.impShock[i];
+          if (rr > 1.1) { L.impShock.splice(i, 1); continue; }
+          // a thin, fast ring — reads as a pressure wave rather than a halo
+          const a = (1 - rr) ** 3;
+          c.strokeStyle = C1(a * 0.8, 80);
+          c.lineWidth = (1 + a * 2.5) * TK;
+          c.beginPath();
+          c.arc(cx, cy, rr * R * 1.1, 0, Math.PI * 2);
+          c.stroke();
+        }
+        c.restore();
+      }
+      if (IMP.has("SPOTLIGHT")) {
+        // everything outside a moving pool of light is dimmed
+        const sx = cx + Math.cos(vt * 0.013) * w * 0.22;
+        const sy = cy + Math.sin(vt * 0.017) * h * 0.16;
+        const sg = c.createRadialGradient(sx, sy, 0, sx, sy, R * (0.34 + BE * 0.12));
+        sg.addColorStop(0, "rgba(0,0,0,0)");
+        sg.addColorStop(1, `rgba(0,0,0,${0.55 - BE * 0.15})`);
+        c.fillStyle = sg;
+        c.fillRect(0, 0, w, h);
+      }
+      if (IMP.has("SMEAR") && BE > 0.04) {
+        // directional motion blur, faked with a few offset copies
+        c.save();
+        c.globalCompositeOperation = "lighter";
+        const dir = Math.cos(vt * 0.01), dy2 = Math.sin(vt * 0.01);
+        for (let i = 1; i <= 3; i++) {
+          c.globalAlpha = 0.14 * BE / i;
+          c.drawImage(vc, 0, 0, vc.width, vc.height, dir * i * BE * 16, dy2 * i * BE * 16, w, h);
+        }
+        c.restore();
+      }
+      if (IMP.has("GRAIN")) {
+        // film grain that thickens on the beat, drawn as a sparse dot field
+        const n = Math.round(140 * (0.3 + BE));
+        c.save();
+        c.globalCompositeOperation = "lighter";
+        c.fillStyle = `rgba(255,255,255,${0.05 + BE * 0.06})`;
+        for (let i = 0; i < n; i++) {
+          c.fillRect(Math.random() * w, Math.random() * h, 1.5, 1.5);
+        }
+        c.restore();
+      }
+      if (IMP.has("EDGE") && BE > 0.02) {
+        // difference of two slightly-scaled copies leaves the outlines glowing
+        c.save();
+        c.globalCompositeOperation = "lighter";
+        c.globalAlpha = 0.3 * BE;
+        const e = 1 + 0.012 + BE * 0.01;
+        c.drawImage(vc, 0, 0, vc.width, vc.height, (w - w * e) / 2, (h - h * e) / 2, w * e, h * e);
+        c.restore();
       }
 
       // beat flash
