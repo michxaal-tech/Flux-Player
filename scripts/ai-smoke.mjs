@@ -83,6 +83,12 @@ await page.route("https://generativelanguage.googleapis.com/**", async (route) =
   if (headers["x-goog-api-key"] === "AIzaBAD") {
     return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: { code: 400, message: "API key not valid. Please pass a valid API key.", status: "INVALID_ARGUMENT" } }) });
   }
+  // thinking models burn the output budget before writing anything: reply
+  // empty + MAX_TOKENS unless thinking was explicitly disabled
+  if (body.generationConfig?.thinkingConfig?.thinkingBudget !== 0) {
+    return route.fulfill({ contentType: "application/json", body: JSON.stringify({
+      candidates: [{ content: { parts: [] }, finishReason: "MAX_TOKENS" }] }) });
+  }
   if (userText === "ping") return route.fulfill(geminiReply("ok"));
   return route.fulfill(geminiReply({
     reply: "Gemini set the mood.",
@@ -167,6 +173,11 @@ await step("Gemini is the default provider and its free key flow works", async (
   if (!g.url.includes("gemini-3.7-flash:generateContent")) throw new Error(`wrong endpoint: ${g.url}`);
   const chosen = await page.evaluate(() => window.__fluxStore.getState().aiModel);
   if (chosen !== "gemini-3.7-flash") throw new Error(`aiModel=${chosen}, expected the discovered model`);
+  // thinking must be disabled or a Flash model answers with nothing at all
+  const ping = [...geminiSeen].reverse().find((x) => x.userText === "ping");
+  if (ping?.cfg?.thinkingConfig?.thinkingBudget !== 0) {
+    throw new Error("thinking budget not disabled — the model will spend its output on reasoning");
+  }
 });
 
 await step("a stale stored model id is replaced on reconnect", async () => {

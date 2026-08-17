@@ -68,6 +68,9 @@ export interface Provider {
   errorMessage?(status: number, body: string): string | null;
   /** live model discovery, where the provider exposes it */
   listModels?: ListModels;
+  /** retry body used when the first request is rejected as malformed —
+   * lets a provider drop options an older model doesn't understand */
+  bodyFallback?(o: AskShape, model: string): unknown;
 }
 
 const ANTHROPIC: Provider = {
@@ -141,7 +144,22 @@ const GEMINI: Provider = {
     generationConfig: {
       maxOutputTokens: o.maxTokens,
       temperature: o.temperature,
+      // Current Flash models think before answering, and that reasoning is
+      // billed against maxOutputTokens — a short budget gets consumed entirely
+      // by thinking and returns nothing at all. FLUX wants fast structured
+      // replies, not reasoning, so turn it off.
+      thinkingConfig: { thinkingBudget: 0 },
       // native JSON mode: the model cannot return prose around the object
+      ...(o.json ? { responseMimeType: "application/json" } : {}),
+    },
+  }),
+  // older models reject thinkingConfig outright — retry without it
+  bodyFallback: (o, _model) => ({
+    system_instruction: { parts: [{ text: o.system }] },
+    contents: [{ role: "user", parts: [{ text: o.user }] }],
+    generationConfig: {
+      maxOutputTokens: o.maxTokens,
+      temperature: o.temperature,
       ...(o.json ? { responseMimeType: "application/json" } : {}),
     },
   }),
@@ -153,7 +171,9 @@ const GEMINI: Provider = {
     if (d.promptFeedback?.blockReason) throw new Error(`blocked by safety filter (${d.promptFeedback.blockReason})`);
     const c = d.candidates?.[0];
     const text = (c?.content?.parts ?? []).map((p) => p.text ?? "").join("");
-    if (!text && c?.finishReason === "MAX_TOKENS") throw new Error("hit the output limit before answering");
+    if (!text && c?.finishReason === "MAX_TOKENS") {
+      throw new Error("the model used its whole output budget before replying — pick a different model in MODEL below");
+    }
     return text;
   },
   listModels: async (key) => {

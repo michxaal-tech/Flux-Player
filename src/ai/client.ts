@@ -90,13 +90,19 @@ async function rawCall(cfg: CallCfg, o: AskOpts, json: boolean): Promise<string>
     temperature: o.temperature ?? 1,
     json,
   };
+  const url = resolveEndpoint(p, cfg.model, cfg.baseUrl);
+  const send = (body: unknown) =>
+    fetch(url, { method: "POST", headers: p.headers(cfg.key), body: JSON.stringify(body) });
+
   let resp: Response;
   try {
-    resp = await fetch(resolveEndpoint(p, cfg.model, cfg.baseUrl), {
-      method: "POST",
-      headers: p.headers(cfg.key),
-      body: JSON.stringify(p.body(shape, cfg.model)),
-    });
+    resp = await send(p.body(shape, cfg.model));
+    // a 400 usually means the model rejected an option rather than the prompt;
+    // retry once with the provider's conservative body before giving up
+    if (resp.status === 400 && p.bodyFallback) {
+      const alt = await send(p.bodyFallback(shape, cfg.model));
+      if (alt.ok) resp = alt;
+    }
   } catch {
     throw new AiError(`Couldn't reach ${p.label} — offline, or the endpoint blocked the request`, "network");
   }
@@ -230,7 +236,7 @@ export async function validateKey(
   try {
     await rawCall(
       { providerId, model: model || getProvider(providerId).defaultModel, baseUrl, key },
-      { system: "Reply with the single word: ok", user: "ping", maxTokens: 16 },
+      { system: "Reply with the single word: ok", user: "ping", maxTokens: 256 },
       false
     );
     return { ok: true };
