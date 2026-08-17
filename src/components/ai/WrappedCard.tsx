@@ -1,6 +1,7 @@
 // FLUX WRAPPED rendered to a canvas so it can be saved/shared as an image.
 import { useEffect, useRef, useState } from "react";
 import { BORDER, MONO, SANS } from "../../constants";
+import { stopsOf } from "../../palette";
 import type { Wrapped } from "../../ai/features";
 import { useStore } from "../../store/useStore";
 import { PALETTES } from "../../constants";
@@ -20,8 +21,10 @@ export function WrappedCard({ data, onClose }: { data: Wrapped; onClose: () => v
     cv.height = H;
     const c = cv.getContext("2d")!;
     const pal = PALETTES.find((p) => p.id === visCfg.palette) ?? PALETTES[0];
-    const h1 = pal.h ? pal.h[0] : visCfg.h1;
-    const h2 = pal.h ? pal.h[1] : visCfg.h2;
+    // a still image takes the two ends of the ramp; there is nothing to cycle
+    const stops = stopsOf(pal, visCfg.h1, visCfg.h2);
+    const h1 = stops[0];
+    const h2 = stops[stops.length - 1];
     const s = pal.s;
     const c1 = (a = 1, l = 62) => `hsla(${h1}, ${s}%, ${l}%, ${a})`;
     const c2 = (a = 1, l = 62) => `hsla(${h2}, ${s}%, ${l}%, ${a})`;

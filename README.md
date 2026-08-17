@@ -28,7 +28,12 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
   wind) are synthesized in the audio graph, no samples.
 - **DJ deck** — live BPM detection, output meter, 4 hot cues, hold-to-stutter
   (⅛/¼/½), tape brake & spin-up, speed nudge.
-- **Visualizer** — 85 canvas themes × 31 palettes (+ custom hue pair), including
+- **Visualizer** — 85 canvas themes × 41 palettes (+ custom hue pair), including
+  10 multi-colour ones (RAINBOW, PRISM, PLASMA, MIAMI, OPAL, TIEDYE, BOREALIS,
+  REEF, SLICK, CITRUS): a palette is a list of hue stops rather than a pair, and
+  a list of three or more becomes a cycle the whole scene walks through over
+  about half a minute, so even a theme that only draws two colours passes through
+  the entire spectrum. Also including
   15 staged themes (◈) whose effects layer in as the arrangement builds, most of
   them natively 3D (real perspective projection and depth sorting), plus 2 more
   3D ones. Any theme can be projected into 3D

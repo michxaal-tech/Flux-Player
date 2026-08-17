@@ -12,6 +12,7 @@ import type { ThemeCtx } from "./themeTypes";
 import { drawLyricOverlay } from "./lyricRenderer";
 import { project3d, type Mode3D } from "./project3d";
 import { drawDropLayers, stepDropLayers, MAX_SLOTS } from "./dropLayers";
+import { DRIFT_FRAMES, hueRamp, rampPos, stopsOf } from "../palette";
 import { drawSignatureImpacts, impactsNeedHistory, stepImpactHistory, SIGNATURE_IMPACTS } from "./impactFx";
 
 const SIG_SET = new Set<string>(SIGNATURE_IMPACTS);
@@ -609,12 +610,12 @@ export function startRenderLoop(): void {
       const [pw, ph] = sizeCanvas(pb, 460, true);
       const pc = pb.getContext("2d")!;
       const ppal = PALETTES.find((p) => p.id === cfg.palette) || PALETTES[0];
-      const ph1 = ppal.h ? ppal.h[0] : cfg.h1;
-      const ph2 = ppal.h ? ppal.h[1] : cfg.h2;
+      const pRamp = hueRamp(stopsOf(ppal, cfg.h1, cfg.h2));
+      const pPos = rampPos(pRamp, (L.vt / DRIFT_FRAMES) % 1);
       const ps = ppal.s;
-      const pC1 = (a = 1, l = 62) => `hsla(${ph1}, ${ps}%, ${l}%, ${a})`;
-      const pC2 = (a = 1, l = 62) => `hsla(${ph2}, ${ps}%, ${l}%, ${a})`;
-      const pCMix = (f: number, a = 1, l = 62) => `hsla(${ph1 + (ph2 - ph1) * f}, ${ps}%, ${l}%, ${a})`;
+      const pC1 = (a = 1, l = 62) => `hsla(${pRamp.at(pPos(0))}, ${ps}%, ${l}%, ${a})`;
+      const pC2 = (a = 1, l = 62) => `hsla(${pRamp.at(pPos(1))}, ${ps}%, ${l}%, ${a})`;
+      const pCMix = (f: number, a = 1, l = 62) => `hsla(${pRamp.at(pPos(f))}, ${ps}%, ${l}%, ${a})`;
       pc.globalCompositeOperation = "source-over";
       pc.fillStyle = "rgba(5,6,10,0.22)"; // trail fade
       pc.fillRect(0, 0, pw, ph);
@@ -684,12 +685,17 @@ export function startRenderLoop(): void {
       const cx = w / 2, cy = h / 2, R = Math.min(w, h);
 
       const pal = PALETTES.find((p) => p.id === cfg.palette) || PALETTES[0];
-      const h1 = pal.h ? pal.h[0] : cfg.h1;
-      const h2 = pal.h ? pal.h[1] : cfg.h2;
+      // A multi-stop palette slides its sample window round the ramp, so the
+      // whole spectrum reaches themes that only ever ask for C1 and C2. Two-stop
+      // palettes get the identity and are byte-for-byte what they always were.
+      const ramp = hueRamp(stopsOf(pal, cfg.h1, cfg.h2));
+      const pos = rampPos(ramp, (L.vt / DRIFT_FRAMES) % 1);
+      const h1 = ramp.at(pos(0));
+      const h2 = ramp.at(pos(1));
       const sat = pal.s;
       const C1 = (a = 1, l = 62) => `hsla(${h1}, ${sat}%, ${l}%, ${a})`;
       const C2 = (a = 1, l = 62) => `hsla(${h2}, ${sat}%, ${l}%, ${a})`;
-      const CMix = (f: number, a = 1, l = 62) => `hsla(${h1 + (h2 - h1) * f}, ${sat}%, ${l}%, ${a})`;
+      const CMix = (f: number, a = 1, l = 62) => `hsla(${ramp.at(pos(f))}, ${sat}%, ${l}%, ${a})`;
       const GLOW = cfg.glow;
       const TK = cfg.thick;
       const glow = (blur: number, color: string) => { c.shadowBlur = blur * GLOW * 1.6; c.shadowColor = color; };

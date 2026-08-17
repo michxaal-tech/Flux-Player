@@ -76,7 +76,10 @@ export const STAGED_MARK = "◈";
 
 export interface Palette {
   id: string;
-  h: [number, number] | null;
+  /** Hue stops. Two stops is a plain A→B ramp; three or more make a cycle the
+   * whole app walks through (see palette.ts). null means CUSTOM, which takes
+   * the user's own pair. */
+  h: number[] | null;
   s: number;
 }
 
@@ -112,6 +115,21 @@ export const PALETTES: Palette[] = [
   { id: "ULTRA", h: [286, 322], s: 100 },
   { id: "HONEY", h: [38, 12], s: 88 },
   { id: "ABYSS", h: [206, 172], s: 78 },
+
+  // Multi-stop palettes. Everything above is a two-colour ramp; these cycle
+  // through their whole stop list, so a theme that only draws two colours still
+  // moves through the entire spectrum over about half a minute.
+  { id: "RAINBOW", h: [0, 45, 108, 172, 248, 302], s: 92 },
+  { id: "PRISM", h: [190, 232, 284, 330, 22], s: 96 },
+  { id: "PLASMA", h: [268, 306, 344, 24, 56], s: 100 },
+  { id: "MIAMI", h: [328, 354, 28, 186], s: 95 },
+  { id: "OPAL", h: [172, 206, 258, 302, 334], s: 56 },
+  { id: "TIEDYE", h: [282, 322, 12, 48, 148], s: 88 },
+  { id: "BOREALIS", h: [148, 174, 202, 262], s: 86 },
+  { id: "REEF", h: [178, 198, 32, 342], s: 88 },
+  { id: "SLICK", h: [228, 276, 324, 24, 88, 168], s: 64 },
+  { id: "CITRUS", h: [58, 36, 12, 96], s: 90 },
+
   { id: "CUSTOM", h: null, s: 100 },
 ];
 
@@ -150,6 +168,7 @@ export const IMPACTS = [
  */
 export const NEW_ITEMS = new Set<string>([
   "STRATA", "CROWN", "CASCADE", "FISSION", "PARALLAX",
+  "RAINBOW", "PRISM", "PLASMA", "MIAMI", "OPAL", "TIEDYE", "BOREALIS", "REEF", "SLICK", "CITRUS",
 ]);
 
 /** Particle silhouettes. MIXED assigns one per particle, so a single drift can

@@ -7,6 +7,7 @@ import { mix } from "../theme";
 import { canvasRefs, live } from "../visualizer/live";
 import { MODE_3D_HELP, MODES_3D } from "../visualizer/project3d";
 import { layersFor, MAX_SLOTS } from "../visualizer/dropLayers";
+import { stopsOf, swatchCss } from "../palette";
 import { applyLook, captureLook, copyText, decodeLook, encodeLook } from "../visualPresets";
 import { LYRIC_FX, LYRIC_FX_GROUPS } from "../visualizer/lyricFx";
 import { startVideoExport, stopVideoExport, videoExportSupported } from "../audio/videoRecorder";
@@ -429,19 +430,27 @@ export function VisualizerOverlay() {
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 8px" }}>COLOR PALETTE — {PALETTES.length - 1} + CUSTOM</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
             {PALETTES.map((p) => {
-              const ph1 = p.h ? p.h[0] : visCfg.h1;
-              const ph2 = p.h ? p.h[1] : visCfg.h2;
+              const stops = stopsOf(p, visCfg.h1, visCfg.h2);
+              const on = visCfg.palette === p.id;
               return (
                 <button
                   key={p.id}
                   onClick={() => setV("palette", p.id)}
                   style={{
+                    position: "relative", overflow: "hidden",
                     padding: "7px 11px", borderRadius: 999, fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer",
-                    background: visCfg.palette === p.id ? `linear-gradient(90deg, hsl(${ph1},${p.s}%,60%), hsl(${ph2},${p.s}%,60%))` : "rgba(255,255,255,0.06)",
-                    color: visCfg.palette === p.id ? "#05060A" : "rgba(255,255,255,0.7)",
+                    background: on ? swatchCss(stops, p.s) : "rgba(255,255,255,0.06)",
+                    color: on ? "#05060A" : "rgba(255,255,255,0.7)",
                     border: BORDER,
                   }}
-                >{p.id}</button>
+                >
+                  {p.id}{NEW_ITEMS.has(p.id) && <NewTag />}
+                  {/* an unselected multi-stop palette still has to show that it
+                      carries more than two colours, or the list reads flat */}
+                  {!on && stops.length > 2 && (
+                    <span style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 2.5, background: swatchCss(stops, p.s, 90, 56) }} />
+                  )}
+                </button>
               );
             })}
           </div>

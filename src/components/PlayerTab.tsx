@@ -5,6 +5,7 @@ import { nextTrack, prevTrack, playAt, seek, setInstMode, togglePlay } from "../
 import { getCurrentTrack, getFavCount, getPlayingList, useStore } from "../store/useStore";
 import { canvasRefs } from "../visualizer/live";
 import { mix } from "../theme";
+import { stopsOf, swatchCss } from "../palette";
 import { fmt } from "../utils";
 import { PresetRow } from "./PresetRow";
 import { Revoice } from "./Revoice";
@@ -119,8 +120,7 @@ export function PlayerTab() {
           {bgMenu === "palette" && (
             <div className="dropin glass" style={dropStyle}>
               {PALETTES.map((p) => {
-                const a = p.h ? p.h[0] : visCfg.h1;
-                const b = p.h ? p.h[1] : visCfg.h2;
+                const stops = stopsOf(p, visCfg.h1, visCfg.h2);
                 const on = visCfg.palette === p.id;
                 return (
                   <div
@@ -133,7 +133,7 @@ export function PlayerTab() {
                       border: on ? `1px solid ${mix(CYAN, 55)}` : "1px solid transparent",
                     }}
                   >
-                    <span style={{ width: 11, height: 11, borderRadius: 3, flexShrink: 0, background: `linear-gradient(120deg, hsl(${a},${p.s}%,60%), hsl(${b},${p.s}%,60%))` }} />
+                    <span style={{ width: 11, height: 11, borderRadius: 3, flexShrink: 0, background: swatchCss(stops, p.s, 120) }} />
                     {p.id}
                   </div>
                 );
