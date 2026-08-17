@@ -28,6 +28,8 @@ export function VisualizerOverlay() {
   const setV = useStore((s) => s.setVisKey);
   const visChaos = useStore((s) => s.visChaos);
   const aiReady = useStore((s) => s.aiReady);
+  const analyzedMode = useStore((s) => s.analyzedMode);
+  const analyzeStatus = useStore((s) => s.analyzeStatus);
   const vidState = useStore((s) => s.vidState);
   const vidTime = useStore((s) => s.vidTime);
   const vidMsg = useStore((s) => s.vidMsg);
@@ -220,6 +222,17 @@ export function VisualizerOverlay() {
             {P_STYLES.map((s) => (
               <button key={s} onClick={() => setV("pStyle", s)} style={{ ...chip(visCfg.pStyle === s), padding: "6px 11px", fontSize: 9.5 }}>{s}</button>
             ))}
+          </div>
+
+          <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 6px" }}>SYNC MODE</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <Toggle label="ANALYZED" on={analyzedMode} onChange={(v) => set({ analyzedMode: v })} color={MAG} />
+            {!!analyzeStatus && <span style={{ fontSize: 10, color: MAG }}>{analyzeStatus}</span>}
+          </div>
+          <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, margin: "5px 0 4px" }}>
+            Reads the whole file once and builds a beat map, so beats land exactly and the
+            visuals swell <em>into</em> drops instead of reacting after them. Takes a few
+            seconds per track the first time, then it's cached.
           </div>
 
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "10px 0 8px" }}>IMPACT</div>

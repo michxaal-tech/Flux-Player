@@ -59,6 +59,11 @@ export interface LiveState {
   energy: number;
   playerTheme: string;
   playerBgOn: boolean;
+  /** pre-computed timeline for the playing track (analyzed mode) */
+  anal: import("../audio/analysis").Analysis | null;
+  analOn: boolean;
+  /** index of the next beat in anal.beats */
+  analBeat: number;
   /** expanding beat rings (IMPACTS "RINGS"), 0..1.25 each */
   impRings: number[];
   /** sweeping scanline position (IMPACTS "SCANLINE"), -1 when idle */
@@ -76,7 +81,7 @@ export const live: LiveState = {
   rot: 0, vt: 0, tunnel: [], stars: [], vparts: [], specHist: [], ripples: [],
   flies: [], vort: [], cityH: [], shakeVal: 0,
   beatAvg: 0, prevBass: 0, fluxAvg: 0, fluxDev: 0, lastBeatAt: 0, beats: [], bpm: 0, flashVal: 0, cycleT: 0,
-  beatE: 0, energy: 0.35, impRings: [], impScan: -1, syncMs: 0, playerTheme: "AURORA", playerBgOn: true, scratch: {},
+  beatE: 0, energy: 0.35, anal: null, analOn: false, analBeat: 0, impRings: [], impScan: -1, syncMs: 0, playerTheme: "AURORA", playerBgOn: true, scratch: {},
 };
 
 // Debug handle: inspect the render-loop state from the console (window.__flux).

@@ -49,6 +49,26 @@ function syncLive(): void {
     },
     { fireImmediately: true }
   );
+  sub((s) => s.analyzedMode, (v) => { live.analOn = v; }, { fireImmediately: true });
+  // pull in (or build) the timeline whenever the mode is on and the track changes
+  const wantAnalysis = () => {
+    const st = useStore.getState();
+    const tr = getCurrentTrack(st);
+    if (!st.analyzedMode || !tr) { live.anal = null; return; }
+    live.anal = null;
+    live.analBeat = 0;
+    import("../audio/analysis").then(({ ensureAnalysis }) =>
+      ensureAnalysis(tr.fileId).then((a) => {
+        const now = getCurrentTrack(useStore.getState());
+        if (a && now?.fileId === tr.fileId && useStore.getState().analyzedMode) {
+          live.anal = a;
+          live.analBeat = 0;
+        }
+      })
+    );
+  };
+  sub((s) => s.analyzedMode, wantAnalysis);
+  sub((s) => getCurrentTrack(s)?.fileId, wantAnalysis, { fireImmediately: true });
   sub((s) => s.lyricsOn, (v) => { live.lyricsOn = v; }, { fireImmediately: true });
   sub((s) => s.lyricStyle, (v) => { live.lyricStyle = v; }, { fireImmediately: true });
 }
@@ -278,6 +298,35 @@ export function startRenderLoop(): void {
       bass = out.bass; mid = out.mid; treb = out.treb; rms = out.rms;
       beat = out.beat;
       liveAudio = out.live;
+
+      // ── analyzed mode ──
+      // The timeline was built from the file itself, so it knows exactly where
+      // every beat sits. Sample it at the position currently reaching the
+      // speakers (media time minus output latency) and the visuals land on the
+      // beat instead of chasing it.
+      const A = L.anal;
+      if (A && L.playing) {
+        const media = engine.audio.currentTime - totalMs / 1000;
+        if (media >= 0 && media <= A.duration) {
+          const fi = Math.min(A.bass.length - 1, Math.max(0, Math.round(media * A.fps)));
+          bass = A.bass[fi]; mid = A.mid[fi]; treb = A.treb[fi]; rms = A.rms[fi];
+          liveAudio = true;
+          // fire every beat we have crossed since the last frame
+          if (L.analBeat > 0 && A.beats[L.analBeat - 1] > media + 0.4) L.analBeat = 0; // seeked back
+          beat = false;
+          while (L.analBeat < A.beats.length && A.beats[L.analBeat] <= media) {
+            L.analBeat++;
+            beat = true;
+          }
+          L.bpm = A.bpm;
+          // a drop within the next beat pre-charges the energy so the visuals
+          // swell into it rather than reacting a beat late
+          for (const d of A.drops) {
+            const dt = d - media;
+            if (dt > 0 && dt < 0.8) { L.energy = Math.max(L.energy, 0.6 + (0.8 - dt) * 0.5); break; }
+          }
+        }
+      }
     }
 
     // beat envelope decays faster at high speed too, so back-to-back beats

@@ -89,6 +89,9 @@ export interface StoreState {
   trackBpm: Record<string, number>;
   /** bumped whenever cover art changes so views re-read the cache */
   coverRev: number;
+  /** drive visuals from a pre-computed timeline instead of live FFT */
+  analyzedMode: boolean;
+  analyzeStatus: string;
   /** a Spotify session exists in this browser (import is metadata-only) */
   spotifyReady: boolean;
   /** spoken transitions between tracks */
@@ -186,6 +189,8 @@ export const useStore = create<StoreState>()(
         trackBpm: {},
         coverRev: 0,
         radioMode: "off",
+        analyzedMode: false,
+        analyzeStatus: "",
         spotifyReady: false,
         tab: "player",
         shortcutsOpen: false,
@@ -387,6 +392,7 @@ export const useStore = create<StoreState>()(
           lyricAuto: s.lyricAuto,
           trackBpm: s.trackBpm,
           radioMode: s.radioMode,
+          analyzedMode: s.analyzedMode,
           aiProvider: s.aiProvider,
           aiModel: s.aiModel,
           aiBaseUrl: s.aiBaseUrl,
