@@ -29,6 +29,8 @@ function syncLive(): void {
   sub((s) => s.fx.spinRate, (v) => { live.spinRate = v; }, { fireImmediately: true });
   sub((s) => s.visOpen, (v) => { live.visOpen = v; }, { fireImmediately: true });
   sub((s) => s.visTheme, (v) => { live.visTheme = v; }, { fireImmediately: true });
+  sub((s) => s.playerTheme, (v) => { live.playerTheme = v; }, { fireImmediately: true });
+  sub((s) => s.playerBgOn, (v) => { live.playerBgOn = v; }, { fireImmediately: true });
   sub((s) => s.visCfg, (v) => { live.cfg = v; }, { fireImmediately: true });
   sub((s) => s.loopA, (v) => { live.loopA = v; }, { fireImmediately: true });
   sub((s) => s.loopB, (v) => { live.loopB = v; }, { fireImmediately: true });
@@ -353,6 +355,41 @@ export function startRenderLoop(): void {
           c.fillRect((a / dur) * w, 0, ((b - a) / dur) * w, h);
         }
       }
+    }
+
+    // ── player-page ambient backdrop ──
+    // The same theme engine, rendered tiny and CSS-blurred behind the glass
+    // UI. Deliberately ~1/9th the pixels of the fullscreen path: the blur
+    // hides the resolution completely, so it costs almost nothing.
+    const pb = canvasRefs.pbg;
+    if (pb && !L.visOpen && L.playerBgOn) {
+      const [pw, ph] = sizeCanvas(pb, 460, true);
+      const pc = pb.getContext("2d")!;
+      const ppal = PALETTES.find((p) => p.id === cfg.palette) || PALETTES[0];
+      const ph1 = ppal.h ? ppal.h[0] : cfg.h1;
+      const ph2 = ppal.h ? ppal.h[1] : cfg.h2;
+      const ps = ppal.s;
+      const pC1 = (a = 1, l = 62) => `hsla(${ph1}, ${ps}%, ${l}%, ${a})`;
+      const pC2 = (a = 1, l = 62) => `hsla(${ph2}, ${ps}%, ${l}%, ${a})`;
+      const pCMix = (f: number, a = 1, l = 62) => `hsla(${ph1 + (ph2 - ph1) * f}, ${ps}%, ${l}%, ${a})`;
+      pc.setTransform(pc.getTransform());
+      pc.fillStyle = "rgba(5,6,10,0.20)";
+      pc.fillRect(0, 0, pw, ph);
+      pc.save();
+      pc.globalCompositeOperation = "lighter";
+      const pI = cfg.intensity;
+      themes[L.playerTheme]?.({
+        c: pc, w: pw, h: ph, cx: pw / 2, cy: ph / 2, R: Math.min(pw, ph),
+        t, vt: L.vt, freq, wave, liveAudio,
+        bass, mid, treb,
+        bassV: Math.min(1, bass * pI), midV: Math.min(1, mid * pI), trebV: Math.min(1, treb * pI),
+        beat, beatE: L.beatE, energy: L.energy, cfg, I: pI, TK: cfg.thick,
+        C1: pC1, C2: pC2, CMix: pCMix,
+        glow: (blur, color) => { pc.shadowBlur = blur * cfg.glow * 1.6; pc.shadowColor = color; },
+        noGlow: () => { pc.shadowBlur = 0; },
+        L, trackName: L.trackName,
+      });
+      pc.restore();
     }
 
     // ── fullscreen visual engine ──

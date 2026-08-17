@@ -58,7 +58,7 @@ export type ViewMode =
   | { type: "tag"; tag: string };
 
 export type RepeatMode = "off" | "all" | "one";
-export type TabId = "player" | "dj" | "fx" | "library" | "me";
+export type TabId = "player" | "visuals" | "dj" | "fx" | "library" | "me";
 export type SortBy = "added" | "name" | "plays";
 
 export interface AmbState {

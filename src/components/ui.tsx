@@ -40,7 +40,7 @@ export function Toggle({
 
 export function Module({ title, children, extra }: { title: string; children: ReactNode; extra?: ReactNode }) {
   return (
-    <div style={{ background: CARD, border: BORDER, borderRadius: 14, padding: "12px 14px" }}>
+    <div className="glass" style={{ background: CARD, border: BORDER, borderRadius: 14, padding: "12px 14px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", color: "rgba(255,255,255,0.85)" }}>{title}</span>
         {extra}

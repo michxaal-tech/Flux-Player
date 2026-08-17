@@ -65,7 +65,7 @@ export function MeTab() {
   const sleepLabel = sleepEnd ? `${Math.max(0, Math.floor((sleepEnd - Date.now()) / 60000))}m` : "";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 6, maxWidth: 640, margin: "0 auto" }}>
+    <div className="stagger" style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 6, maxWidth: 640, margin: "0 auto" }}>
       <div style={{ background: `linear-gradient(135deg, ${mix(CYAN, 12)}, ${mix(MAG, 12)})`, border: BORDER, borderRadius: 16, padding: 16 }}>
         <div style={{ fontSize: 10, letterSpacing: "0.24em", color: "rgba(255,255,255,0.55)" }}>{greeting} · LEVEL {lvlIdx + 1}</div>
         <div style={{ fontSize: 22, fontWeight: 700, margin: "4px 0 10px" }}>{LEVELS[lvlIdx].name}</div>

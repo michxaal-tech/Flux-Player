@@ -598,12 +598,16 @@ export function drawLyricOverlay(x: LyricCtx): void {
     // a motion trail: ghost copies lag behind the live line and fade out
     const dir = cur.index % 2 ? 1 : -1;
     for (let k = 3; k >= 0; k--) {
-      const tt = cur.age - k * 0.075;
+      // each ghost samples the line's path further in the past, and is pushed
+      // a little further back along the travel direction so the trail still
+      // reads once the line has settled into its drift
+      const tt = cur.age - k * 0.11;
       const e2 = 1 - easeOut(Math.max(0, tt) * 2.2);
-      const fade = k === 0 ? alpha : alpha * (0.22 - k * 0.05);
+      const back = Math.cos(tt * 3 + cur.index) >= 0 ? -1 : 1;
+      const fade = k === 0 ? alpha : alpha * (0.3 - k * 0.06);
       drawBlock(c, cur.text, {
-        x: lx + Math.sin(tt * 1.9 + cur.index) * w * 0.045 + dir * e2 * w * 0.12,
-        y: ly + Math.cos(tt * 1.35 + cur.index) * h * 0.018 + e2 * 16,
+        x: lx + Math.sin(tt * 3 + cur.index) * w * 0.05 + dir * e2 * w * 0.12 + back * k * w * 0.016,
+        y: ly + Math.cos(tt * 1.35 + cur.index) * h * 0.02 + e2 * 16 + k * 6,
         alpha: fade,
         scale: (0.95 + beatE * 0.02) * (1 - k * 0.035),
         maxW: w * 0.52, size,
@@ -620,12 +624,13 @@ export function drawLyricOverlay(x: LyricCtx): void {
     const band = Math.max(24, m.sizePx * 1.1);
     const p = smooth(Math.min(1, Math.max(0, cur.frac / 0.72)));
     const sxp = m.x - m.widest / 2 - band + (m.widest + band * 2) * p;
-    drawBlock(c, cur.text, { ...base, color: CMix(0.5, alpha * 0.82, 68), glowAmt: 8, glowColor: C2() }, w);
+    drawBlock(c, cur.text, { ...base, color: CMix(0.5, alpha * 0.5, 54), glowAmt: 6, glowColor: C2() }, w);
     c.save();
     c.beginPath();
     c.rect(0, 0, Math.max(0, sxp), h);
     c.clip();
-    drawBlock(c, cur.text, { ...base, color: `rgba(255,255,255,${alpha})`, glowAmt: 16 + beatE * 20, glowColor: C1() }, w);
+    // no `color`: drawBlock's own full-strength fill is the lit state
+    drawBlock(c, cur.text, { ...base, glowAmt: 16 + beatE * 20, glowColor: C1() }, w);
     c.restore();
     c.save();
     c.beginPath();
@@ -647,25 +652,26 @@ export function drawLyricOverlay(x: LyricCtx): void {
     const px = m.x - rw / 2 + rw * (p * n - ri);
     const py = cy2 + (ri - (n - 1) / 2) * m.lineH * scl;
     const rad = Math.max(10, m.sizePx * scl * (1.45 + beatE * 0.3));
-    drawBlock(c, cur.text, { ...base, color: CMix(0.5, alpha * 0.26, 44), glowAmt: 0, glowColor: C2() }, w);
+    drawBlock(c, cur.text, { ...base, color: CMix(0.5, alpha * 0.42, 52), glowAmt: 4, glowColor: C2() }, w);
     c.save();
     c.globalCompositeOperation = "lighter";
     const pool = c.createRadialGradient(px, py, 0, px, py, rad * 1.9);
-    pool.addColorStop(0, C1(alpha * 0.18, 70));
-    pool.addColorStop(1, C1(0, 70));
+    pool.addColorStop(0, C1(alpha * 0.3, 72));
+    pool.addColorStop(1, C1(0, 72));
     c.fillStyle = pool;
     c.beginPath();
     c.arc(px, py, rad * 1.9, 0, Math.PI * 2);
     c.fill();
     c.restore();
-    for (const [rr, aa] of [[rad * 1.5, 0.4], [rad, 1]] as const) {
+    // soft-edged reveal: a halo pass, then a hard bright core inside it
+    for (const [rr, aa, li] of [[rad * 1.55, 0.45, 74], [rad, 1, 94]] as const) {
       c.save();
       c.beginPath();
       c.arc(px, py, rr, 0, Math.PI * 2);
       c.clip();
       drawBlock(c, cur.text, {
         ...base,
-        color: CMix(0.15, alpha * aa, 82),
+        color: CMix(0.15, alpha * aa, li),
         glowAmt: 16 + beatE * 18, glowColor: C1(),
       }, w);
       c.restore();

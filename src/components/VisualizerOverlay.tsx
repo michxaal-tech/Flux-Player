@@ -53,7 +53,7 @@ export function VisualizerOverlay() {
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "#05060A" }}>
+    <div className="overlayIn" style={{ position: "fixed", inset: 0, zIndex: 50, background: "#05060A" }}>
       <canvas
         ref={visRef}
         onClick={() => { set({ visPanel: false }); setThemeMenu(false); }}

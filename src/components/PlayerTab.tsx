@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
-import { BG, BORDER, CYAN, LEVELS, MAG, MONO, TAGS } from "../constants";
+import { BG, BORDER, CYAN, LEVELS, MAG, MONO, PALETTES, PLAYER_THEMES, TAGS } from "../constants";
 import { nextTrack, prevTrack, playAt, seek, setInstMode, togglePlay } from "../audio/transport";
 import { getCurrentTrack, getFavCount, getPlayingList, useStore } from "../store/useStore";
 import { canvasRefs } from "../visualizer/live";
@@ -38,8 +38,22 @@ export function PlayerTab() {
   const togglePinCurrent = useStore((s) => s.togglePinCurrent);
   const updateTrack = useStore((s) => s.updateTrack);
 
+  const playerTheme = useStore((s) => s.playerTheme);
+  const playerBgOn = useStore((s) => s.playerBgOn);
+  const visCfg = useStore((s) => s.visCfg);
+  const setVisKey = useStore((s) => s.setVisKey);
+  const [bgMenu, setBgMenu] = useState<"none" | "theme" | "palette">("none");
+
   const [noteOpen, setNoteOpen] = useState(false);
   useEffect(() => setNoteOpen(false), [track?.id]);
+
+  const pbgRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    canvasRefs.pbg = pbgRef.current;
+    return () => {
+      if (canvasRefs.pbg === pbgRef.current) canvasRefs.pbg = null;
+    };
+  }, []);
 
   const discRef = useRef<HTMLDivElement>(null);
   const waveRef = useRef<HTMLCanvasElement>(null);
@@ -71,7 +85,85 @@ export function PlayerTab() {
   const nextLvl = LEVELS[lvlIdx + 1];
 
   return (
-    <div className="pgrid">
+    <div className="pgrid" style={{ position: "relative" }}>
+      {/* live theme behind the glass — rendered tiny and blurred, so it reads
+          as colour and motion rather than a competing picture */}
+      <canvas
+        ref={pbgRef}
+        aria-hidden
+        style={{
+          position: "fixed", inset: 0, width: "100%", height: "100%", zIndex: -1,
+          pointerEvents: "none", opacity: playerBgOn ? 0.55 : 0,
+          filter: "blur(38px) saturate(1.35)", transform: "scale(1.12)", maxWidth: "100vw", overflow: "hidden",
+          transition: "opacity 0.5s var(--ease-soft)",
+        }}
+      />
+
+      {/* backdrop controls: the palette here is the same one the visualizer
+          uses, so a colour picked on either screen applies everywhere */}
+      <div style={{ gridColumn: "1 / -1", display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap", position: "relative", zIndex: 3 }}>
+        <div style={{ position: "relative" }}>
+          <button
+            onClick={() => setBgMenu((m) => (m === "theme" ? "none" : "theme"))}
+            style={{ ...chip(bgMenu === "theme"), display: "flex", alignItems: "center", gap: 8, fontSize: 10.5 }}
+          >
+            ◈ {playerBgOn ? playerTheme : "NO BACKDROP"}
+            <span style={{ fontSize: 8, transform: bgMenu === "theme" ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}>▼</span>
+          </button>
+          {bgMenu === "theme" && (
+            <div className="dropin glass" style={dropStyle}>
+              <div
+                onClick={() => { set({ playerBgOn: false }); setBgMenu("none"); }}
+                style={{ ...cellStyle, gridColumn: "1 / -1", color: !playerBgOn ? BG : "rgba(255,255,255,0.7)", background: !playerBgOn ? CYAN : "rgba(255,255,255,0.04)" }}
+              >✕ NO BACKDROP</div>
+              {PLAYER_THEMES.map((th) => (
+                <div
+                  key={th}
+                  onClick={() => { set({ playerTheme: th, playerBgOn: true }); setBgMenu("none"); }}
+                  style={{ ...cellStyle, color: playerBgOn && playerTheme === th ? BG : "rgba(255,255,255,0.78)", background: playerBgOn && playerTheme === th ? CYAN : "rgba(255,255,255,0.04)" }}
+                >{th}</div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ position: "relative" }}>
+          <button
+            onClick={() => setBgMenu((m) => (m === "palette" ? "none" : "palette"))}
+            style={{ ...chip(bgMenu === "palette", MAG), display: "flex", alignItems: "center", gap: 8, fontSize: 10.5 }}
+          >
+            ◐ {visCfg.palette}
+            <span style={{ fontSize: 8, transform: bgMenu === "palette" ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}>▼</span>
+          </button>
+          {bgMenu === "palette" && (
+            <div className="dropin glass" style={dropStyle}>
+              {PALETTES.map((p) => {
+                const a = p.h ? p.h[0] : visCfg.h1;
+                const b = p.h ? p.h[1] : visCfg.h2;
+                const on = visCfg.palette === p.id;
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => { setVisKey("palette", p.id); setBgMenu("none"); }}
+                    style={{
+                      ...cellStyle, display: "flex", alignItems: "center", gap: 6, justifyContent: "center",
+                      color: on ? "#fff" : "rgba(255,255,255,0.72)",
+                      background: on ? mix(CYAN, 20) : "rgba(255,255,255,0.04)",
+                      border: on ? `1px solid ${mix(CYAN, 55)}` : "1px solid transparent",
+                    }}
+                  >
+                    <span style={{ width: 11, height: 11, borderRadius: 3, flexShrink: 0, background: `linear-gradient(120deg, hsl(${a},${p.s}%,60%), hsl(${b},${p.s}%,60%))` }} />
+                    {p.id}
+                  </div>
+                );
+              })}
+              <div style={{ gridColumn: "1 / -1", fontSize: 9, color: "rgba(255,255,255,0.4)", padding: "6px 4px 0", lineHeight: 1.5 }}>
+                One palette for the whole app — this also recolours the fullscreen visualizer and the UI accents.
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, paddingTop: 4 }}>
         <div style={{ position: "relative", width: "min(48vw, 205px)", aspectRatio: "1" }}>
           <div
@@ -275,3 +367,17 @@ export function PlayerTab() {
     </div>
   );
 }
+
+const dropStyle = {
+  position: "absolute" as const, top: 42, left: "50%", transform: "translateX(-50%)",
+  width: "min(92vw, 460px)", maxHeight: "52vh", overflowY: "auto" as const,
+  display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 3,
+  background: "rgba(10,12,18,0.94)", border: BORDER, borderRadius: 14, padding: 8,
+  backdropFilter: "blur(22px)", zIndex: 20, boxShadow: "0 16px 44px rgba(0,0,0,0.6)",
+};
+
+const cellStyle = {
+  padding: "9px 4px", borderRadius: 9, fontSize: 10, fontWeight: 700,
+  letterSpacing: "0.04em", cursor: "pointer", textAlign: "center" as const,
+  whiteSpace: "nowrap" as const, overflow: "hidden",
+};

@@ -26,7 +26,7 @@ export function DJTab() {
   }, []);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 6, maxWidth: 640, margin: "0 auto" }}>
+    <div className="stagger" style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 6, maxWidth: 640, margin: "0 auto" }}>
       <div style={{ display: "flex", gap: 10, alignItems: "stretch" }}>
         <div style={{ flex: 1, background: CARD, border: BORDER, borderRadius: 14, padding: 14, textAlign: "center" }}>
           <div style={{ fontSize: 10, letterSpacing: "0.2em", color: "rgba(255,255,255,0.45)" }}>LIVE BPM</div>

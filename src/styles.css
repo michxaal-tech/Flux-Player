@@ -11,6 +11,9 @@ input[type=text], textarea { font-family: 'Space Grotesk', sans-serif; }
 ::-webkit-scrollbar-thumb { background: #2a2e38; border-radius: 3px; }
 .hscroll::-webkit-scrollbar { display: none; }
 .pgrid { display: grid; grid-template-columns: 1fr; gap: 16px; max-width: 1020px; margin: 0 auto; width: 100%; }
+/* grid/flex children default to min-width:auto, so one wide row (a chip strip,
+   a long track name) stretches the whole column past the viewport on a phone */
+.pgrid > * { min-width: 0; }
 @media (min-width: 760px) { .pgrid { grid-template-columns: 1fr 310px; align-items: start; } }
 .drag-over { outline: 1px dashed var(--ac1); outline-offset: -1px; }
 .dropin { animation: dropin 0.18s ease; transform-origin: top; }
@@ -30,3 +33,118 @@ input[type=text], textarea { font-family: 'Space Grotesk', sans-serif; }
 
 @keyframes fluxspin { to { transform: rotate(360deg); } }
 @keyframes fluxpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+/* ── motion system ───────────────────────────────────────────────────────
+   Everything below animates transform/opacity only, so it runs on the
+   compositor and never competes with the 60fps canvas render loop. Timings
+   are short and eased so the app feels quick rather than showy. */
+
+:root {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-back: cubic-bezier(0.34, 1.4, 0.5, 1);
+}
+
+@keyframes fluxBoot {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); filter: blur(6px); }
+  to   { opacity: 1; transform: none; filter: blur(0); }
+}
+@keyframes fluxTabInR {
+  from { opacity: 0; transform: translate3d(26px, 6px, 0) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes fluxTabInL {
+  from { opacity: 0; transform: translate3d(-26px, 6px, 0) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes fluxRise {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes fluxPop {
+  0%   { opacity: 0; transform: scale(0.9); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes fluxSheen {
+  from { transform: translateX(-120%); }
+  to   { transform: translateX(320%); }
+}
+
+/* app shell entrance */
+.bootIn { animation: fluxBoot 0.62s var(--ease-out) both; }
+.bootIn.d1 { animation-delay: 0.06s; }
+.bootIn.d2 { animation-delay: 0.13s; }
+
+/* tab content: slides in from the side you travelled from */
+.tabIn-r { animation: fluxTabInR 0.34s var(--ease-out) both; }
+.tabIn-l { animation: fluxTabInL 0.34s var(--ease-out) both; }
+
+/* children of a freshly-shown tab rise in sequence */
+.stagger > * { animation: fluxRise 0.42s var(--ease-out) both; }
+.stagger > *:nth-child(1) { animation-delay: 0.02s; }
+.stagger > *:nth-child(2) { animation-delay: 0.06s; }
+.stagger > *:nth-child(3) { animation-delay: 0.10s; }
+.stagger > *:nth-child(4) { animation-delay: 0.14s; }
+.stagger > *:nth-child(5) { animation-delay: 0.18s; }
+.stagger > *:nth-child(6) { animation-delay: 0.22s; }
+.stagger > *:nth-child(n + 7) { animation-delay: 0.26s; }
+
+/* the active-tab pill slides between tabs instead of snapping */
+.tabInk {
+  position: absolute; top: 0; height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--ac1), var(--ac2));
+  transition: transform 0.42s var(--ease-back), width 0.42s var(--ease-back);
+  pointer-events: none;
+}
+.tabBtn { transition: color 0.25s var(--ease-soft), transform 0.2s var(--ease-out); }
+.tabBtn:active { transform: scale(0.92); }
+.tabBtn .tabIcon { transition: transform 0.34s var(--ease-back); display: flex; justify-content: center; }
+.tabBtn[data-on="1"] .tabIcon { transform: translateY(-2px) scale(1.14); }
+
+/* tactile press on every control */
+button, .pressable { transition: transform 0.16s var(--ease-out), background 0.22s var(--ease-soft), border-color 0.22s var(--ease-soft), opacity 0.2s var(--ease-soft); }
+button:active:not(:disabled) { transform: scale(0.955); }
+
+/* rows and cards lift slightly under the pointer */
+@media (hover: hover) {
+  .liftable { transition: transform 0.22s var(--ease-out), background 0.22s var(--ease-soft), border-color 0.22s var(--ease-soft); }
+  .liftable:hover { transform: translateY(-2px); }
+}
+
+/* full-screen surfaces bloom open */
+.overlayIn { animation: fluxPop 0.34s var(--ease-out) both; }
+
+/* a light sweeps across the primary action once on load */
+.sheen { position: relative; overflow: hidden; }
+.sheen::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(100deg, transparent 20%, rgba(255,255,255,0.42) 50%, transparent 80%);
+  transform: translateX(-120%);
+  animation: fluxSheen 2.6s var(--ease-soft) 0.8s;
+}
+
+/* Honour the OS setting: people who get motion sick, or who simply asked for
+   less movement, get the same UI with the animation stripped out. */
+@media (prefers-reduced-motion: reduce) {
+  .bootIn, .tabIn-r, .tabIn-l, .stagger > *, .overlayIn, .sheen::after { animation: none !important; }
+  .tabInk, .tabBtn, .tabBtn .tabIcon, button, .liftable { transition: none !important; }
+  button:active:not(:disabled), .liftable:hover { transform: none !important; }
+}
+
+/* ── glass surfaces ──────────────────────────────────────────────────────
+   The player page renders a blurred theme behind everything, so its panels
+   are translucent and let that colour through instead of sitting on flat
+   black. backdrop-filter is the whole point of the effect. */
+.glass {
+  background: rgba(16, 18, 26, 0.44) !important;
+  backdrop-filter: blur(18px) saturate(1.25);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+  border: 1px solid rgba(255, 255, 255, 0.11) !important;
+}
+.pgrid .glass { box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28); }
+
+/* browsers without backdrop-filter get a solid panel rather than an
+   unreadable transparent one */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass { background: rgba(14, 16, 23, 0.93) !important; }
+}

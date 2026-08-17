@@ -144,7 +144,7 @@ export function LibraryTab({ onLoadClick }: { onLoadClick: () => void }) {
           return (
             <div key={tr.id}>
             <div
-              className={canReorder && dragOver === idx && dragIdx !== idx ? "drag-over" : undefined}
+              className={`liftable${canReorder && dragOver === idx && dragIdx !== idx ? " drag-over" : ""}`}
               draggable={canReorder}
               onDragStart={() => setDragIdx(idx)}
               onDragOver={(e: React.DragEvent) => {

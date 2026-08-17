@@ -33,7 +33,7 @@ export function FXRackTab() {
           </Module>
         </div>
       )}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 10 }}>
+      <div className="stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 10 }}>
         <Module title="⏱ TIME & PITCH" extra={<Toggle label="TAPE" on={fx.vinyl} onChange={(v) => setFxKey("vinyl", v)} />}>
           <Slider label="SPEED" value={fx.speed} min={0.5} max={1.5} step={0.01} format={(v) => `${v.toFixed(2)}×`} onChange={(v) => setFxKey("speed", v)} />
           <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.38)", lineHeight: 1.5 }}>TAPE on → pitch follows speed (slowed / nightcore).</div>
