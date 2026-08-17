@@ -25,6 +25,10 @@ const THEMES = arg("themes", ["ASCENSION", "LEVIATHAN", "CATHODE", "CITADEL", "S
 const MODES = arg("modes", ["OFF", "FLOOR", "ROOM", "TUNNEL", "SPIN", "CUBE"]);
 // bright palettes are where white-out shows up, so test against the worst case
 const PALETTE = process.env.PALETTE || "VOLT";
+// LIGHTFX=WAVE measures the alternate light treatment, which pushes everything
+// toward white and adds an ambient bloom — exactly the shape of change that
+// clips a frame
+const LIGHTFX = process.env.LIGHTFX || "NORMAL";
 
 // 8s track with a quiet intro, a build and a loud drop, so staged themes
 // actually reach their later layers and the drop set-piece fires.
@@ -78,6 +82,7 @@ await page.waitForTimeout(400);
 await page.click("button:has-text('⚙ TUNE')");
 await page.waitForSelector("text=COLOR PALETTE");
 await page.click(`button:has-text('${PALETTE}')`);
+if (LIGHTFX !== "NORMAL") await page.click(`button[data-light="${LIGHTFX}"]`);
 await page.keyboard.press("Escape");
 
 /** Reads the visualizer canvas and reports its luminance distribution.
@@ -218,7 +223,7 @@ if (IMPACTS_ARG.length) {
 }
 
 let fails = 0;
-console.log(`palette=${PALETTE}  themes=${THEMES.length}  modes=${MODES.join("/")}\n`);
+console.log(`palette=${PALETTE}  light=${LIGHTFX}  themes=${THEMES.length}  modes=${MODES.join("/")}\n`);
 
 for (const t of THEMES) {
   await setTheme(t);

@@ -169,6 +169,7 @@ export const IMPACTS = [
 export const NEW_ITEMS = new Set<string>([
   "STRATA", "CROWN", "CASCADE", "FISSION", "PARALLAX",
   "RAINBOW", "PRISM", "PLASMA", "MIAMI", "OPAL", "TIEDYE", "BOREALIS", "REEF", "SLICK", "CITRUS",
+  "WAVE", "WAVE GLOW",
 ]);
 
 /** Particle silhouettes. MIXED assigns one per particle, so a single drift can
@@ -186,7 +187,7 @@ export const DEFAULT_VIS_CFG: VisCfg = {
   glow: 0.7, trail: 0.55, particles: 0.35, pStyle: "RISE", pShape: "MIXED", pSize: "VARIED", pScale: 1,
   speed: 1, intensity: 1, zoom: 1, spinV: 0, bgWash: 0.3, thick: 1,
   mirror: false, shake: false, flash: true, impacts: [], autoMode: "off", hiRes: false, fastBeats: true, syncMs: 0,
-  vis3d: "OFF", vis3dAmt: 0.5, dropFx: 0.6,
+  vis3d: "OFF", vis3dAmt: 0.5, dropFx: 0.6, lightFx: "NORMAL",
 };
 
 export const MONO = "'JetBrains Mono', monospace";

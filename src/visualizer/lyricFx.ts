@@ -19,7 +19,7 @@ export const LYRIC_FX_GROUPS: { name: string; items: string[] }[] = [
   {
     name: "COLOR",
     items: [
-      "RAINBOW", "RAINBOW WAVE", "PALETTE", "OMBRE", "FIRE", "ICE", "TOXIC",
+      "WAVE GLOW", "RAINBOW", "RAINBOW WAVE", "PALETTE", "OMBRE", "FIRE", "ICE", "TOXIC",
       "GOLD", "CHROME", "NEON PULSE", "SPECTRUM", "TWO TONE", "STROBE", "HEATMAP",
     ],
   },
@@ -154,6 +154,21 @@ export function letterFx(fx: string, x: LetterFxCtx): LetterStyle {
 
   switch (fx) {
     // ── COLOUR ─────────────────────────────────────────────────────────────
+    case "WAVE GLOW": {
+      // The colour treatment from the WAVE line animation, pulled out on its
+      // own so it can ride any of them. Two things make that look, and neither
+      // is specific to WAVE's geometry: hue and lightness travel *one*
+      // travelling sine together, so a line reads as a single moving gradient
+      // rather than as letters tinted one by one, and the whole thing sits
+      // inside a wide halo. WAVE drove the sine off the frame counter; using
+      // musical time instead keeps it in phase at any tempo.
+      const s = 0.5 + 0.5 * Math.sin(flow * 3 - i * 0.5);
+      return {
+        color: x.CMix(s, 0.9, 54 + s * 26),
+        glow: 14 + beatE * 20,
+        glowColor: x.C1(0.9, 62),
+      };
+    }
     case "RAINBOW":
       // matched, the "rainbow" becomes a full sweep of the palette pair
       return { color: x.ramp(p, 0, 360, 92, 66) };

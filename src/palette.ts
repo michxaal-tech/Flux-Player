@@ -68,6 +68,73 @@ export const rampPos = (ramp: HueRamp, drift: number) =>
 /** Frames for one full pass of a cyclic palette, at speed 1. */
 export const DRIFT_FRAMES = 2160;
 
+/**
+ * Light treatments — how a palette is turned into actual colours.
+ *
+ * NORMAL is the plain mapping every theme has always used: the hue you asked
+ * for, at the lightness and alpha you asked for.
+ *
+ * WAVE is the look the WAVES theme gets from its receding terrain, lifted out
+ * so any theme can wear it. Nothing about it is specific to that geometry:
+ * WAVES takes its colour position from row depth, and depth there is just how
+ * *present* a row is — near rows are drawn bright and thick, far ones faint and
+ * thin. So the same treatment falls out of mapping the requested alpha onto the
+ * ramp. Two other things make the look, and they matter more than the hue ramp:
+ * the stroke runs toward white as it brightens while the bloom around it keeps
+ * the saturated palette colour, and faint things fall off harder than linearly,
+ * which is what reads as translucent rather than merely dim.
+ */
+export const LIGHT_FX = ["NORMAL", "WAVE"];
+
+export interface Lighting {
+  C1: (a?: number, l?: number) => string;
+  C2: (a?: number, l?: number) => string;
+  CMix: (f: number, a?: number, l?: number) => string;
+  /**
+   * Blur radius for a full-frame bloom pass, in canvas px at 1× scale; 0 for
+   * none.
+   *
+   * The bloom deliberately is *not* a shadow floor under every primitive. That
+   * was tried and it triples a busy theme's frame time — shadow blur is priced
+   * per draw call, and a theme that strokes a few hundred paths pays for every
+   * one. Blurring the finished frame once costs the same whatever the theme
+   * did, and looks better besides, because the halo comes from the whole
+   * composition rather than from each stroke in isolation.
+   */
+  bloom: number;
+}
+
+export function lighting(ramp: HueRamp, pos: (f: number) => number, sat: number, style: string): Lighting {
+  const hueAt = (f: number) => ramp.at(pos(f));
+  if (style !== "WAVE") {
+    return {
+      C1: (a = 1, l = 62) => `hsla(${hueAt(0)}, ${sat}%, ${l}%, ${a})`,
+      C2: (a = 1, l = 62) => `hsla(${hueAt(1)}, ${sat}%, ${l}%, ${a})`,
+      CMix: (f: number, a = 1, l = 62) => `hsla(${hueAt(f)}, ${sat}%, ${l}%, ${a})`,
+      bloom: 0,
+    };
+  }
+  const col = (f: number, a: number, l: number) => {
+    const t = a > 1 ? 1 : a > 0 ? a : 0;
+    // Brightness *shifts* the theme's own ramp position rather than replacing
+    // it. Weighting the two evenly pulls everything a theme draws at middling
+    // alpha toward the middle of the palette, which collapses the contrast
+    // between its two colours and reads as muddy — the theme has to stay in
+    // charge of where on the ramp it is.
+    const p = f * 0.7 + t * 0.3;
+    // toward white as it brightens, but never past the point where a stack of
+    // additive copies has nowhere left to go
+    const lm = Math.min(88, l * 0.55 + (52 + t * 34) * 0.45);
+    return `hsla(${hueAt(p)}, ${sat}%, ${lm}%, ${Math.min(0.93, Math.pow(t, 1.06))})`;
+  };
+  return {
+    C1: (a = 1, l = 62) => col(0, a, l),
+    C2: (a = 1, l = 62) => col(1, a, l),
+    CMix: (f: number, a = 1, l = 62) => col(f, a, l),
+    bloom: 13,
+  };
+}
+
 /** CSS gradient showing every stop, for palette swatches. */
 export function swatchCss(stops: number[], sat: number, angle = 90, l = 60): string {
   const list = stops.length > 2 ? [...stops, stops[0]] : stops;

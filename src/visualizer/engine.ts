@@ -12,7 +12,7 @@ import type { ThemeCtx } from "./themeTypes";
 import { drawLyricOverlay } from "./lyricRenderer";
 import { project3d, type Mode3D } from "./project3d";
 import { drawDropLayers, stepDropLayers, MAX_SLOTS } from "./dropLayers";
-import { DRIFT_FRAMES, hueRamp, rampPos, stopsOf } from "../palette";
+import { DRIFT_FRAMES, hueRamp, lighting, rampPos, stopsOf } from "../palette";
 import { drawSignatureImpacts, impactsNeedHistory, stepImpactHistory, SIGNATURE_IMPACTS } from "./impactFx";
 
 const SIG_SET = new Set<string>(SIGNATURE_IMPACTS);
@@ -28,6 +28,11 @@ const sceneCv = document.createElement("canvas");
 
 // tiny buffer for the PIXELATE impact (downscale, then blit back unsmoothed)
 const pixCv = document.createElement("canvas");
+
+// Half-scale copy of the finished scene, blurred and added back for the WAVE
+// light treatment. Half scale because the result is blurred anyway, so the
+// missing detail is invisible and the blur costs a quarter as much.
+const bloomCv = document.createElement("canvas");
 
 /** Shapes MIXED draws from. Kept out of P_SHAPES' "MIXED"/"DOT" entries so the
  * pool is all *distinct* silhouettes. */
@@ -612,10 +617,8 @@ export function startRenderLoop(): void {
       const ppal = PALETTES.find((p) => p.id === cfg.palette) || PALETTES[0];
       const pRamp = hueRamp(stopsOf(ppal, cfg.h1, cfg.h2));
       const pPos = rampPos(pRamp, (L.vt / DRIFT_FRAMES) % 1);
-      const ps = ppal.s;
-      const pC1 = (a = 1, l = 62) => `hsla(${pRamp.at(pPos(0))}, ${ps}%, ${l}%, ${a})`;
-      const pC2 = (a = 1, l = 62) => `hsla(${pRamp.at(pPos(1))}, ${ps}%, ${l}%, ${a})`;
-      const pCMix = (f: number, a = 1, l = 62) => `hsla(${pRamp.at(pPos(f))}, ${ps}%, ${l}%, ${a})`;
+      const pLit = lighting(pRamp, pPos, ppal.s, cfg.lightFx ?? "NORMAL");
+      const { C1: pC1, C2: pC2, CMix: pCMix } = pLit;
       pc.globalCompositeOperation = "source-over";
       pc.fillStyle = "rgba(5,6,10,0.22)"; // trail fade
       pc.fillRect(0, 0, pw, ph);
@@ -657,13 +660,20 @@ export function startRenderLoop(): void {
     if (vc && L.visOpen) {
       const mode3d = (cfg.vis3d ?? "OFF") as Mode3D;
       const use3d = mode3d !== "OFF";
-      // In 3D the visible canvas is only ever a blit target, so it must not
-      // carry the trail — preserve-on-resize moves to the scene buffer instead.
-      const [w, h] = sizeCanvas(vc, 1800 * resScale, !use3d);
+      // The bloom adds the frame to itself. If the theme drew straight onto the
+      // visible canvas, that sum would be inside the trail buffer and the next
+      // frame would bloom the bloom — the picture ramps to white in about a
+      // second. Rendering offscreen keeps the trail free of it, so the bloom is
+      // a one-shot overlay on the way to the screen. 3D already worked this way.
+      const wantBloom = (cfg.lightFx ?? "NORMAL") === "WAVE";
+      const offscreen = use3d || wantBloom;
+      // The visible canvas is then only ever a blit target, so it must not carry
+      // the trail — preserve-on-resize moves to the scene buffer instead.
+      const [w, h] = sizeCanvas(vc, 1800 * resScale, !offscreen);
       // The scene buffer mirrors vc's backing store and transform so themes see
       // exactly the geometry they'd see drawing straight to the screen.
       let c = vc.getContext("2d")!;
-      if (use3d) {
+      if (offscreen) {
         if (sceneCv.width !== vc.width || sceneCv.height !== vc.height) {
           const keep = sceneCv.width > 0 && sceneCv.height > 0;
           if (keep) {
@@ -693,9 +703,11 @@ export function startRenderLoop(): void {
       const h1 = ramp.at(pos(0));
       const h2 = ramp.at(pos(1));
       const sat = pal.s;
-      const C1 = (a = 1, l = 62) => `hsla(${h1}, ${sat}%, ${l}%, ${a})`;
-      const C2 = (a = 1, l = 62) => `hsla(${h2}, ${sat}%, ${l}%, ${a})`;
-      const CMix = (f: number, a = 1, l = 62) => `hsla(${ramp.at(pos(f))}, ${sat}%, ${l}%, ${a})`;
+      // The light treatment sits between the palette and the theme, so every
+      // theme, the particle overlay and the drop layers all pick it up without
+      // knowing it exists.
+      const lit = lighting(ramp, pos, sat, cfg.lightFx ?? "NORMAL");
+      const { C1, C2, CMix } = lit;
       const GLOW = cfg.glow;
       const TK = cfg.thick;
       const glow = (blur: number, color: string) => { c.shadowBlur = blur * GLOW * 1.6; c.shadowColor = color; };
@@ -880,7 +892,7 @@ export function startRenderLoop(): void {
       L.dropNew = false;
 
       // mirror — folds the left half of whatever was just drawn onto the right
-      const sceneSrc = use3d ? sceneCv : vc;
+      const sceneSrc = offscreen ? sceneCv : vc;
       if (cfg.mirror) {
         c.save();
         c.globalCompositeOperation = "source-over";
@@ -903,6 +915,56 @@ export function startRenderLoop(): void {
           vt, flow: L.flow, bass: bassV, beatE: L.beatE, dropE: L.dropE,
           wash: cfg.bgWash, C1, C2,
         });
+      } else if (offscreen) {
+        // bloom without 3D: the scene was rendered offscreen purely to keep the
+        // bloom out of the trail, so blit it to the screen unchanged
+        c = vc.getContext("2d")!;
+        c.save();
+        c.globalCompositeOperation = "copy";
+        c.drawImage(sceneCv, 0, 0, sceneCv.width, sceneCv.height, 0, 0, w, h);
+        c.restore();
+      }
+
+      // ── bloom ──
+      // The halo half of the WAVE light treatment. The colour side pushed the
+      // strokes toward white; this puts the saturated colour back around them by
+      // adding a blurred copy of the finished frame over itself. One pass, so it
+      // costs the same on a theme that strokes six paths and one that strokes
+      // six hundred — a shadow floor under every primitive was tried first and
+      // tripled the frame time.
+      //
+      // Reads and writes the visible canvas, which is safe only because
+      // everything above rewrote it whole this frame; it never carries over.
+      if (lit.bloom > 0) {
+        const bw = Math.max(1, vc.width >> 1);
+        const bh = Math.max(1, vc.height >> 1);
+        if (bloomCv.width !== bw || bloomCv.height !== bh) {
+          bloomCv.width = bw;
+          bloomCv.height = bh;
+        }
+        const bc = bloomCv.getContext("2d")!;
+        bc.setTransform(1, 0, 0, 1, 0, 0);
+        bc.globalCompositeOperation = "copy";
+        // Threshold the copy first. Adding back an unfiltered frame lifts the
+        // mid-tones along with the highlights, which brightens the whole
+        // picture instead of haloing the bright parts of it — contrast pivots
+        // around mid-grey, so on a dark frame it crushes everything but the
+        // highlights to black and only those bloom.
+        bc.filter = "contrast(2.8) brightness(1.05)";
+        bc.drawImage(vc, 0, 0, bw, bh);
+        bc.filter = "none";
+        c.save();
+        c.globalCompositeOperation = "lighter";
+        // the copy is half scale, so the blur radius halves with it
+        c.filter = `blur(${Math.max(1, (lit.bloom * w) / 1800)}px)`;
+        // GLOW drives the strength. A dense bright theme (RING) blooms into a
+        // solid disc at full strength while a sparse one (STARFIELD) wants all
+        // of it, and no single constant suits both — so it stays on the slider
+        // that already means exactly this.
+        c.globalAlpha = 0.62 * (0.25 + GLOW * 0.75);
+        c.drawImage(bloomCv, 0, 0, bw, bh, 0, 0, w, h);
+        c.filter = "none";
+        c.restore();
       }
 
       // ── per-beat impact layer ──

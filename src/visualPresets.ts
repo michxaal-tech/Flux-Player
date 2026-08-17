@@ -12,6 +12,7 @@
 // untrusted input, so it goes through the same clamping the AI layer uses.
 import { DEFAULT_VIS_CFG, VIS_THEMES } from "./constants";
 import { sanitizeVis } from "./ai/commands";
+import { LIGHT_FX } from "./palette";
 import { LYRIC_FX } from "./visualizer/lyricFx";
 import { LYRIC_STYLES } from "./visualizer/lyricRenderer";
 import { useStore } from "./store/useStore";
@@ -66,6 +67,7 @@ const K: Record<string, string> = {
   mirror: "mi", shake: "sk", flash: "fl", impacts: "im", autoMode: "am",
   hiRes: "hr", fastBeats: "fb", syncMs: "sy", vis3d: "d3", vis3dAmt: "da",
   dropFx: "df",
+  lightFx: "lf",
 };
 const UNK: Record<string, string> = Object.fromEntries(Object.entries(K).map(([a, b]) => [b, a]));
 
@@ -124,6 +126,7 @@ export function decodeLook(code: string): Look | null {
   if (typeof expanded.pShape === "string") passthrough.pShape = expanded.pShape;
   if (typeof expanded.pSize === "string") passthrough.pSize = expanded.pSize;
   if (typeof expanded.vis3d === "string") passthrough.vis3d = expanded.vis3d;
+  if (typeof expanded.lightFx === "string" && LIGHT_FX.includes(expanded.lightFx)) passthrough.lightFx = expanded.lightFx;
   if (Array.isArray(expanded.impacts)) {
     passthrough.impacts = (expanded.impacts as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 40);
   }

@@ -109,6 +109,10 @@ export interface VisCfg {
   vis3d: string;
   /** 0..1 — how aggressive the 3D perspective is */
   vis3dAmt: number;
+  /** how the palette becomes actual colour (see palette.ts LIGHT_FX):
+   * NORMAL is the plain mapping, WAVE is the WAVES theme's glowing translucent
+   * treatment applied to whatever theme is running */
+  lightFx: string;
   /** 0..1 — drop escalation strength. 0 disables it; higher also allows more
    * of the theme's layer set to be unlocked (see dropLayers.ts) */
   dropFx: number;

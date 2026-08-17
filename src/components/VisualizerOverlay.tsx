@@ -7,7 +7,7 @@ import { mix } from "../theme";
 import { canvasRefs, live } from "../visualizer/live";
 import { MODE_3D_HELP, MODES_3D } from "../visualizer/project3d";
 import { layersFor, MAX_SLOTS } from "../visualizer/dropLayers";
-import { stopsOf, swatchCss } from "../palette";
+import { LIGHT_FX, stopsOf, swatchCss } from "../palette";
 import { applyLook, captureLook, copyText, decodeLook, encodeLook } from "../visualPresets";
 import { LYRIC_FX, LYRIC_FX_GROUPS } from "../visualizer/lyricFx";
 import { startVideoExport, stopVideoExport, videoExportSupported } from "../audio/videoRecorder";
@@ -462,6 +462,21 @@ export function VisualizerOverlay() {
           )}
 
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "10px 0 8px" }}>LIGHT</div>
+          <div style={{ display: "flex", gap: 5, marginBottom: 8 }}>
+            {LIGHT_FX.map((f) => (
+              <button
+                key={f}
+                data-light={f}
+                onClick={() => setV("lightFx", f)}
+                style={{ ...chip((visCfg.lightFx ?? "NORMAL") === f, MAG), flex: 1, padding: "8px 6px", fontSize: 10 }}
+              >{f}{NEW_ITEMS.has(f) && <NewTag />}</button>
+            ))}
+          </div>
+          <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, margin: "0 0 8px" }}>
+            {(visCfg.lightFx ?? "NORMAL") === "WAVE"
+              ? "The WAVES look on whatever theme is running — white-hot cores inside a saturated bloom, everything translucent, and the colour picked by how bright each element is rather than by one flat hue. GLOW below sets how strong the bloom is; turn it down on the busier themes."
+              : "Plain colour: the hue you picked, at the brightness each theme asks for."}
+          </div>
           <Slider label="GLOW" value={visCfg.glow} min={0} max={1} step={0.01} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setV("glow", v)} />
           <Slider label="TRAILS" value={visCfg.trail} min={0} max={0.95} step={0.01} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setV("trail", v)} />
           <Slider label="BG WASH" value={visCfg.bgWash} min={0} max={1} step={0.01} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setV("bgWash", v)} />
@@ -722,7 +737,7 @@ export function VisualizerOverlay() {
                     data-lfx={f}
                     onClick={() => set({ lyricFx: f })}
                     style={{ ...chip(lyricFx === f, MAG), padding: "6px 9px", fontSize: 9 }}
-                  >{f}</button>
+                  >{f}{NEW_ITEMS.has(f) && <NewTag />}</button>
                 ))}
               </div>
             </div>
