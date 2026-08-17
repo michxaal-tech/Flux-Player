@@ -73,6 +73,9 @@ export const REACTOR: ThemeDraw = ({
   S.pulse += (0.02 + E * 0.06) * cfg.speed;
 
   // ── plasma core ───────────────────────────────────────────────────────────
+  // The core never moves, so it is *painted* (source-over) rather than added:
+  // a static additive disc would clip to white against a slow trail buffer.
+  c.globalCompositeOperation = "source-over";
   const target = R * (0.15 + OV * 0.1 + bassV * 0.05) * (1 + beatE * (0.12 + OV * 0.3));
   S.coreR += (target - S.coreR) * 0.18;
   const cr = S.coreR || target;
@@ -104,16 +107,19 @@ export const REACTOR: ThemeDraw = ({
   }
   c.closePath();
   const pg = c.createRadialGradient(cx, cy, 0, cx, cy, cr * 1.25);
-  pg.addColorStop(0, C1(0.5 + beatE * 0.16, 72));
-  pg.addColorStop(0.5, CMix(0.5, 0.38 + OV * 0.12, 56));
-  pg.addColorStop(1, C2(0.22, 36));
+  pg.addColorStop(0, C1(0.62 + beatE * 0.14, 70));
+  pg.addColorStop(0.5, CMix(0.5, 0.5 + OV * 0.12, 52));
+  pg.addColorStop(1, C2(0.3, 30));
   c.fillStyle = pg;
   c.fill();
   glow(Math.min(26, 12 + OV * 10 + beatE * 8), C1());
-  c.strokeStyle = C1(0.34 + beatE * 0.24, 70);
+  c.strokeStyle = C1(0.4 + beatE * 0.24, 68);
   c.lineWidth = (1 + OV * 1.6 + beatE * 2) * TK;
   c.stroke();
   noGlow();
+
+  // everything from here on is light, not matter → back to additive
+  c.globalCompositeOperation = "lighter";
 
   // ── energy conduits feeding the vessel ────────────────────────────────────
   const conduitR = R * 0.62;
@@ -125,7 +131,7 @@ export const REACTOR: ThemeDraw = ({
     c.moveTo(cx + co * conduitR, cy + si * conduitR);
     c.lineTo(cx + co * cr * 1.05, cy + si * cr * 1.05);
   }
-  c.strokeStyle = C2(0.16 + midV * 0.1, 42);
+  c.strokeStyle = C2(0.09 + midV * 0.07, 38);
   c.lineWidth = (1.4 + E * 1.2) * TK;
   c.stroke();
 
@@ -144,7 +150,7 @@ export const REACTOR: ThemeDraw = ({
       c.lineTo(cx + co * (rr - seg), cy + si * (rr - seg));
     }
   }
-  c.strokeStyle = C2(0.3 + E * 0.22 + beatE * 0.2, 68);
+  c.strokeStyle = C2(0.24 + E * 0.2 + beatE * 0.18, 66);
   c.lineWidth = (1.6 + E * 1.8 + beatE * 1.4) * TK;
   c.stroke();
   noGlow();
@@ -180,7 +186,9 @@ export const REACTOR: ThemeDraw = ({
     }
     c.closePath();
     const f = i / (RINGS - 1);
-    c.strokeStyle = CMix(f, 0.2 + rg.strain * 0.22 + beatE * 0.16, 48 + f * 16 + OV * 8);
+    // low base alpha: a slowly-turning ring retraces almost the same locus
+    // every frame, and additive paint there would burn out to white
+    c.strokeStyle = CMix(f, 0.11 + rg.strain * 0.2 + beatE * 0.16, 48 + f * 16 + OV * 8);
     c.lineWidth = (1 + (1 - f) * 1.4 + beatE * 1.2) * TK;
     c.stroke();
   }

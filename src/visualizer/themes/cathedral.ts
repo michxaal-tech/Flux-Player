@@ -150,10 +150,12 @@ export const CATHEDRAL: ThemeDraw = ({
   noGlow();
 
   // ── the oculus at the heart of the window ─────────────────────────────────
+  // painted, not added — it sits in one place every frame
+  c.globalCompositeOperation = "source-over";
   const oc = rose * R0[0] * (0.92 + beatE * 0.12);
   const og = c.createRadialGradient(cx, cy, 0, cx, cy, oc);
-  og.addColorStop(0, C1(0.42 + beatE * 0.2, 72));
-  og.addColorStop(0.55, C2(0.26 + S.glowV * 0.12, 54));
+  og.addColorStop(0, C1(0.62 + beatE * 0.18, 70));
+  og.addColorStop(0.55, C2(0.34 + S.glowV * 0.12, 52));
   og.addColorStop(1, "transparent");
   c.fillStyle = og;
   c.beginPath();
@@ -161,8 +163,9 @@ export const CATHEDRAL: ThemeDraw = ({
   c.fill();
 
   // ── light shafts falling through the glass ────────────────────────────────
+  c.globalCompositeOperation = "lighter";
   const lum = Math.round((54 + E * 10 + beatE * 8) / 6) * 6;   // <= 72, quantised
-  const spr = getShaft(C1(0.5, lum + 8), C2(0.22, lum));
+  const spr = getShaft(C1(0.42, lum + 8), C2(0.18, lum));
   const want = 2 + Math.round(E * (MAX_SHAFTS - 2));
   const len = Math.hypot(w, h) * 0.75;
   const sweepSp = (0.0022 + E * E * 0.05) * cfg.speed;
@@ -176,7 +179,8 @@ export const CATHEDRAL: ThemeDraw = ({
     const wobble = Math.sin(vt * 0.01 + i * 1.7) * (0.04 + E * 0.12);
     const a = s.ang + wobble;
     const halfW = rose * (0.1 + E * 0.09) * (1 + beatE * 0.35);
-    c.globalAlpha = Math.min(0.4, s.a * (0.14 + E * 0.12 + beatE * 0.14) * I);
+    // a calm shaft drifts slowly, so its additive contribution is kept small
+    c.globalAlpha = Math.min(0.3, s.a * (0.09 + E * 0.12 + beatE * 0.13) * I);
     c.save();
     c.translate(cx + Math.cos(a) * rose * 0.35, cy + Math.sin(a) * rose * 0.35);
     c.rotate(a);

@@ -159,7 +159,7 @@ export const GRAFFITI: ThemeDraw = ({
     const edge = C2(1, 40);
     const core = st.wd * unit;
     // walk the newly covered span in small steps so fast strokes stay solid
-    const steps = Math.max(1, Math.ceil((end - prev) * 18));
+    const steps = Math.min(24, Math.max(1, Math.ceil((end - prev) * 18)));
     for (let k = 1; k <= steps; k++) {
       const t = prev + (end - prev) * (k / steps);
       const seg = Math.min(last - 1, Math.floor(t));
@@ -297,7 +297,7 @@ export const GRAFFITI: ThemeDraw = ({
         const y = (st.py[seg] + (st.py[seg + 1] - st.py[seg]) * f) * h;
         if (k === 0) c.moveTo(x, y); else c.lineTo(x, y);
       }
-      c.strokeStyle = CMix(st.hue, (0.16 + midV * 0.16 + beatE * 0.16) * (0.4 + I * 0.6), 66);
+      c.strokeStyle = CMix(st.hue, Math.min(0.45, (0.16 + midV * 0.16 + beatE * 0.16) * (0.4 + I * 0.6)), 66);
       c.lineWidth = Math.max(0.8, st.wd * R * 0.9 * TK);
       c.stroke();
       // the can nozzle itself

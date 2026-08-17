@@ -105,7 +105,9 @@ export const ORIGAMI: ThemeDraw = ({
     // fold closes, so a flat polygon becomes a starred/creased solid
     const n = f.sides;
     const base = i * (MAXS + 1);
-    const scale = f.sz * (1 + beatE * 0.12);
+    // batched fills can't carry a per-form alpha, so a form scales in and out
+    // of existence instead of popping
+    const scale = f.sz * (1 + beatE * 0.12) * f.a;
     for (let k = 0; k < n; k++) {
       const a = f.rot + (k / n) * Math.PI * 2;
       const alt = k % 2 === 0 ? 1 : -1;

@@ -236,7 +236,7 @@ export const BIOLUME: ThemeDraw = ({
     if (p.lit <= 0.02) continue;
     p.lit *= 0.93 - E * 0.02;
     const rr = p.sz * TK * (2.6 + p.lit * 4.5 + beatE * 1.2);
-    c.globalAlpha = Math.min(0.85, p.lit * (0.5 + I * 0.5));
+    c.globalAlpha = Math.min(0.7, p.lit * (0.5 + I * 0.5));
     c.drawImage(spr, p.x * w - rr, p.y * h - rr, rr * 2, rr * 2);
   }
   c.globalAlpha = 1;
@@ -296,7 +296,8 @@ export const BIOLUME: ThemeDraw = ({
     const rx = base * (1 - contracted * 0.34);
     const ry = base * (0.62 + contracted * 0.42);
     if (!(rx > 0.4) || !(ry > 0.4)) continue;
-    const a = j.fi * (0.32 + midV * 0.22 + beatE * 0.2 + E * 0.12) * (0.4 + I * 0.7);
+    // capped: reactivity goes to 2x and 16 additive bells must not stack to white
+    const a = Math.min(0.6, j.fi * (0.32 + midV * 0.22 + beatE * 0.2 + E * 0.12) * (0.4 + I * 0.7));
 
     // tendrils: sampled sine ribbons, fixed segment count
     c.strokeStyle = CMix(j.hue, a * 0.4, 58);
@@ -337,7 +338,7 @@ export const BIOLUME: ThemeDraw = ({
   // --- one shared bloom pass on the brightest bells, blur capped ---
   if (jellies.length) {
     glow(Math.min(26, (9 + E * 10) * (1 + beatE * 0.7)), C1());
-    c.strokeStyle = C1((0.1 + E * 0.12 + beatE * 0.16) * (0.4 + I * 0.6), 68);
+    c.strokeStyle = C1(Math.min(0.3, (0.1 + E * 0.12 + beatE * 0.16) * (0.4 + I * 0.6)), 68);
     c.lineWidth = Math.max(0.6, 1.4 * TK);
     c.beginPath();
     for (let i = 0; i < jellies.length; i++) {

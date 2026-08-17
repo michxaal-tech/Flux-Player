@@ -29,7 +29,7 @@ const MAX_GEARS = 34;
 const MAX_SPARKS = 90;
 const TAU = Math.PI * 2;
 /** pitch radius per tooth, in units of R — one shared module keeps meshes true */
-const MODULE = 0.0125;
+const MODULE = 0.0095;
 
 // Pre-rendered spark. Sparks fly in the dozens on loud passages; a sprite blit
 // keeps shadowBlur out of that loop entirely.

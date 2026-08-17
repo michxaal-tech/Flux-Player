@@ -3,9 +3,8 @@ import type { ThemeDraw } from "../themeTypes";
 interface Grain {
   x: number; y: number;
   vx: number; vy: number;
-  /** alpha, <= 0 means the slot is free */ a: number;
+  /** alpha, <= 0 means the slot is free; also the batching key */ a: number;
   /** streak length multiplier */ len: number;
-  /** depth tier, also the batching key */ tr: number;
 }
 interface Devil {
   x: number; y: number;
@@ -16,7 +15,7 @@ interface Devil {
 }
 
 const MAX_GRAINS = 400;   // hard-capped pool, recycled — never grows
-const TIERS = 3;          // depth tiers → 3 batched strokes for all the sand
+const TIERS = 4;          // brightness buckets → 4 batched strokes for all the sand
 const MAX_DEVILS = 3;
 const LAYERS = 4;         // dune ridges
 const SEGS = 88;          // fixed ridge resolution at any canvas size
@@ -45,7 +44,7 @@ export const SANDSTORM: ThemeDraw = ({
   const devils: Devil[] = S.devils;
   if (grains.length === 0) {
     for (let i = 0; i < MAX_GRAINS; i++) {
-      grains.push({ x: 0, y: 0, vx: 0, vy: 0, a: 0, len: 1, tr: 0 });
+      grains.push({ x: 0, y: 0, vx: 0, vy: 0, a: 0, len: 1 });
     }
   }
 
@@ -126,9 +125,8 @@ export const SANDSTORM: ThemeDraw = ({
     g.x = x; g.y = y;
     g.vx = wind * (0.7 + Math.random() * 0.9) * force;
     g.vy = -Math.random() * wind * (0.2 + E * 0.5) - R * 0.0004;
-    g.a = 0.25 + Math.random() * 0.55;
+    g.a = 0.35 + Math.random() * 0.65;
     g.len = 0.6 + Math.random() * 1.2;
-    g.tr = (Math.random() * TIERS) | 0;
   };
 
   const perFrame = Math.round(2 + E * 14);
@@ -184,6 +182,8 @@ export const SANDSTORM: ThemeDraw = ({
   }
 
   // ── draw the sand: TIERS batched strokes, no per-grain glow ───────────────
+  // grains are bucketed by their own alpha, so a dying grain slides down the
+  // buckets and fades out instead of popping
   c.lineCap = "round";
   for (let t = 0; t < TIERS; t++) {
     const tf = t / (TIERS - 1);
@@ -191,14 +191,17 @@ export const SANDSTORM: ThemeDraw = ({
     c.beginPath();
     for (let i = 0; i < MAX_GRAINS; i++) {
       const g = grains[i];
-      if (g.a <= 0.02 || g.tr !== t) continue;
+      if (g.a <= 0.02) continue;
+      let bk = (g.a * TIERS) | 0;
+      if (bk > TIERS - 1) bk = TIERS - 1;
+      if (bk !== t) continue;
       const st = (1.5 + E * 6) * g.len;
       c.moveTo(g.x, g.y);
       c.lineTo(g.x - g.vx * st, g.y - g.vy * st);
       any = true;
     }
     if (!any) continue;
-    c.strokeStyle = CMix(tf, 0.16 + tf * 0.16 + E * 0.14 + beatE * 0.1, 52 + tf * 16 + trebV * 6);
+    c.strokeStyle = CMix(tf, 0.1 + tf * 0.24 + E * 0.14 + beatE * 0.1, 50 + tf * 18 + trebV * 6);
     c.lineWidth = (0.5 + tf * 1.1) * TK;
     c.stroke();
   }
@@ -227,10 +230,10 @@ export const SANDSTORM: ThemeDraw = ({
 
   // ── whiteout veil: only bites in the loudest passages ─────────────────────
   if (S.haze > 0.05) {
-    const a = Math.min(0.11, S.haze * 0.12 + beatE * 0.02);
+    const a = Math.min(0.08, S.haze * 0.09 + beatE * 0.015);
     const vg = c.createLinearGradient(0, 0, 0, h);
-    vg.addColorStop(0, C1(a, 56));
-    vg.addColorStop(0.55, CMix(0.5, a * 0.7, 48));
+    vg.addColorStop(0, C1(a, 50));
+    vg.addColorStop(0.55, CMix(0.5, a * 0.7, 44));
     vg.addColorStop(1, "transparent");
     c.fillStyle = vg;
     c.fillRect(0, 0, w, h);

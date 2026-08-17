@@ -28,12 +28,14 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
   wind) are synthesized in the audio graph, no samples.
 - **DJ deck** — live BPM detection, output meter, 4 hot cues, hold-to-stutter
   (⅛/¼/½), tape brake & spin-up, speed nudge.
-- **Visualizer** — 53 canvas themes × 26 palettes (+ custom hue pair), 15 tune
+- **Visualizer** — 68 canvas themes × 31 palettes (+ custom hue pair), 15 tune
   controls (glow, trails, particles w/ 4 styles, reactivity, zoom, scene spin,
   mirror, beat flash/shake, auto-cycle), edge spectrum meters on every tab.
   Adaptive resolution keeps full-screen rendering at 60fps on any device (or
   pin MAX SHARPNESS to disable it). Themes also read a smoothed musical
   "energy" signal, so they move differently in a song's calm and driving parts.
+  Analysis is delayed to compensate for audio output latency, so beats land on
+  the sound rather than ahead of it (with a BEAT SYNC offset for Bluetooth).
 - **Synced lyrics** — lrclib.net lookup with filename analysis + confidence
   scoring, auto-search per track, .lrc import, 14 animation styles drawn on
   a dedicated canvas layer.
@@ -81,10 +83,23 @@ palette helpers (`C1`/`C2`/`CMix`), and a scratch state bucket (`L`).
 
 ## Optional AI layer (BYOK)
 
-FLUX works completely without AI. Add your own Anthropic API key in **ME → AI
-SETTINGS** and a `✦` layer appears across the app; remove the key and every AI
-surface disappears again. The key is stored only in this browser (IndexedDB)
-and is sent only to `api.anthropic.com` — there is no backend.
+FLUX works completely without AI. Add an API key in **ME → AI SETTINGS** and a
+`✦` layer appears across the app; remove the key and every AI surface
+disappears again. Keys are stored only in this browser (IndexedDB, one per
+provider) and are sent only to the provider you pick — there is no backend.
+
+**Providers.** Because FLUX is serverless, calls go straight from the browser,
+so a provider must answer CORS preflights from a page origin. Three do:
+
+| Provider | Cost | Notes |
+| --- | --- | --- |
+| **Google Gemini** (default) | Free | ~1,500 req/day, 15/min on Flash. No credit card. Native JSON mode. Google may train on free-tier prompts. |
+| **Anthropic** | Paid | Best quality. Billed to your own account; not covered by a Claude Pro/Max subscription. |
+| **OpenAI-compatible** | Varies | Groq, OpenRouter, Cerebras or any custom base URL + model. |
+
+Each provider only describes how to shape a request and read the reply
+(`src/ai/providers.ts`), so every feature below works unchanged across all of
+them.
 
 Every feature speaks one command protocol (`src/ai/commands.ts`): Claude returns
 `{reply, actions[]}` and the app executes the actions (`fx`, `visuals`, `queue`,

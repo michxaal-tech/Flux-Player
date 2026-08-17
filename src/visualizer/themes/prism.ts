@@ -94,7 +94,7 @@ export const PRISM: ThemeDraw = ({
       });
     }
     // glass debris off the crystal faces
-    const n = Math.min(Math.round(4 + E * 16 + bassV * 8), MAX_SHARDS - shards.length);
+    const n = Math.min(Math.round((4 + E * 16 + bassV * 8) * I), MAX_SHARDS - shards.length);
     for (let k = 0; k < n; k++) {
       const a2 = Math.random() * Math.PI * 2;
       const sp = R * (0.004 + Math.random() * 0.012) * (0.5 + E);
@@ -135,7 +135,7 @@ export const PRISM: ThemeDraw = ({
     c.moveTo(px + Math.cos(ang) * inLen, py + Math.sin(ang) * inLen);
     c.lineTo(px + Math.cos(ang) * pr * 0.9, py + Math.sin(ang) * pr * 0.9);
   }
-  c.strokeStyle = C1(0.2 + beatE * 0.18 + S.flash * 0.12, 70);
+  c.strokeStyle = C1(0.12 + beatE * 0.16 + S.flash * 0.1, 68);
   c.lineWidth = (1.4 + beatE * 2.2 + E * 1.2) * TK;
   c.stroke();
   noGlow();
@@ -144,15 +144,19 @@ export const PRISM: ThemeDraw = ({
   // ── refracted spectrum fans ───────────────────────────────────────────────
   // Sprite keys are quantised so the wedges are only re-rendered when the
   // palette or the overall mood actually shifts.
+  // Alphas stay low on purpose: the fan barely moves in a calm passage, and
+  // additive paint over a slow trail buffer clips to white if it is not kept
+  // well under the per-frame trail fade.
   const baseL = Math.round((52 + E * 12 + beatE * 8) / 6) * 6;   // <= 72
-  const baseA = Math.round((0.3 + E * 0.16) * 20) / 20;
+  const baseA = Math.round((0.17 + E * 0.11) * 20) / 20;
   const key = baseL + ":" + baseA + ":" + C1(1, 50) + C2(1, 50);
   for (let k = 0; k < BANDS; k++) {
     getRay(k, CMix(k / (BANDS - 1), baseA, baseL), key + k);
   }
 
   const spread = 0.42 + E * 1.35;
-  const shatter = E * E;   // strobing/jitter only really bites at high energy
+  // strobing/jitter only really bites at high energy
+  const shatter = Math.min(1.3, E * E * I);
   for (let i = 0; i < beams.length; i++) {
     const b = beams[i];
     const wob = Math.sin(vt * (0.01 + E * 0.05) + b.ph) * (0.03 + E * 0.22);
@@ -164,7 +168,7 @@ export const PRISM: ThemeDraw = ({
       const strobe = 1 - shatter * 0.55 * (0.5 + 0.5 * Math.sin(vt * 0.55 + k * 1.7));
       const len = rayLen * (0.55 + f * 0.3) * (1 + beatE * 0.25);
       const halfW = R * (0.035 + E * 0.05) * (1 + beatE * 0.5);
-      c.globalAlpha = Math.min(0.55, b.a * (0.42 + trebV * 0.2 + beatE * 0.25) * strobe);
+      c.globalAlpha = Math.min(0.3, b.a * (0.24 + trebV * 0.14 + beatE * 0.2) * strobe);
       c.save();
       c.translate(px + Math.cos(a2) * pr * 0.75, py + Math.sin(a2) * pr * 0.75);
       c.rotate(a2);
@@ -180,8 +184,8 @@ export const PRISM: ThemeDraw = ({
   c.translate(px, py);
   c.rotate(S.rot);
   const cg = c.createRadialGradient(0, 0, 0, 0, 0, pr);
-  cg.addColorStop(0, C1(0.24 + S.flash * 0.2, 68));
-  cg.addColorStop(0.6, C2(0.12, 46));
+  cg.addColorStop(0, C1(0.13 + S.flash * 0.16, 64));
+  cg.addColorStop(0.6, C2(0.08, 44));
   cg.addColorStop(1, "transparent");
   c.fillStyle = cg;
   c.beginPath();
@@ -193,7 +197,7 @@ export const PRISM: ThemeDraw = ({
   c.closePath();
   c.fill();
   glow(Math.min(22, 10 + beatE * 10), C2());
-  c.strokeStyle = C2(0.42 + beatE * 0.25, 66);
+  c.strokeStyle = C2(0.26 + beatE * 0.22, 64);
   c.lineWidth = (1.2 + beatE * 1.6) * TK;
   c.stroke();
   // internal creases catching the light
@@ -203,7 +207,7 @@ export const PRISM: ThemeDraw = ({
     c.moveTo(0, 0);
     c.lineTo(Math.cos(a2) * pr, Math.sin(a2) * pr);
   }
-  c.strokeStyle = C1(0.2 + E * 0.16, 62);
+  c.strokeStyle = C1(0.13 + E * 0.12, 60);
   c.lineWidth = 0.8 * TK;
   c.stroke();
   noGlow();
@@ -235,7 +239,7 @@ export const PRISM: ThemeDraw = ({
         any = true;
       }
       if (!any) continue;
-      c.fillStyle = CMix(t / (SHARD_TIERS - 1), 0.3 + beatE * 0.2, 62 + E * 8);
+      c.fillStyle = CMix(t / (SHARD_TIERS - 1), 0.22 + beatE * 0.18, 60 + E * 8);
       c.fill();
     }
   }
@@ -243,8 +247,8 @@ export const PRISM: ThemeDraw = ({
   // ── impact bloom at the prism on a hit ────────────────────────────────────
   if (S.flash > 0.04) {
     const fg = c.createRadialGradient(px, py, 0, px, py, pr * (2.4 + S.flash * 2));
-    fg.addColorStop(0, C1(S.flash * 0.34, 74));
-    fg.addColorStop(0.45, C2(S.flash * 0.2, 58));
+    fg.addColorStop(0, C1(S.flash * 0.26, 70));
+    fg.addColorStop(0.45, C2(S.flash * 0.16, 56));
     fg.addColorStop(1, "transparent");
     c.fillStyle = fg;
     c.beginPath();

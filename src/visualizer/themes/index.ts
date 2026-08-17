@@ -52,6 +52,18 @@ import { ORACLE } from "./oracle";
 import { AURORAFALL } from "./aurorafall";
 import { GRAVITY } from "./gravity";
 import { CIRCUITRY } from "./circuitry";
+import { PRISM } from "./prism";
+import { REACTOR } from "./reactor";
+import { ORIGAMI } from "./origami";
+import { SANDSTORM } from "./sandstorm";
+import { CATHEDRAL } from "./cathedral";
+import { BIOLUME } from "./bioluminescence";
+import { MECHANISM } from "./mechanism";
+import { WORMHOLE } from "./wormhole";
+import { GRAFFITI } from "./graffiti";
+import { CONSTELLATION } from "./constellation";
+import { VHS } from "./vhs";
+import { LAVALAMP } from "./lavalamp";
 import { CLOCK } from "./clock";
 
 export const themes: Record<string, ThemeDraw> = {
@@ -61,5 +73,6 @@ export const themes: Record<string, ThemeDraw> = {
   ECLIPSE, GALAXY, SILK, LIQUID, TERMINAL, GLITCH, PIXEL, BRUTAL,
   VINYL, THUNDER, KOI, CASSETTE,
   MURMUR, INKFLOW, SHATTER, SERPENT, BLOOMRAIL, MAGNETIC, ORACLE, AURORAFALL, GRAVITY, CIRCUITRY,
+  PRISM, REACTOR, ORIGAMI, SANDSTORM, CATHEDRAL, BIOLUME, MECHANISM, WORMHOLE, GRAFFITI, CONSTELLATION, VHS, LAVALAMP,
   MARQUEE, NEONSIGN, CLOCK,
 };

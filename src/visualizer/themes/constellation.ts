@@ -207,7 +207,7 @@ export const CONSTELLATION: ThemeDraw = ({
     }
   }
 
-  const lineA = (0.34 + midV * 0.2 + beatE * 0.2) * (0.4 + I * 0.7);
+  const lineA = Math.min(0.8, (0.34 + midV * 0.2 + beatE * 0.2) * (0.4 + I * 0.7));
   glow(Math.min(22, (7 + E * 9) * (1 + beatE * 0.8)), C1());
   c.lineCap = "round";
   for (let fi = figs.length - 1; fi >= 0; fi--) {

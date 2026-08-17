@@ -173,7 +173,7 @@ export const WORMHOLE: ThemeDraw = ({
     c.moveTo(ex + (sx - ex) * st, ey + (sy - ey) * st);
     c.lineTo(ex, ey);
   }
-  c.strokeStyle = C2((0.22 + E * 0.26 + beatE * 0.18) * (0.4 + I * 0.7), 62 + E * 8);
+  c.strokeStyle = C2(Math.min(0.55, (0.22 + E * 0.26 + beatE * 0.18) * (0.4 + I * 0.7)), 62 + E * 8);
   c.lineWidth = Math.max(0.5, (0.9 + E * 1.1 + beatE * 0.8) * TK);
   c.lineCap = "round";
   glow(Math.min(18, (6 + E * 8) * (1 + beatE * 0.6)), C2());
@@ -209,7 +209,7 @@ export const WORMHOLE: ThemeDraw = ({
       ln.a *= 0.9 - E * 0.03;
       if (ln.a < 0.04 || ln.p > 1) { lens.splice(i, 1); continue; }
       const r1 = bend(rad(Math.min(1, ln.p)));
-      c.strokeStyle = C1(ln.a * 0.5, 76);
+      c.strokeStyle = C1(ln.a * 0.5, 74);
       c.lineWidth = Math.max(0.7, (1 + ln.a * 3 + E * 1.5) * TK);
       c.beginPath();
       c.ellipse(cx, cy, r1, r1 * 0.94, 0, 0, TAU);
@@ -221,7 +221,7 @@ export const WORMHOLE: ThemeDraw = ({
   // --- the singularity itself: bright but small, so the frame never washes out ---
   const core = throat * (1.5 + bassV * 0.6 + beatE * (0.5 + E));
   const cg = c.createRadialGradient(cx, cy, 0, cx, cy, core * 3.4);
-  cg.addColorStop(0, C1(0.85, 78));
+  cg.addColorStop(0, C1(0.85, 76));
   cg.addColorStop(0.22, C1(0.5 + S.flash * 0.25, 66));
   cg.addColorStop(0.6, CMix(0.5, 0.18 + S.flash * 0.16, 50));
   cg.addColorStop(1, "transparent");
@@ -231,7 +231,7 @@ export const WORMHOLE: ThemeDraw = ({
   c.fill();
 
   // photon ring: the tell-tale sharp circle just outside the horizon
-  c.strokeStyle = C2(Math.min(0.75, 0.3 + beatE * 0.35 + E * 0.15), 80);
+  c.strokeStyle = C2(Math.min(0.75, 0.3 + beatE * 0.35 + E * 0.15), 76);
   c.lineWidth = Math.max(0.6, (0.9 + beatE * 2 + E) * TK);
   glow(Math.min(24, 14 * (1 + beatE + E * 0.5)), C1());
   c.beginPath();
