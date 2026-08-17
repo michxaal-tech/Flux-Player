@@ -1,7 +1,7 @@
 {
   "name": "FLUX PRO",
   "short_name": "FLUX PRO",
-  "description": "Local music player with a live Web Audio FX rack, DJ deck and 43-theme visualizer.",
+  "description": "Local music player with a live Web Audio FX rack, DJ deck and 68-theme visualizer.",
   "start_url": ".",
   "scope": "./",
   "display": "standalone",

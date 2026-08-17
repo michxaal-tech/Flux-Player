@@ -122,7 +122,11 @@ export const VHS: ThemeDraw = ({
         const fv = liveAudio
           ? freq[(yn * 150) | 0] / 255
           : 0.22 + 0.18 * Math.sin(vt * 0.02 + yn * 4 + k);
-        const rx = w * (0.5 + 0.3 * Math.sin(yn * rb.wob + vt * 0.008 * rb.sp * sp + rb.ph));
+        // the subject behind the artefacts drifts lazily when calm and
+        // thrashes when the music drives
+        const rx = w * (0.5 + (0.22 + E * 0.16) * Math.sin(
+          yn * rb.wob * (1 + E * 0.9) + vt * (0.004 + E * 0.024) * rb.sp * sp + rb.ph,
+        ));
         const hw = w * (0.03 + 0.085 * fv * I) * (1 + beatE * 0.35);
         const a = (0.4 + fv * 0.5) * amul;
         if (a < 0.02) continue;

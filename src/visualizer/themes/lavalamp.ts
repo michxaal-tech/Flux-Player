@@ -170,27 +170,39 @@ export const LAVALAMP: ThemeDraw = ({
     if (b.r < rMin) b.r = rMin;
   }
 
-  // --- the glass ------------------------------------------------------------
+  // --- the room -------------------------------------------------------------
+  // opaque, so nothing the lamp throws off can accumulate in the trail buffer
   c.globalCompositeOperation = "source-over";
-  c.save();
-  c.beginPath();
-  for (let i = 0; i <= SIDE; i++) {
-    const yn = i / SIDE;
-    const x = cxL - halfAt(yn);
-    const y = topY + yn * span;
-    if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
-  }
-  for (let i = SIDE; i >= 0; i--) {
-    const yn = i / SIDE;
-    c.lineTo(cxL + halfAt(yn), topY + yn * span);
-  }
-  c.closePath();
-  const glassPathTop = topY;
+  const room = c.createRadialGradient(cxL, botY, 0, cxL, botY, Math.max(w, h) * 0.85);
+  room.addColorStop(0, CMix(0.2, 1, 10 + bassV * 4 + beatE * 3));
+  room.addColorStop(0.45, CMix(0.6, 1, 6));
+  room.addColorStop(1, CMix(0.85, 1, 3));
+  c.fillStyle = room;
+  c.fillRect(0, 0, w, h);
+
+  // --- the glass ------------------------------------------------------------
+  const vessel = () => {
+    c.beginPath();
+    for (let i = 0; i <= SIDE; i++) {
+      const yn = i / SIDE;
+      const x = cxL - halfAt(yn);
+      const y = topY + yn * span;
+      if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
+    }
+    for (let i = SIDE; i >= 0; i--) {
+      const yn = i / SIDE;
+      c.lineTo(cxL + halfAt(yn), topY + yn * span);
+    }
+    c.closePath();
+  };
+
+  c.globalCompositeOperation = "source-over";
+  vessel();
   c.save();
   c.clip();
 
   // fluid inside the glass, hot at the heater
-  const inner = c.createLinearGradient(0, glassPathTop, 0, botY);
+  const inner = c.createLinearGradient(0, topY, 0, botY);
   inner.addColorStop(0, CMix(0.8, 1, 7));
   inner.addColorStop(0.6, CMix(0.55, 1, 11 + midV * 4));
   inner.addColorStop(1, CMix(0.15, 1, 20 + bassV * 8 + beatE * 6));
@@ -274,9 +286,10 @@ export const LAVALAMP: ThemeDraw = ({
     c.fillRect(b.x - rr * 1.1, b.y - rr * 1.1, rr * 2.2, rr * 2.2);
   }
   c.globalCompositeOperation = "source-over";
-  c.restore(); // drop clip, keep the vessel path
+  c.restore(); // drop the clip
 
-  // glass edge + reflections
+  // glass edge + reflections (the wax path replaced the vessel — rebuild it)
+  vessel();
   c.strokeStyle = C1(0.28, 58);
   c.lineWidth = 1.4 * TK;
   c.stroke();
@@ -295,7 +308,6 @@ export const LAVALAMP: ThemeDraw = ({
     c.stroke();
   }
   c.globalCompositeOperation = "source-over";
-  c.restore();
 
   // cap and base
   const capW = halfAt(0) * 1.5;

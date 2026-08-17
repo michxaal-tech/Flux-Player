@@ -64,6 +64,9 @@ import { GRAFFITI } from "./graffiti";
 import { CONSTELLATION } from "./constellation";
 import { VHS } from "./vhs";
 import { LAVALAMP } from "./lavalamp";
+import { SAMURAI } from "./samurai";
+import { QUANTUM } from "./quantum";
+import { TOPOGRAPH } from "./topograph";
 import { CLOCK } from "./clock";
 
 export const themes: Record<string, ThemeDraw> = {
@@ -74,5 +77,6 @@ export const themes: Record<string, ThemeDraw> = {
   VINYL, THUNDER, KOI, CASSETTE,
   MURMUR, INKFLOW, SHATTER, SERPENT, BLOOMRAIL, MAGNETIC, ORACLE, AURORAFALL, GRAVITY, CIRCUITRY,
   PRISM, REACTOR, ORIGAMI, SANDSTORM, CATHEDRAL, BIOLUME, MECHANISM, WORMHOLE, GRAFFITI, CONSTELLATION, VHS, LAVALAMP,
+  SAMURAI, QUANTUM, TOPOGRAPH,
   MARQUEE, NEONSIGN, CLOCK,
 };
