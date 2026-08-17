@@ -29,7 +29,7 @@ function TakeRow({ take }: { take: Take }) {
           textDecoration: "none", fontSize: 12.5, fontWeight: 700, opacity: url ? 1 : 0.5,
         }}
       >
-        <span>⬇ {take.name}</span>
+        <span>{take.kind === "video" ? "🎬" : "⬇"} {take.name}</span>
         <span style={{ fontFamily: MONO, opacity: 0.7 }}>{fmt(take.secs)}</span>
       </a>
       <button

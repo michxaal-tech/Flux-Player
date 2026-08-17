@@ -103,6 +103,8 @@ export interface Take {
   id: string;
   name: string;
   secs: number;
+  /** audio session take (default) or an exported visualizer video */
+  kind?: "audio" | "video";
 }
 
 export type RecState = "idle" | "rec";

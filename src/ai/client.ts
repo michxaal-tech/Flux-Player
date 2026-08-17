@@ -3,8 +3,8 @@
 // telemetry, no backend of any kind.
 import { blobStore } from "../store/blobStore";
 import { useStore } from "../store/useStore";
-import { getProvider, resolveEndpoint } from "./providers";
-import type { AskShape } from "./providers";
+import { getProvider, rankModel, resolveEndpoint } from "./providers";
+import type { AskShape, ProviderModel } from "./providers";
 
 const keyBlob = (providerId: string) => `ai-key-${providerId}`;
 
@@ -200,6 +200,24 @@ export async function askJson<T>(o: AskOpts & { validate?: (v: unknown) => v is 
   } finally {
     setBusy(-1);
   }
+}
+
+/**
+ * Asks the provider which models this key can actually call, best first.
+ * Hardcoded lists go stale (Google retires ids for new keys), so the picker
+ * and the auto-chosen default both come from here.
+ */
+export async function discoverModels(
+  key: string,
+  providerId: string,
+  baseUrl: string
+): Promise<ProviderModel[]> {
+  const p = getProvider(providerId);
+  if (!p.listModels) return p.models;
+  const list = await p.listModels(key.trim(), baseUrl);
+  return list
+    .filter((m) => rankModel(m.id) >= 0)
+    .sort((a, b) => rankModel(b.id) - rankModel(a.id));
 }
 
 /** Cheap round-trip used by the settings panel to validate a pasted key. */

@@ -5,6 +5,8 @@ import { nextTrack, prevTrack, togglePlay } from "../audio/transport";
 import { getCurrentTrack, useStore } from "../store/useStore";
 import { mix } from "../theme";
 import { canvasRefs } from "../visualizer/live";
+import { startVideoExport, stopVideoExport, videoExportSupported } from "../audio/videoRecorder";
+import { fmt } from "../utils";
 import { LYRIC_STYLES } from "../visualizer/lyricRenderer";
 import { chip, NextIcon, PauseIcon, playBtn, PlayIcon, PrevIcon, skipBtn, Slider, Toggle } from "./ui";
 import { vibeToVisuals } from "../ai/features";
@@ -26,6 +28,10 @@ export function VisualizerOverlay() {
   const setV = useStore((s) => s.setVisKey);
   const visChaos = useStore((s) => s.visChaos);
   const aiReady = useStore((s) => s.aiReady);
+  const vidState = useStore((s) => s.vidState);
+  const vidTime = useStore((s) => s.vidTime);
+  const vidMsg = useStore((s) => s.vidMsg);
+  const [vidSupported] = useState(videoExportSupported);
   const lrcInputRef = useRef<HTMLInputElement>(null);
 
   const [themeMenu, setThemeMenu] = useState(false);
@@ -134,11 +140,39 @@ export function VisualizerOverlay() {
             style={{ ...chip(lyricAuto, MAG), fontSize: 10 }}
             title="Auto-search lyrics for every track"
           >⟳ AUTO</button>
+          {vidSupported && (
+            <button
+              onClick={() => (vidState === "rec" ? stopVideoExport() : startVideoExport(true))}
+              style={{ ...chip(vidState === "rec", "#FF4949"), fontSize: 10 }}
+              title={vidState === "rec" ? "Stop and save the video" : "Record this song with the visualizer"}
+            >
+              {vidState === "rec" ? `⏹ ${fmt(vidTime)}` : "⏺ VIDEO"}
+            </button>
+          )}
           <button onClick={visChaos} style={chip(false, MAG)}>🎲</button>
           <button onClick={() => set({ visPanel: !visPanel })} style={chip(visPanel, MAG)}>⚙ TUNE</button>
           <button onClick={() => set({ visOpen: false })} style={{ ...chip(false), fontSize: 14 }}>✕</button>
         </div>
       </div>
+
+      {(vidState === "rec" || !!vidMsg) && (
+        <div
+          style={{
+            position: "absolute", top: 62, left: "50%", transform: "translateX(-50%)", zIndex: 7,
+            display: "flex", alignItems: "center", gap: 9, padding: "9px 15px", borderRadius: 999,
+            background: "rgba(10,12,18,0.92)", backdropFilter: "blur(14px)",
+            border: `1px solid ${vidState === "rec" ? "rgba(255,73,73,0.5)" : mix(CYAN, 40)}`,
+            fontSize: 11, color: "#fff", maxWidth: "88vw", textAlign: "center",
+          }}
+        >
+          {vidState === "rec" && <span style={{ color: "#FF4949", animation: "fluxpulse 1s ease-in-out infinite" }}>●</span>}
+          <span>
+            {vidState === "rec"
+              ? `Recording ${visTheme}${lyricsOn && track?.lyrics ? ` + ${lyricStyle}` : ""} — plays through in real time, stops at the end`
+              : vidMsg}
+          </span>
+        </div>
+      )}
 
       {visPanel && (
         <div style={{ position: "absolute", top: 62, right: 16, width: "min(88vw, 330px)", maxHeight: "68vh", overflowY: "auto", background: "rgba(10,12,18,0.93)", border: BORDER, borderRadius: 16, padding: 14, backdropFilter: "blur(20px)", zIndex: 5 }}>

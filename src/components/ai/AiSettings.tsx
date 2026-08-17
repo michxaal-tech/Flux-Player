@@ -1,9 +1,10 @@
 // BYOK key management across providers. Keys are stored in this browser only
 // (IndexedDB, one per provider) and are sent only to the provider you pick.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BORDER, CYAN, MAG, MONO } from "../../constants";
-import { loadKey, refreshReady, saveKey, validateKey } from "../../ai/client";
+import { discoverModels, loadKey, refreshReady, saveKey, validateKey } from "../../ai/client";
 import { COMPAT_PRESETS, getProvider, PROVIDERS } from "../../ai/providers";
+import type { ProviderModel } from "../../ai/providers";
 import { useStore } from "../../store/useStore";
 import { mix } from "../../theme";
 import { Module } from "../ui";
@@ -22,16 +23,24 @@ export function AiSettings() {
   const [checking, setChecking] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // live model list from the key — hardcoded ids go stale
+  const [liveModels, setLiveModels] = useState<ProviderModel[] | null>(null);
+  // read inside async flows without waiting for a re-render
+  const liveModelsRef = useRef<ProviderModel[] | null>(null);
 
   // reload the stored key whenever the provider changes
   useEffect(() => {
     let alive = true;
     setStatus("");
     setKey("");
+    setLiveModels(null);
     loadKey(providerId).then((k) => {
       if (!alive) return;
       setSaved(k);
       refreshReady();
+      if (k) discoverModels(k, providerId, baseUrl)
+        .then((m) => { if (alive && m.length) { setLiveModels(m); liveModelsRef.current = m; } })
+        .catch(() => {});
     });
     return () => { alive = false; };
   }, [providerId]);
@@ -42,14 +51,40 @@ export function AiSettings() {
     const k = key.trim();
     if (!k) return;
     setChecking(true);
+    // Ask the provider what this key can call before testing anything — a
+    // model id that was valid last month may not be offered to a new key.
+    setStatus("Finding available models…");
+    let use = activeModel;
+    try {
+      const models = await discoverModels(k, providerId, baseUrl);
+      if (models.length) {
+        setLiveModels(models);
+        liveModelsRef.current = models;
+        // keep the user's pick only if their key actually offers it
+        if (!models.some((m) => m.id === use)) use = models[0].id;
+      }
+    } catch { /* fall back to the seeded id and let the test call report */ }
+
     setStatus("Checking key…");
-    const res = await validateKey(k, providerId, activeModel, baseUrl);
+    let res = await validateKey(k, providerId, use, baseUrl);
+    // A model can be listed and still be refused (retired for new keys, or
+    // not enabled on this tier). If the failure is about the model rather
+    // than the key, fall back to the best one the key offers.
+    if (!res.ok && /model|404|not available|not found/i.test(res.msg)) {
+      const best = (liveModelsRef.current ?? [])[0]?.id;
+      if (best && best !== use) {
+        setStatus(`${use} was refused — trying ${best}…`);
+        const retry = await validateKey(k, providerId, best, baseUrl);
+        if (retry.ok) { use = best; res = retry; }
+      }
+    }
     setChecking(false);
     if (res.ok) {
       await saveKey(k, providerId);
+      set({ aiModel: use });
       setSaved(k);
       setKey("");
-      setStatus(`✓ Connected to ${provider.label} — AI features unlocked`);
+      setStatus(`✓ Connected to ${provider.label} using ${use}`);
     } else {
       setStatus(`⚠ ${res.msg}`);
     }
@@ -210,7 +245,23 @@ export function AiSettings() {
         >{showAdvanced ? "▾" : "▸"} MODEL — {activeModel}</button>
         {showAdvanced && (
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-            {provider.models.map((m) => (
+            {saved && (
+              <button
+                onClick={async () => {
+                  setStatus("Refreshing model list…");
+                  try {
+                    const m = await discoverModels(saved, providerId, baseUrl);
+                    setLiveModels(m);
+                    liveModelsRef.current = m;
+                    setStatus(m.length ? `✓ ${m.length} models available to this key` : "⚠ No models returned");
+                  } catch (e) {
+                    setStatus(`⚠ ${(e as Error).message}`);
+                  }
+                }}
+                style={{ padding: "8px", borderRadius: 9, fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", background: "rgba(255,255,255,0.05)", border: BORDER, color: "rgba(255,255,255,0.7)" }}
+              >⟳ REFRESH FROM MY KEY</button>
+            )}
+            {(liveModels ?? provider.models).map((m) => (
               <button
                 key={m.id}
                 onClick={() => set({ aiModel: m.id })}
@@ -222,8 +273,8 @@ export function AiSettings() {
                   color: activeModel === m.id ? CYAN : "rgba(255,255,255,0.7)",
                 }}
               >
-                <span>{m.label}</span>
-                {m.note && <span style={{ fontSize: 9, opacity: 0.6 }}>{m.note}</span>}
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.label}</span>
+                <span style={{ fontSize: 9, opacity: 0.6, flexShrink: 0, marginLeft: 8 }}>{m.note ?? (liveModels ? m.id : "")}</span>
               </button>
             ))}
             {provider.customModel && (

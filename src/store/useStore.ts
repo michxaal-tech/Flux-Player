@@ -49,6 +49,10 @@ export interface StoreState {
   // recorder / exports
   recState: RecState;
   recTime: number;
+  /** visualizer video export */
+  vidState: RecState;
+  vidTime: number;
+  vidMsg: string;
   takes: Take[];
   exporting: string;
   // on-device stem separation
@@ -151,6 +155,9 @@ export const useStore = create<StoreState>()(
         visPanel: false,
         recState: "idle",
         recTime: 0,
+        vidState: "idle",
+        vidTime: 0,
+        vidMsg: "",
         takes: [],
         exporting: "",
         instMode: false,
@@ -391,6 +398,9 @@ export const useStore = create<StoreState>()(
             playing: false,
             visOpen: false,
             recState: "idle",
+            vidState: "idle",
+            vidTime: 0,
+            vidMsg: "",
             aiBusy: false,
             aiLabel: "",
             aiPanel: false,

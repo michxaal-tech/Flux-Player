@@ -68,6 +68,18 @@ await page.route("https://generativelanguage.googleapis.com/**", async (route) =
   const system = body.system_instruction?.parts?.[0]?.text ?? "";
   geminiSeen.push({ headers, url: req.url(), userText, system, cfg: body.generationConfig });
 
+  // model discovery
+  if (req.method() === "GET" && req.url().includes("/v1beta/models") && !req.url().includes(":generateContent")) {
+    return route.fulfill({ contentType: "application/json", body: JSON.stringify({ models: [
+      { name: "models/gemini-2.5-flash", displayName: "Gemini 2.5 Flash", supportedGenerationMethods: ["generateContent"] },
+      { name: "models/gemini-3.7-flash", displayName: "Gemini 3.7 Flash", supportedGenerationMethods: ["generateContent"] },
+      { name: "models/text-embedding-004", displayName: "Embedding", supportedGenerationMethods: ["embedContent"] },
+    ] }) });
+  }
+  // the retired id 404s for new keys, exactly like the live API
+  if (req.url().includes("gemini-2.5-flash:generateContent")) {
+    return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: { code: 404, message: "This model models/gemini-2.5-flash is no longer available to new users." } }) });
+  }
   if (headers["x-goog-api-key"] === "AIzaBAD") {
     return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: { code: 400, message: "API key not valid. Please pass a valid API key.", status: "INVALID_ARGUMENT" } }) });
   }
@@ -150,7 +162,22 @@ await step("Gemini is the default provider and its free key flow works", async (
   const g = [...geminiSeen].reverse().find((x) => x.userText === "ping");
   if (!g) throw new Error("no Gemini call was made");
   if (g.headers["x-goog-api-key"] !== "AIzaGOOD") throw new Error("key not sent in x-goog-api-key");
-  if (!g.url.includes("gemini-2.5-flash:generateContent")) throw new Error(`wrong endpoint: ${g.url}`);
+  // discovery must have skipped the retired id and chosen the live one
+  if (g.url.includes("gemini-2.5-flash")) throw new Error("connected with the retired model id");
+  if (!g.url.includes("gemini-3.7-flash:generateContent")) throw new Error(`wrong endpoint: ${g.url}`);
+  const chosen = await page.evaluate(() => window.__fluxStore.getState().aiModel);
+  if (chosen !== "gemini-3.7-flash") throw new Error(`aiModel=${chosen}, expected the discovered model`);
+});
+
+await step("a stale stored model id is replaced on reconnect", async () => {
+  // simulate a config saved before Google retired the id
+  await page.evaluate(() => window.__fluxStore.getState().set({ aiModel: "gemini-2.5-flash" }));
+  await page.click("button:has-text('REMOVE KEY')");
+  await page.fill("input[placeholder='AIza…']", "AIzaGOOD");
+  await page.click("button:has-text('CONNECT')");
+  await page.waitForSelector("text=Connected to Google Gemini", { timeout: 10000 });
+  const m = await page.evaluate(() => window.__fluxStore.getState().aiModel);
+  if (m === "gemini-2.5-flash") throw new Error("kept a model the key can no longer call");
 });
 
 await step("Gemini executes commands through the same schema", async () => {
