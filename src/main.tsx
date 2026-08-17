@@ -13,6 +13,11 @@ wireAudio();
 startRenderLoop();
 // unlock AI surfaces if this browser already holds a key (BYOK, local only)
 refreshReady();
+// finish a Spotify redirect if we came back from one, and reflect any session
+import("./spotify").then(async (m) => {
+  await m.completeSpotifyAuth();
+  useStore.setState({ spotifyReady: await m.spotifyConnected() });
+});
 applyAccentTheme(useStore.getState().visCfg);
 useStore.subscribe((s) => s.visCfg, applyAccentTheme);
 // debug/test handle

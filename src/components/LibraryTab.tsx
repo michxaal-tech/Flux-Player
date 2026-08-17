@@ -8,6 +8,7 @@ import { mix } from "../theme";
 import { chip } from "./ui";
 import { Cover } from "./ai/Cover";
 import { EmojiSearch, LibraryAiBar, TrackAiMenu } from "./ai/LibraryAi";
+import { SpotifyImport } from "./SpotifyImport";
 
 export function LibraryTab({ onLoadClick }: { onLoadClick: () => void }) {
   const aiReady = useStore((s) => s.aiReady);
@@ -62,6 +63,7 @@ export function LibraryTab({ onLoadClick }: { onLoadClick: () => void }) {
       />
       {aiReady && <EmojiSearch />}
       {aiReady && <LibraryAiBar />}
+      <div style={{ marginBottom: 10 }}><SpotifyImport /></div>
 
       <div className="hscroll" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8 }}>
         <button onClick={() => set({ viewMode: { type: "fav" } })} style={chip(viewMode.type === "fav", MAG)}>♥ FAVORITES ({favCount})</button>

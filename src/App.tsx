@@ -25,6 +25,7 @@ export default function App() {
   const visOpen = useStore((s) => s.visOpen);
   const shortcutsOpen = useStore((s) => s.shortcutsOpen);
   const aiReady = useStore((s) => s.aiReady);
+  const playerBgOn = useStore((s) => s.playerBgOn);
   const recState = useStore((s) => s.recState);
   const recTime = useStore((s) => s.recTime);
   const set = useStore((s) => s.set);
@@ -63,11 +64,14 @@ export default function App() {
   }, [tab, visOpen]);
 
   const bgRef = useRef<HTMLCanvasElement>(null);
+  const pbgRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     canvasRefs.bg = bgRef.current;
+    canvasRefs.pbg = pbgRef.current;
     return () => {
       if (canvasRefs.bg === bgRef.current) canvasRefs.bg = null;
+      if (canvasRefs.pbg === pbgRef.current) canvasRefs.pbg = null;
     };
   }, []);
 
@@ -82,6 +86,18 @@ export default function App() {
       onDragOver={(e) => e.preventDefault()}
       style={{ position: "fixed", inset: 0, background: BG, fontFamily: SANS, color: "#fff", display: "flex", flexDirection: "column", userSelect: "none" }}
     >
+      {/* live theme behind the whole player page, rendered tiny and blurred so
+          it reads as colour and motion rather than a competing picture */}
+      <canvas
+        ref={pbgRef}
+        aria-hidden
+        style={{
+          position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none",
+          opacity: tab === "player" && playerBgOn && !visOpen ? 0.6 : 0,
+          filter: "blur(40px) saturate(1.4)",
+          transition: "opacity 0.55s var(--ease-soft)",
+        }}
+      />
       <canvas ref={bgRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
 
       <div className="bootIn" style={{ position: "relative", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 18px" }}>

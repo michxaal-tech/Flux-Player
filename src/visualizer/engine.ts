@@ -303,24 +303,41 @@ export function startRenderLoop(): void {
     if (bg) {
       const [w, h] = sizeCanvas(bg, 1100 * resScale); // soft ambient layer — low res is invisible
       const c = bg.getContext("2d")!;
-      c.fillStyle = "rgba(8,9,13,0.3)";
-      c.fillRect(0, 0, w, h);
+      // Cleared, not painted over with a dark wash: this layer sits above the
+      // player's blurred backdrop, and a translucent black fill accumulated to
+      // solid over a few frames — which blacked out the backdrop everywhere
+      // the centre glow didn't reach.
+      c.clearRect(0, 0, w, h);
       const g = c.createRadialGradient(w / 2, h * 0.25, 0, w / 2, h * 0.25, h * (0.5 + bass * 0.3));
-      g.addColorStop(0, ac1(0.04 + bass * 0.1));
-      g.addColorStop(0.6, ac2(0.02 + bass * 0.05));
+      g.addColorStop(0, ac1(0.05 + bass * 0.12));
+      g.addColorStop(0.6, ac2(0.025 + bass * 0.06));
       g.addColorStop(1, "transparent");
       c.fillStyle = g;
       c.fillRect(0, 0, w, h);
+      // Edge meters fade out horizontally instead of ending on a hard edge,
+      // so they dissolve into whatever is behind them.
       const SB = 18;
+      const MAXW = 33;
+      const gl = c.createLinearGradient(0, 0, MAXW, 0);
+      gl.addColorStop(0, ac1(0.5));
+      gl.addColorStop(0.55, ac1(0.22));
+      gl.addColorStop(1, ac1(0));
+      const gr = c.createLinearGradient(w - MAXW, 0, w, 0);
+      gr.addColorStop(0, ac2(0));
+      gr.addColorStop(0.45, ac2(0.22));
+      gr.addColorStop(1, ac2(0.5));
       for (let i = 0; i < SB; i++) {
         const v = liveAudio ? freq[i * 9] / 255 : 0.08 + 0.07 * Math.sin(t * 0.02 + i * 0.6);
         const bh2 = h / SB;
         const bw2 = 3 + v * 30;
-        c.fillStyle = ac1(0.06 + v * 0.3);
+        // soft vertical falloff too, so the column of bars has no hard ends
+        c.globalAlpha = (0.35 + v * 0.65) * (0.45 + 0.55 * Math.sin((i + 0.5) / SB * Math.PI));
+        c.fillStyle = gl;
         c.fillRect(0, i * bh2 + 2, bw2, bh2 - 4);
-        c.fillStyle = ac2(0.06 + v * 0.3);
+        c.fillStyle = gr;
         c.fillRect(w - bw2, i * bh2 + 2, bw2, bh2 - 4);
       }
+      c.globalAlpha = 1;
     }
 
     // ── spinning disc ──
@@ -372,8 +389,24 @@ export function startRenderLoop(): void {
       const pC1 = (a = 1, l = 62) => `hsla(${ph1}, ${ps}%, ${l}%, ${a})`;
       const pC2 = (a = 1, l = 62) => `hsla(${ph2}, ${ps}%, ${l}%, ${a})`;
       const pCMix = (f: number, a = 1, l = 62) => `hsla(${ph1 + (ph2 - ph1) * f}, ${ps}%, ${l}%, ${a})`;
-      pc.setTransform(pc.getTransform());
-      pc.fillStyle = "rgba(5,6,10,0.20)";
+      pc.globalCompositeOperation = "source-over";
+      pc.fillStyle = "rgba(5,6,10,0.22)"; // trail fade
+      pc.fillRect(0, 0, pw, ph);
+      // Full-bleed colour wash. Most themes only paint their subject (a flock,
+      // an orb, a wave) and leave the rest of the canvas bare, which showed up
+      // as big black regions around the edges of the page. This guarantees the
+      // whole backdrop carries palette colour; the theme adds the motion.
+      const wash = pc.createRadialGradient(pw * 0.5, ph * 0.4, 0, pw * 0.5, ph * 0.4, Math.max(pw, ph) * 0.92);
+      wash.addColorStop(0, pC1(0.34, 44));
+      wash.addColorStop(0.5, pCMix(0.5, 0.24, 34));
+      wash.addColorStop(1, pC2(0.16, 22));
+      pc.fillStyle = wash;
+      pc.fillRect(0, 0, pw, ph);
+      const corner = pc.createLinearGradient(0, 0, pw, ph);
+      corner.addColorStop(0, pC2(0.16, 34));
+      corner.addColorStop(0.5, "transparent");
+      corner.addColorStop(1, pC1(0.16, 34));
+      pc.fillStyle = corner;
       pc.fillRect(0, 0, pw, ph);
       pc.save();
       pc.globalCompositeOperation = "lighter";

@@ -89,6 +89,8 @@ export interface StoreState {
   trackBpm: Record<string, number>;
   /** bumped whenever cover art changes so views re-read the cache */
   coverRev: number;
+  /** a Spotify session exists in this browser (import is metadata-only) */
+  spotifyReady: boolean;
   /** spoken transitions between tracks */
   radioMode: "off" | "host" | "hype";
   // ui
@@ -184,6 +186,7 @@ export const useStore = create<StoreState>()(
         trackBpm: {},
         coverRev: 0,
         radioMode: "off",
+        spotifyReady: false,
         tab: "player",
         shortcutsOpen: false,
 

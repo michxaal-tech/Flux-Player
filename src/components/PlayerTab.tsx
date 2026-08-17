@@ -47,14 +47,6 @@ export function PlayerTab() {
   const [noteOpen, setNoteOpen] = useState(false);
   useEffect(() => setNoteOpen(false), [track?.id]);
 
-  const pbgRef = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    canvasRefs.pbg = pbgRef.current;
-    return () => {
-      if (canvasRefs.pbg === pbgRef.current) canvasRefs.pbg = null;
-    };
-  }, []);
-
   const discRef = useRef<HTMLDivElement>(null);
   const waveRef = useRef<HTMLCanvasElement>(null);
   const bpmRef = useRef<HTMLSpanElement>(null);
@@ -86,18 +78,6 @@ export function PlayerTab() {
 
   return (
     <div className="pgrid" style={{ position: "relative" }}>
-      {/* live theme behind the glass — rendered tiny and blurred, so it reads
-          as colour and motion rather than a competing picture */}
-      <canvas
-        ref={pbgRef}
-        aria-hidden
-        style={{
-          position: "fixed", inset: 0, width: "100%", height: "100%", zIndex: -1,
-          pointerEvents: "none", opacity: playerBgOn ? 0.55 : 0,
-          filter: "blur(38px) saturate(1.35)", transform: "scale(1.12)", maxWidth: "100vw", overflow: "hidden",
-          transition: "opacity 0.5s var(--ease-soft)",
-        }}
-      />
 
       {/* backdrop controls: the palette here is the same one the visualizer
           uses, so a colour picked on either screen applies everywhere */}
