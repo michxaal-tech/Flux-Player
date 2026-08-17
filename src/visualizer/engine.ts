@@ -10,6 +10,12 @@ import { canvasRefs, live } from "./live";
 import { themes } from "./themes";
 import type { ThemeCtx } from "./themeTypes";
 import { drawLyricOverlay } from "./lyricRenderer";
+import { project3d, type Mode3D } from "./project3d";
+
+// Offscreen buffer the theme renders into when a 3D mode is on. It carries the
+// trail, and the projection reads it as a texture — so the perspective is
+// applied once per frame instead of compounding into the trail.
+const sceneCv = document.createElement("canvas");
 
 /** themes that render lyrics themselves — the shared overlay stays out of their way */
 const LYRIC_NATIVE_THEMES = new Set(["MARQUEE", "NEONSIGN", "CLOCK"]);
@@ -192,7 +198,7 @@ export function startRenderLoop(): void {
     const L = live;
     const cfg = L.cfg;
     let bass = 0.08 + Math.sin(t * 0.01) * 0.03, mid = bass * 0.8, treb = bass * 0.5;
-    let liveAudio = false, rms = 0, beat = false;
+    let liveAudio = false, rms = 0, beat = false, hit = false;
 
     if (n && L.playing) {
       n.analyser.getByteFrequencyData(freq);
@@ -305,6 +311,7 @@ export function startRenderLoop(): void {
       // speakers (media time minus output latency) and the visuals land on the
       // beat instead of chasing it.
       const A = L.anal;
+      hit = false;
       if (A && L.playing) {
         const media = engine.audio.currentTime - totalMs / 1000;
         if (media >= 0 && media <= A.duration) {
@@ -318,20 +325,57 @@ export function startRenderLoop(): void {
             L.analBeat++;
             beat = true;
           }
-          L.bpm = A.bpm;
-          // a drop within the next beat pre-charges the energy so the visuals
-          // swell into it rather than reacting a beat late
-          for (const d of A.drops) {
-            const dt = d - media;
-            if (dt > 0 && dt < 0.8) { L.energy = Math.max(L.energy, 0.6 + (0.8 - dt) * 0.5); break; }
+          // percussive hits: several per beat during fills and double-time
+          // passages, so the flashing follows the drums rather than the tempo
+          if (L.analHit > 0 && (A.hits[L.analHit - 1] ?? 0) > media + 0.4) L.analHit = 0;
+          while (L.analHit < A.hits.length && A.hits[L.analHit] <= media) {
+            L.analHit++;
+            hit = true;
           }
+          if (cfg.fastBeats && hit) beat = true; // drive the main pulse from hits too
+          L.bpm = A.bpm;
+
+          // drop envelope: ramp up over the 1.5s before, decay over 3s after
+          let de = 0;
+          for (const d of A.drops) {
+            const dt = media - d;
+            if (dt < -1.5 || dt > 3) continue;
+            de = Math.max(de, dt < 0 ? (1.5 + dt) / 1.5 * 0.8 : 1 - dt / 3);
+          }
+          L.dropE = de;
+          if (de > 0.05) L.energy = Math.max(L.energy, 0.55 + de * 0.45);
+
+          // section index = how many section marks we have passed
+          let sec = 0;
+          for (const t2 of A.sections) if (t2 <= media) sec++;
+          L.section = sec;
         }
+      } else {
+        // no timeline: approximate a drop from a sudden sustained low-end lift
+        hit = beat;
+        const jump = bass - L.prevBassSlow;
+        L.prevBassSlow += (bass - L.prevBassSlow) * 0.01;
+        L.dropE = Math.max(L.dropE * 0.97, Math.min(1, Math.max(0, jump - 0.18) * 3));
+        L.section = 0;
       }
     }
 
-    // beat envelope decays faster at high speed too, so back-to-back beats
-    // read as separate hits instead of one smeared glow
-    L.beatE = beat ? 1 : L.beatE * (L.playing ? Math.pow(0.9, Math.max(0.5, Math.min(2, L.speed || 1))) : 0.9);
+    // ── musical clock ──
+    // Everything that decays or travels is stepped in *beats*, not frames.
+    // Frame-counted envelopes take the same wall-clock time at every tempo, so
+    // they drift out of phase with the music and end up reading as a fixed
+    // ~1s loop running beside the track rather than with it. `beatStep` is how
+    // much of a beat this frame covered, so one unit of envelope = one beat at
+    // any BPM and any refresh rate.
+    const dtSec = Math.min(0.1, delta / 1000); // clamp: tab-switch gaps aren't music
+    const bps = L.bpm > 0 ? (L.bpm * (L.speed || 1)) / 60 : 2;
+    const beatStep = L.playing ? dtSec * bps : dtSec * 2;
+    const decay = (k: number) => Math.exp(-beatStep * k);
+
+    L.hitE = hit ? 1 : L.hitE * decay(9);
+    // beat envelope: back-to-back beats read as separate hits instead of one
+    // smeared glow, because the decay tightens as the tempo rises
+    L.beatE = beat ? 1 : L.beatE * decay(4.5);
 
     // musical intensity: loudness + how fast beats arrive + brightness, all
     // smoothed over seconds so themes drift between calm and driving motion
@@ -465,7 +509,7 @@ export function startRenderLoop(): void {
         t, vt: L.vt, freq, wave, liveAudio,
         bass, mid, treb,
         bassV: Math.min(1, bass * pI), midV: Math.min(1, mid * pI), trebV: Math.min(1, treb * pI),
-        beat, beatE: L.beatE, energy: L.energy, cfg, I: pI, TK: cfg.thick,
+        beat, beatE: L.beatE, energy: L.energy, dropE: L.dropE, hit, hitE: L.hitE, section: L.section, cfg, I: pI, TK: cfg.thick,
         C1: pC1, C2: pC2, CMix: pCMix,
         glow: (blur, color) => { pc.shadowBlur = blur * cfg.glow * 1.6; pc.shadowColor = color; },
         noGlow: () => { pc.shadowBlur = 0; },
@@ -477,8 +521,33 @@ export function startRenderLoop(): void {
     // ── fullscreen visual engine ──
     const vc = canvasRefs.vis;
     if (vc && L.visOpen) {
-      const [w, h] = sizeCanvas(vc, 1800 * resScale, true);
-      const c = vc.getContext("2d")!;
+      const mode3d = (cfg.vis3d ?? "OFF") as Mode3D;
+      const use3d = mode3d !== "OFF";
+      // In 3D the visible canvas is only ever a blit target, so it must not
+      // carry the trail — preserve-on-resize moves to the scene buffer instead.
+      const [w, h] = sizeCanvas(vc, 1800 * resScale, !use3d);
+      // The scene buffer mirrors vc's backing store and transform so themes see
+      // exactly the geometry they'd see drawing straight to the screen.
+      let c = vc.getContext("2d")!;
+      if (use3d) {
+        if (sceneCv.width !== vc.width || sceneCv.height !== vc.height) {
+          const keep = sceneCv.width > 0 && sceneCv.height > 0;
+          if (keep) {
+            snapCv.width = sceneCv.width;
+            snapCv.height = sceneCv.height;
+            snapCv.getContext("2d")!.drawImage(sceneCv, 0, 0);
+          }
+          sceneCv.width = vc.width;
+          sceneCv.height = vc.height;
+          const sc0 = sceneCv.getContext("2d")!;
+          sc0.setTransform(1, 0, 0, 1, 0, 0);
+          if (keep) sc0.drawImage(snapCv, 0, 0, vc.width, vc.height);
+        }
+        c = sceneCv.getContext("2d")!;
+        // vc's transform is CSS-px scaled; match it so w/h mean the same thing
+        const k = vc.width / Math.max(1, w);
+        c.setTransform(k, 0, 0, k, 0, 0);
+      }
       const cx = w / 2, cy = h / 2, R = Math.min(w, h);
 
       const pal = PALETTES.find((p) => p.id === cfg.palette) || PALETTES[0];
@@ -553,7 +622,8 @@ export function startRenderLoop(): void {
 
       const themeCtx: ThemeCtx = {
         c, w, h, cx, cy, R, t, vt, freq, wave, liveAudio,
-        bass, mid, treb, bassV, midV, trebV, beat, beatE: L.beatE, energy: L.energy, cfg, I, TK,
+        bass, mid, treb, bassV, midV, trebV, beat, beatE: L.beatE, energy: L.energy,
+        dropE: L.dropE, hit, hitE: L.hitE, section: L.section, cfg, I, TK,
         C1, C2, CMix, glow, noGlow, L, trackName: L.trackName,
       };
       themes[TH]?.(themeCtx);
@@ -627,14 +697,30 @@ export function startRenderLoop(): void {
 
       c.restore();
 
-      // mirror
+      // mirror — folds the left half of whatever was just drawn onto the right
+      const sceneSrc = use3d ? sceneCv : vc;
       if (cfg.mirror) {
         c.save();
         c.globalCompositeOperation = "source-over";
         c.translate(w, 0);
         c.scale(-1, 1);
-        c.drawImage(vc, 0, 0, vc.width / 2, vc.height, 0, 0, w / 2, h);
+        c.drawImage(sceneSrc, 0, 0, sceneSrc.width / 2, sceneSrc.height, 0, 0, w / 2, h);
         c.restore();
+      }
+
+      // ── 3D pass ──
+      // The scene is finished; map it onto a perspective surface on the way to
+      // the screen. Everything below this point (impacts, flash, lyrics) is
+      // screen-space and so runs on the projected result, which is what you
+      // want — a beat flash belongs on the camera, not painted onto the plane.
+      if (use3d) {
+        c = vc.getContext("2d")!;
+        project3d({
+          c, src: sceneCv, sw: sceneCv.width, sh: sceneCv.height, w, h,
+          mode: mode3d, amt: cfg.vis3dAmt ?? 0.5,
+          vt, bass: bassV, beatE: L.beatE, dropE: L.dropE,
+          tint: C1(0.5, 70),
+        });
       }
 
       // ── per-beat impact layer ──

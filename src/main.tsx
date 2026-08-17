@@ -24,6 +24,14 @@ useStore.subscribe((s) => s.visCfg, applyAccentTheme);
 // debug/test handle
 (window as unknown as { __fluxStore: typeof useStore }).__fluxStore = useStore;
 (window as unknown as { __fluxEngine: typeof engine }).__fluxEngine = engine;
+// per-frame visual state + transport, so beat/impact sync can be measured
+// rather than eyeballed (see scripts/impact-check.mjs)
+import("./visualizer/live").then((m) => {
+  (window as unknown as { __fluxLive: unknown }).__fluxLive = m.live;
+});
+import("./audio/transport").then((m) => {
+  (window as unknown as { __fluxPlayAt: unknown }).__fluxPlayAt = m.playAt;
+});
 // AI internals for the ai-smoke suite (same pattern as __flux / __fluxStore)
 import("./ai/covers").then((m) => {
   (window as unknown as { __fluxAi: unknown }).__fluxAi = { sanitizeSvg: m.sanitizeSvg, loadCover: m.loadCover };

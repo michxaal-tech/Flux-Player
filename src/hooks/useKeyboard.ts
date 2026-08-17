@@ -49,7 +49,12 @@ export function useKeyboard(): void {
           useStore.setState({ volume: Math.max(0, st.volume - 0.05) });
           return;
         case "Escape":
-          useStore.setState({ visPanel: false, visOpen: false, shortcutsOpen: false });
+          // Peel one layer at a time. Closing the visualizer outright from an
+          // open panel meant a stray Escape while tuning threw you all the way
+          // back to the player and lost your place.
+          if (st.shortcutsOpen) useStore.setState({ shortcutsOpen: false });
+          else if (st.visPanel) useStore.setState({ visPanel: false });
+          else useStore.setState({ visOpen: false });
           return;
         case "BracketLeft":
           st.setFxKey("speed", Math.max(0.5, +(st.fx.speed - 0.05).toFixed(2)));

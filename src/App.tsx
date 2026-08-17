@@ -41,16 +41,37 @@ export default function App() {
   const [dir, setDir] = useState<1 | -1>(1);
   const tabBarRef = useRef<HTMLDivElement>(null);
   const [ink, setInk] = useState({ x: 0, w: 0 });
+  /** the tab being animated out, kept mounted until its exit finishes */
+  const [leaving, setLeaving] = useState<{ tab: TabId; dir: 1 | -1 } | null>(null);
+
+  const renderTab = (id: TabId) => (
+    <>
+      {id === "player" && <PlayerTab />}
+      {id === "dj" && <DJTab />}
+      {id === "fx" && <FXRackTab />}
+      {id === "library" && <LibraryTab onLoadClick={() => fileInputRef.current?.click()} onAnyFileClick={() => anyInputRef.current?.click()} />}
+      {id === "me" && <MeTab />}
+    </>
+  );
 
   useLayoutEffect(() => {
     if (prevTab.current !== tab) {
-      setDir(TAB_ORDER.indexOf(tab) >= TAB_ORDER.indexOf(prevTab.current) ? 1 : -1);
+      const d = TAB_ORDER.indexOf(tab) >= TAB_ORDER.indexOf(prevTab.current) ? 1 : -1;
+      setDir(d);
+      setLeaving({ tab: prevTab.current, dir: d });
       prevTab.current = tab;
     }
     const bar = tabBarRef.current;
     const btn = bar?.querySelector<HTMLElement>(`[data-tab="${visOpen ? "visuals" : tab}"]`);
     if (bar && btn) setInk({ x: btn.offsetLeft, w: btn.offsetWidth });
   }, [tab, visOpen]);
+
+  // drop the outgoing tab once its exit animation has played out
+  useEffect(() => {
+    if (!leaving) return;
+    const t = window.setTimeout(() => setLeaving(null), 320);
+    return () => window.clearTimeout(t);
+  }, [leaving]);
 
   // keep the accent bar aligned when the window resizes
   useEffect(() => {
@@ -132,14 +153,18 @@ export default function App() {
         }}
       />
 
-      <div className="bootIn d1" style={{ position: "relative", flex: 1, overflowY: "auto", padding: "2px 18px 14px" }}>
+      <div className="bootIn d1 tabWrap" style={{ position: "relative", flex: 1, overflowY: "auto", padding: "2px 18px 14px" }}>
+        {/* The tab we just left stays mounted underneath until its exit
+            animation finishes, so a switch is one continuous move instead of
+            the old panel disappearing on the frame the new one appears. */}
+        {leaving && (
+          <div key={`out-${leaving.tab}`} aria-hidden className={`tabLeaving ${leaving.dir === 1 ? "tabOut-r" : "tabOut-l"}`}>
+            {renderTab(leaving.tab)}
+          </div>
+        )}
         {/* keyed by tab so the entrance animation replays on every switch */}
         <div key={tab} className={dir === 1 ? "tabIn-r" : "tabIn-l"}>
-          {tab === "player" && <PlayerTab />}
-          {tab === "dj" && <DJTab />}
-          {tab === "fx" && <FXRackTab />}
-          {tab === "library" && <LibraryTab onLoadClick={() => fileInputRef.current?.click()} onAnyFileClick={() => anyInputRef.current?.click()} />}
-          {tab === "me" && <MeTab />}
+          {renderTab(tab)}
         </div>
       </div>
 

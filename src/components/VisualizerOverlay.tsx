@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { BG, BORDER, CYAN, IMPACTS, MAG, P_STYLES, PALETTES, VIS_THEMES } from "../constants";
+import { BG, BORDER, CYAN, IMPACTS, MAG, P_STYLES, PALETTES, STAGED_MARK, STAGED_THEMES, VIS_THEMES } from "../constants";
 import { nextTrack, prevTrack, togglePlay } from "../audio/transport";
 import { getCurrentTrack, useStore } from "../store/useStore";
 import { mix } from "../theme";
-import { canvasRefs } from "../visualizer/live";
+import { canvasRefs, live } from "../visualizer/live";
+import { MODES_3D } from "../visualizer/project3d";
 import { startVideoExport, stopVideoExport, videoExportSupported } from "../audio/videoRecorder";
 import { fmt } from "../utils";
 import { LYRIC_STYLES } from "../visualizer/lyricRenderer";
@@ -112,10 +113,11 @@ export function VisualizerOverlay() {
         {/* compact theme picker: one chip + fluid dropdown, no chip clutter */}
         <div style={{ position: "relative", pointerEvents: "auto" }}>
           <button
+            data-themechip
             onClick={() => setThemeMenu((x) => !x)}
             style={{ ...chip(themeMenu), display: "flex", alignItems: "center", gap: 9 }}
           >
-            ◉ {visTheme}
+            {STAGED_THEMES.has(visTheme) ? STAGED_MARK : "◉"} {visTheme}
             <span style={{ display: "inline-block", fontSize: 9, transform: themeMenu ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}>▼</span>
           </button>
           {themeMenu && (
@@ -131,14 +133,23 @@ export function VisualizerOverlay() {
               {VIS_THEMES.map((v) => (
                 <div
                   key={v}
+                  data-th={v}
                   onClick={() => { set({ visTheme: v }); setThemeMenu(false); }}
                   style={{
                     padding: "9px 4px", borderRadius: 9, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.04em",
                     cursor: "pointer", textAlign: "center", whiteSpace: "nowrap", overflow: "hidden",
                     color: visTheme === v ? BG : "rgba(255,255,255,0.8)",
-                    background: visTheme === v ? CYAN : "rgba(255,255,255,0.03)",
+                    // staged themes get a faint tinted plate so the ◈ row reads
+                    // as a family rather than as scattered stray glyphs
+                    background: visTheme === v ? CYAN
+                      : STAGED_THEMES.has(v) ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)",
+                    boxShadow: visTheme !== v && STAGED_THEMES.has(v) ? `inset 0 0 0 1px ${MAG}44` : "none",
                   }}
+                  title={STAGED_THEMES.has(v) ? "Staged theme — effects layer in as the track builds, with a set-piece on drops" : undefined}
                 >
+                  {STAGED_THEMES.has(v) && (
+                    <span style={{ color: visTheme === v ? BG : MAG, marginRight: 3 }}>{STAGED_MARK}</span>
+                  )}
                   {v}
                 </div>
               ))}
@@ -157,6 +168,10 @@ export function VisualizerOverlay() {
               </div>
               <div style={{ gridColumn: "1 / -1", fontSize: 9, color: "rgba(255,255,255,0.35)", padding: "2px 4px 0" }}>
                 CYCLE / SHUFFLE change the theme every ~16s while playing. OFF stays put.
+              </div>
+              <div style={{ gridColumn: "1 / -1", fontSize: 9, color: "rgba(255,255,255,0.35)", padding: "4px 4px 0" }}>
+                <span style={{ color: MAG }}>{STAGED_MARK}</span> STAGED — effects layer in as instruments and vocals
+                enter, with a big set-piece on every drop. Best with SYNC MODE → ANALYZED.
               </div>
             </div>
           )}
@@ -202,7 +217,7 @@ export function VisualizerOverlay() {
       )}
 
       {visPanel && (
-        <div style={{ position: "absolute", top: 62, right: 16, width: "min(88vw, 330px)", maxHeight: "68vh", overflowY: "auto", background: "rgba(10,12,18,0.93)", border: BORDER, borderRadius: 16, padding: 14, backdropFilter: "blur(20px)", zIndex: 5 }}>
+        <div className="dropin" style={{ position: "absolute", top: 62, right: 16, width: "min(88vw, 330px)", maxHeight: "68vh", overflowY: "auto", background: "rgba(10,12,18,0.93)", border: BORDER, borderRadius: 16, padding: 14, backdropFilter: "blur(20px)", zIndex: 5 }}>
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", marginBottom: 8 }}>COLOR PALETTE — {PALETTES.length - 1} + CUSTOM</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
             {PALETTES.map((p) => {
@@ -241,6 +256,27 @@ export function VisualizerOverlay() {
           <Slider label="ZOOM" value={visCfg.zoom} min={0.6} max={1.6} step={0.02} format={(v) => `${v.toFixed(2)}×`} onChange={(v) => setV("zoom", v)} />
           <Slider label="SCENE SPIN" value={visCfg.spinV} min={-1} max={1} step={0.05} format={(v) => (Math.abs(v) < 0.05 ? "OFF" : v.toFixed(2))} onChange={(v) => setV("spinV", v)} />
 
+          <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 6px" }}>3D SPACE</div>
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+            {MODES_3D.map((m) => (
+              <button
+                key={m}
+                data-3d={m}
+                onClick={() => setV("vis3d", m)}
+                style={{ ...chip((visCfg.vis3d ?? "OFF") === m, m === "OFF" ? CYAN : MAG), padding: "6px 11px", fontSize: 9.5 }}
+              >{m === "OFF" ? "✕ OFF" : `▣ ${m}`}</button>
+            ))}
+          </div>
+          <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, margin: "6px 0 4px" }}>
+            Works with <em>every</em> theme — the visualizer is rendered as normal, then mapped
+            into perspective. FLOOR lays it on a plane running to the horizon, ROOM makes a
+            corridor of floor and ceiling, SPIN turns it on a panel, DEPTH extrudes it into a
+            tunnel coming at you.
+          </div>
+          {(visCfg.vis3d ?? "OFF") !== "OFF" && (
+            <Slider label="DEPTH" value={visCfg.vis3dAmt ?? 0.5} min={0} max={1} step={0.02} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setV("vis3dAmt", v)} color={MAG} />
+          )}
+
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "10px 0 8px" }}>PARTICLES</div>
           <Slider label="COUNT" value={visCfg.particles} min={0} max={1} step={0.01} format={(v) => `${Math.round(v * 150)}`} onChange={(v) => setV("particles", v)} />
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
@@ -252,12 +288,25 @@ export function VisualizerOverlay() {
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 6px" }}>SYNC MODE</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             <Toggle label="ANALYZED" on={analyzedMode} onChange={(v) => set({ analyzedMode: v })} color={MAG} />
+            <Toggle label="FAST BEATS" on={visCfg.fastBeats} onChange={(v) => setV("fastBeats", v)} />
+            {analyzedMode && track && (
+              <button
+                onClick={async () => {
+                  const { ensureAnalysis } = await import("../audio/analysis");
+                  const a = await ensureAnalysis(track.fileId, true);
+                  if (a) { live.anal = a; live.analBeat = 0; live.analHit = 0; }
+                }}
+                style={{ ...chip(false), padding: "6px 11px", fontSize: 9.5 }}
+              >⟳ REANALYZE</button>
+            )}
             {!!analyzeStatus && <span style={{ fontSize: 10, color: MAG }}>{analyzeStatus}</span>}
           </div>
           <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, margin: "5px 0 4px" }}>
             Reads the whole file once and builds a beat map, so beats land exactly and the
-            visuals swell <em>into</em> drops instead of reacting after them. Takes a few
-            seconds per track the first time, then it's cached.
+            visuals swell <em>into</em> drops instead of reacting after them. Runs off the main
+            thread, so it never interrupts playback. Cached per track — REANALYZE rebuilds it if
+            the timing ever looks wrong. FAST BEATS also flashes on drum fills and double-time
+            passages instead of only the tempo grid.
           </div>
 
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "10px 0 8px" }}>IMPACT</div>

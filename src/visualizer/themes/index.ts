@@ -68,6 +68,15 @@ import { SAMURAI } from "./samurai";
 import { QUANTUM } from "./quantum";
 import { TOPOGRAPH } from "./topograph";
 import { CLOCK } from "./clock";
+// staged themes — layered arrangements that build with the track (see STAGED_THEMES)
+import { ASCENSION } from "./ascension";
+import { LEVIATHAN } from "./leviathan";
+import { CATHODE } from "./cathode";
+import { CITADEL } from "./citadel";
+import { SYNAPSE } from "./synapse";
+// natively 3D themes — real perspective projection, not the project3d wrapper
+import { VOXEL } from "./voxel";
+import { TESSERACT } from "./tesseract";
 
 export const themes: Record<string, ThemeDraw> = {
   RING, KALEIDO, HELIX, WAVES, LASERS, GRID, ORB, RIPPLES, SPIRAL, FIREFLIES,
@@ -79,4 +88,6 @@ export const themes: Record<string, ThemeDraw> = {
   PRISM, REACTOR, ORIGAMI, SANDSTORM, CATHEDRAL, BIOLUME, MECHANISM, WORMHOLE, GRAFFITI, CONSTELLATION, VHS, LAVALAMP,
   SAMURAI, QUANTUM, TOPOGRAPH,
   MARQUEE, NEONSIGN, CLOCK,
+  ASCENSION, LEVIATHAN, CATHODE, CITADEL, SYNAPSE,
+  VOXEL, TESSERACT,
 };

@@ -90,6 +90,13 @@ export interface VisCfg {
   autoMode: "off" | "cycle" | "shuffle";
   /** force maximum backing resolution, disabling adaptive quality scaling */
   hiRes: boolean;
+  /** flash on every percussive hit, not just the tempo grid (analyzed mode) */
+  fastBeats: boolean;
+  /** 3D projection applied to whatever the theme drew: OFF renders it flat,
+   * the rest map it onto a perspective surface (see project3d.ts) */
+  vis3d: string;
+  /** 0..1 — how aggressive the 3D perspective is */
+  vis3dAmt: number;
   /** extra A/V sync offset in ms on top of the measured output latency —
    * raise it for Bluetooth headphones, which delay sound but not the screen */
   syncMs: number;

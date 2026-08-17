@@ -55,7 +55,20 @@ export const VIS_THEMES = [
   "PRISM", "REACTOR", "ORIGAMI", "SANDSTORM", "CATHEDRAL", "BIOLUME", "MECHANISM", "WORMHOLE", "GRAFFITI", "CONSTELLATION", "VHS", "LAVALAMP",
   "SAMURAI", "QUANTUM", "TOPOGRAPH",
   "MARQUEE", "NEONSIGN", "CLOCK",
+  "ASCENSION", "LEVIATHAN", "CATHODE", "CITADEL", "SYNAPSE",
+  "VOXEL", "TESSERACT",
 ];
+
+/** Staged themes: instead of one look reacting to volume, these build in layers.
+ * New elements arrive as the arrangement fills out (a second instrument, vocals),
+ * and a detected drop triggers a one-off set-piece. They lean on the offline
+ * analysis (dropE / section / hitE), so they're at their best in ANALYZED mode.
+ * The picker marks them with STAGED_MARK. */
+export const STAGED_THEMES = new Set([
+  "ASCENSION", "LEVIATHAN", "CATHODE", "CITADEL", "SYNAPSE",
+]);
+
+export const STAGED_MARK = "◈";
 
 export interface Palette {
   id: string;
@@ -124,7 +137,8 @@ export const DEFAULT_VIS_CFG: VisCfg = {
   palette: "NEON", h1: 187, h2: 317,
   glow: 0.7, trail: 0.55, particles: 0.35, pStyle: "RISE",
   speed: 1, intensity: 1, zoom: 1, spinV: 0, bgWash: 0.3, thick: 1,
-  mirror: false, shake: false, flash: true, impacts: [], autoMode: "off", hiRes: false, syncMs: 0,
+  mirror: false, shake: false, flash: true, impacts: [], autoMode: "off", hiRes: false, fastBeats: true, syncMs: 0,
+  vis3d: "OFF", vis3dAmt: 0.5,
 };
 
 export const MONO = "'JetBrains Mono', monospace";

@@ -41,12 +41,14 @@ function getRay(i: number, color: string, key: string): HTMLCanvasElement {
   lg.addColorStop(0.45, color);
   lg.addColorStop(1, "rgba(0,0,0,0)");
   g.fillStyle = lg;
-  // widening wedge: narrow at the prism, splayed at the far end
+  // Widening wedge, but already broad where it leaves the crystal. A needle
+  // tip left uncovered background between neighbouring rays, which read as a
+  // black notch hugging the prism's flat edges.
   g.beginPath();
-  g.moveTo(0, RH * 0.5 - 1.4);
+  g.moveTo(0, RH * 0.5 - 7);
   g.lineTo(RW, 0);
   g.lineTo(RW, RH);
-  g.lineTo(0, RH * 0.5 + 1.4);
+  g.lineTo(0, RH * 0.5 + 7);
   g.closePath();
   g.fill();
   raySprites[i] = cv;
@@ -60,7 +62,7 @@ function getRay(i: number, color: string, key: string): HTMLCanvasElement {
 // every beat fractures the input into extra splayed beams, and each fan
 // shatters into strobing, jittering rays that spray the whole screen.
 export const PRISM: ThemeDraw = ({
-  c, w, h, cx, cy, R, vt, beat, beatE, energy, cfg, bassV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, cx, cy, R, vt, beat, beatE, energy, dropE, hit, hitE, cfg, bassV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.prism ??= {
     beams: [] as Beam[],
@@ -68,23 +70,42 @@ export const PRISM: ThemeDraw = ({
     rot: 0,
     flash: 0,
     drift: 0,
+    /** rings thrown off the crystal when a drop lands */
+    waves: [] as number[],
+    /** latches high through a drop so the aftermath keeps burning */
+    burn: 0,
   });
 
   const beams: Beam[] = S.beams;
   const shards: Shard[] = S.shards;
   if (beams.length === 0) beams.push({ ang: 0, ph: 0, life: 0, a: 1 });
 
-  const E = energy;
+  // ── the drop ──────────────────────────────────────────────────────────────
+  // D drives everything below: the crystal is overdriven rather than merely
+  // brighter — it spins up hard, splits into the full beam count, sweeps the
+  // whole 360°, and throws shockwaves. `burn` decays slowly so the aftermath
+  // keeps glowing instead of snapping back the instant the envelope falls.
+  const D = dropE;
+  S.burn = Math.max(S.burn * 0.965, D);
+  const B = S.burn;
+  // energy is bumped by the drop so every existing energy-driven term escalates
+  const E = Math.min(1.6, energy + D * 0.85);
 
   // ── prism spin: a lazy turn when calm, a blur when driving ────────────────
-  S.rot += (0.0035 + E * 0.055 + beatE * 0.05 * E) * cfg.speed;
-  S.drift += (0.0012 + E * 0.006) * cfg.speed;
+  S.rot += (0.0035 + E * 0.055 + beatE * 0.05 * E + D * D * 0.42) * cfg.speed;
+  S.drift += (0.0012 + E * 0.006 + D * 0.03) * cfg.speed;
   S.flash *= 0.88;
+  if (D > 0.5 && S.waves.length < 5 && (vt | 0) % 9 === 0) S.waves.push(0);
+  for (let i = S.waves.length - 1; i >= 0; i--) {
+    S.waves[i] += (0.014 + D * 0.03) * cfg.speed;
+    if (S.waves[i] > 1) S.waves.splice(i, 1);
+  }
 
   // ── beat fractures the input beam into splinters ──────────────────────────
-  if (beat) {
-    S.flash = Math.min(1, S.flash + 0.45 + E * 0.5);
-    const want = 1 + Math.round(E * (MAX_BEAMS - 1));
+  // during a drop every percussive hit counts, not just the tempo grid
+  if (beat || (D > 0.25 && hit)) {
+    S.flash = Math.min(1, S.flash + 0.45 + E * 0.5 + D * 0.6);
+    const want = 1 + Math.round(Math.min(1, E + D) * (MAX_BEAMS - 1));
     while (beams.length < want) {
       beams.push({
         ang: (Math.random() - 0.5) * (0.7 + E * 2.4),
@@ -120,7 +141,8 @@ export const PRISM: ThemeDraw = ({
   if (beams.length > 1 + Math.round(E * (MAX_BEAMS - 1))) beams[beams.length - 1].life -= 6;
 
   const px = cx, py = cy;                       // prism sits at frame centre
-  const pr = R * (0.13 + bassV * 0.03) * (1 + beatE * 0.12);
+  // the crystal swells and jitters through the drop
+  const pr = R * (0.13 + bassV * 0.03) * (1 + beatE * 0.12 + B * 0.42 + hitE * D * 0.16);
   const rayLen = Math.hypot(w, h) * 0.62;
   const inLen = Math.max(w, h) * 0.62;
 
@@ -154,7 +176,9 @@ export const PRISM: ThemeDraw = ({
     getRay(k, CMix(k / (BANDS - 1), baseA, baseL), key + k);
   }
 
-  const spread = 0.42 + E * 1.35;
+  // at full drop the fan opens all the way round, so the prism stops being a
+  // beam-splitter and becomes a star burning in every direction at once
+  const spread = 0.42 + E * 1.35 + D * 4.4;
   // strobing/jitter only really bites at high energy
   const shatter = Math.min(1.3, E * E * I);
   for (let i = 0; i < beams.length; i++) {
@@ -166,17 +190,54 @@ export const PRISM: ThemeDraw = ({
       const jit = shatter * Math.sin(vt * (0.09 + f * 0.05) + k * 2.1 + b.ph) * 0.42;
       const a2 = exit + (f - 0.5) * spread + jit;
       const strobe = 1 - shatter * 0.55 * (0.5 + 0.5 * Math.sin(vt * 0.55 + k * 1.7));
-      const len = rayLen * (0.55 + f * 0.3) * (1 + beatE * 0.25);
-      const halfW = R * (0.035 + E * 0.05) * (1 + beatE * 0.5);
-      c.globalAlpha = Math.min(0.3, b.a * (0.24 + trebV * 0.14 + beatE * 0.2) * strobe);
+      const len = rayLen * (0.55 + f * 0.3) * (1 + beatE * 0.25 + B * 0.7);
+      const halfW = R * (0.035 + E * 0.05) * (1 + beatE * 0.5 + B * 0.8);
+      c.globalAlpha = Math.min(0.44, b.a * (0.24 + trebV * 0.14 + beatE * 0.2 + B * 0.3) * strobe);
       c.save();
-      c.translate(px + Math.cos(a2) * pr * 0.75, py + Math.sin(a2) * pr * 0.75);
+      // originate *inside* the crystal: the triangle's flat edges sit at
+      // 0.5·pr while its corners reach pr, so any origin outside that leaves a
+      // visible gap along the edges
+      c.translate(px + Math.cos(a2) * pr * 0.22, py + Math.sin(a2) * pr * 0.22);
       c.rotate(a2);
       c.drawImage(raySprites[k], 0, -halfW, len, halfW * 2);
       c.restore();
     }
   }
   c.globalAlpha = 1;
+
+  // ── core glow ─────────────────────────────────────────────────────────────
+  // Painted between the rays and the crystal so the hand-off is a bloom rather
+  // than a seam. Without it the flat edges of the triangle sit against bare
+  // background wherever the fan happens not to point.
+  {
+    const gr = pr * (1.7 + beatE * 0.3 + B * 1.6);
+    const cg2 = c.createRadialGradient(px, py, 0, px, py, gr);
+    // kept under saturation on purpose: additive over the ray fan, a hotter
+    // core clips to flat white and the crystal loses its colour entirely
+    cg2.addColorStop(0, C1(0.2 + S.flash * 0.12 + B * 0.2, 64));
+    cg2.addColorStop(0.35, CMix(0.5, 0.12 + B * 0.16, 56));
+    cg2.addColorStop(1, "transparent");
+    c.fillStyle = cg2;
+    c.beginPath();
+    c.arc(px, py, gr, 0, Math.PI * 2);
+    c.fill();
+  }
+
+  // ── drop shockwaves ───────────────────────────────────────────────────────
+  if (S.waves.length) {
+    c.save();
+    glow(Math.min(24, 10 + B * 16), C2());
+    for (const rr of S.waves) {
+      const a3 = (1 - rr) ** 2 * (0.5 + B * 0.5);
+      c.strokeStyle = CMix(rr, a3 * 0.75, 70);
+      c.lineWidth = (1.5 + (1 - rr) * 5) * TK;
+      c.beginPath();
+      c.arc(px, py, rr * Math.hypot(w, h) * 0.55, 0, Math.PI * 2);
+      c.stroke();
+    }
+    noGlow();
+    c.restore();
+  }
 
   // ── the crystal itself ────────────────────────────────────────────────────
   const faces = 3;

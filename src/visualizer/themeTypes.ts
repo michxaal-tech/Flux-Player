@@ -36,6 +36,22 @@ export interface ThemeCtx {
    * sections versus its driving ones.
    */
   energy: number;
+  /**
+   * Drop envelope, 0..1. In ANALYZED mode this rises in the ~1.5s *before* a
+   * detected drop and decays over ~3s after it, so a theme can build tension
+   * and then detonate on the hit. Without analysis it approximates from a
+   * sudden sustained jump in low-end energy.
+   */
+  dropE: number;
+  /**
+   * Fires on every significant onset, not just the tempo grid — drum fills and
+   * double-time passages produce several of these per beat.
+   */
+  hit: boolean;
+  /** decaying envelope for `hit`, same shape as beatE but faster */
+  hitE: number;
+  /** broad section index; increments when the arrangement changes character */
+  section: number;
   cfg: VisCfg;
   /** cfg.intensity */
   I: number;

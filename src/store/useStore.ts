@@ -94,6 +94,8 @@ export interface StoreState {
   /** drive visuals from a pre-computed timeline instead of live FFT */
   analyzedMode: boolean;
   analyzeStatus: string;
+  /** why the mini player didn't open, shown in ME → PLAYBACK */
+  miniStatus: string;
   /** a Spotify session exists in this browser (import is metadata-only) */
   spotifyReady: boolean;
   /** float a mini player when the app is backgrounded */
@@ -197,6 +199,7 @@ export const useStore = create<StoreState>()(
         miniPlayer: true,
         analyzedMode: false,
         analyzeStatus: "",
+        miniStatus: "",
         spotifyReady: false,
         tab: "player",
         shortcutsOpen: false,

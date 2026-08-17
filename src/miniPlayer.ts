@@ -24,8 +24,35 @@ interface DocPiP {
 const docPiP = (): DocPiP | null =>
   (window as unknown as { documentPictureInPicture?: DocPiP }).documentPictureInPicture ?? null;
 
+/** Safari's own PiP predates the standard one and is still the only one that
+ * works on iPhone/iPad — `document.pictureInPictureEnabled` is false there, so
+ * feature-detecting on the standard API alone reports "unsupported" on exactly
+ * the devices that do support it. */
+interface WebKitVideo extends HTMLVideoElement {
+  webkitSupportsPresentationMode?: (mode: string) => boolean;
+  webkitSetPresentationMode?: (mode: string) => void;
+  webkitPresentationMode?: string;
+}
+function webkitPiPAvailable(): boolean {
+  if (typeof document === "undefined") return false;
+  const v = document.createElement("video") as WebKitVideo;
+  return typeof v.webkitSupportsPresentationMode === "function" &&
+    v.webkitSupportsPresentationMode("picture-in-picture");
+}
+
+let statusTimer: number | null = null;
+/** Surfaces why the mini player didn't open. Every path here can be refused by
+ * the browser for reasons the user can act on, so failing silently is wrong. */
+function setStatus(msg: string, sticky = false): void {
+  useStore.setState({ miniStatus: msg });
+  if (statusTimer) clearTimeout(statusTimer);
+  if (msg && !sticky) statusTimer = window.setTimeout(() => useStore.setState({ miniStatus: "" }), 7000);
+}
+
 export function miniPlayerSupported(): boolean {
-  return !!docPiP() || (typeof document !== "undefined" && !!document.pictureInPictureEnabled);
+  return !!docPiP() ||
+    (typeof document !== "undefined" && !!document.pictureInPictureEnabled) ||
+    webkitPiPAvailable();
 }
 
 let unsub: (() => void) | null = null;
@@ -97,7 +124,7 @@ async function openDocumentPiP(): Promise<boolean> {
 
 // ── Video PiP: paint the mini player into a canvas and float that ───────
 async function openVideoPiP(): Promise<boolean> {
-  if (!document.pictureInPictureEnabled) return false;
+  if (!document.pictureInPictureEnabled && !webkitPiPAvailable()) return false;
   const cv = vidCanvas ?? document.createElement("canvas");
   vidCanvas = cv;
   cv.width = 640;
@@ -133,21 +160,58 @@ async function openVideoPiP(): Promise<boolean> {
   };
   paint();
 
-  const v = vid ?? document.createElement("video");
+  const v = (vid ?? document.createElement("video")) as WebKitVideo;
   vid = v;
   v.muted = true;              // the real audio keeps coming from the engine
   v.playsInline = true;
-  v.style.cssText = "position:fixed;left:-9999px;width:1px;height:1px";
+  v.autoplay = true;
+  // Safari won't take a video into PiP while it's display:none or zero-sized,
+  // so it stays a real 1×1 element parked off-screen rather than hidden.
+  v.style.cssText = "position:fixed;left:-9999px;top:0;width:160px;height:90px;opacity:0.01;pointer-events:none";
   if (!v.isConnected) document.body.appendChild(v);
-  if (!v.srcObject) v.srcObject = cv.captureStream(2);
+  // 15fps: at 2fps Safari can sit on a stream long enough that the readyState
+  // never reaches HAVE_CURRENT_DATA before the PiP request, and it rejects.
+  if (!v.srcObject) v.srcObject = cv.captureStream(15);
+
+  // repaint continuously from here so the stream actually carries frames
+  vidTimer = window.setInterval(paint, 250);
+
   try {
     await v.play();
-    await v.requestPictureInPicture();
+    // wait (briefly) for a decoded frame — PiP is refused on an empty video
+    if (v.readyState < 2) {
+      await new Promise<void>((res) => {
+        const done = () => res();
+        v.addEventListener("loadeddata", done, { once: true });
+        setTimeout(done, 1500);
+      });
+    }
   } catch {
+    if (vidTimer) { clearInterval(vidTimer); vidTimer = null; }
+    setStatus("This browser blocked the floating window. Audio keeps playing in the background.");
     return false;
   }
-  vidTimer = window.setInterval(paint, 500);
+
+  try {
+    if (document.pictureInPictureEnabled) {
+      await v.requestPictureInPicture();
+    } else if (typeof v.webkitSetPresentationMode === "function") {
+      v.webkitSetPresentationMode("picture-in-picture");
+    } else {
+      throw new Error("no pip");
+    }
+  } catch {
+    if (vidTimer) { clearInterval(vidTimer); vidTimer = null; }
+    setStatus(
+      "Picture in Picture was refused. On iPhone check Settings → General → Picture in Picture, and try OPEN NOW while the song is playing."
+    );
+    return false;
+  }
   v.addEventListener("leavepictureinpicture", closeMiniPlayer, { once: true });
+  // Safari reports its own exit through this event rather than the standard one
+  v.addEventListener("webkitpresentationmodechanged", () => {
+    if ((v as WebKitVideo).webkitPresentationMode !== "picture-in-picture") closeMiniPlayer();
+  });
   // the system PiP controls drive the real transport
   navigator.mediaSession?.setActionHandler?.("play", () => togglePlay());
   navigator.mediaSession?.setActionHandler?.("pause", () => togglePlay());

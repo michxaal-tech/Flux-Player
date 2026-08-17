@@ -111,8 +111,26 @@ await step("visualizer opens, theme dropdown works, tune panel works", async () 
   await page.click("button:has-text('⚙ TUNE')");
   await page.waitForSelector("text=COLOR PALETTE");
   await page.click("button:has-text('VAPOR')");
+  // Escape peels one layer at a time: first the tune panel, then the overlay.
+  // It used to close both at once, so a stray Escape while tuning dumped you
+  // back to the player.
   await page.keyboard.press("Escape");
   await page.waitForSelector("text=COLOR PALETTE", { state: "detached" });
+  if (!(await page.$("button[data-themechip]"))) throw new Error("Escape closed the whole visualizer, not just the panel");
+  await page.keyboard.press("Escape");
+  await page.waitForSelector("button[data-themechip]", { state: "detached" });
+});
+
+await step("3D projection applies to any theme", async () => {
+  await page.click("button:has-text('◉ VISUALS')");
+  await page.click("button:has-text('⚙ TUNE')");
+  await page.waitForSelector("text=3D SPACE");
+  await page.click('button[data-3d="FLOOR"]');
+  await page.waitForSelector("text=DEPTH"); // amount slider appears once on
+  await page.click('button[data-3d="OFF"]');
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await page.waitForSelector("button[data-themechip]", { state: "detached" });
 });
 
 await step("Me tab: recorder saves a take", async () => {

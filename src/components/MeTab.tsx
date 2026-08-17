@@ -56,6 +56,7 @@ export function MeTab() {
   const aiReady = useStore((s) => s.aiReady);
   const miniPlayer = useStore((s) => s.miniPlayer);
   const [miniSupported] = useState(miniPlayerSupported);
+  const miniStatus = useStore((s) => s.miniStatus);
 
   const minutes = Math.floor(stats.seconds / 60);
   let lvlIdx = 0;
@@ -155,15 +156,19 @@ export function MeTab() {
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 12 }}>
           <Toggle label="MINI PLAYER" on={miniPlayer} onChange={(v) => set({ miniPlayer: v })} color={MAG} />
-          {miniSupported && (
-            <button onClick={() => openMiniPlayer()} style={chip(false, MAG)}>⧉ OPEN NOW</button>
-          )}
+          {/* Always offered, even where support looks absent: detection can be
+              wrong, and a button that reports why it failed beats one that
+              isn't there at all. */}
+          <button onClick={() => openMiniPlayer()} style={chip(false, MAG)}>⧉ OPEN NOW</button>
         </div>
         <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.4)", lineHeight: 1.55, marginTop: 6 }}>
           {miniSupported
-            ? "Floats a small always-on-top player when you leave FLUX. Browsers only allow that window to open from a tap, so if it doesn't appear automatically, use OPEN NOW before switching away."
-            : "This browser can't float a window. Audio keeps playing in the background either way, with controls on your lock screen and in Control Center."}
+            ? "Floats a small always-on-top player when you leave FLUX. Browsers only allow that window to open from a tap, so if it doesn't appear on its own, hit OPEN NOW first — it then stays up when you switch away."
+            : "This browser doesn't advertise a floating window. Try OPEN NOW anyway. Either way audio keeps playing in the background, with controls on your lock screen and in Control Center."}
         </div>
+        {!!miniStatus && (
+          <div style={{ fontSize: 10.5, color: MAG, lineHeight: 1.55, marginTop: 6 }}>{miniStatus}</div>
+        )}
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 12 }}>
           <span style={{ fontSize: 11, letterSpacing: "0.1em", color: "rgba(255,255,255,0.55)" }}>SLEEP TIMER</span>
           {[15, 30, 60].map((m) => (

@@ -49,16 +49,29 @@ input[type=text], textarea { font-family: 'Space Grotesk', sans-serif; }
   from { opacity: 0; transform: translateY(10px) scale(0.985); filter: blur(6px); }
   to   { opacity: 1; transform: none; filter: blur(0); }
 }
+/* Tab travel. The incoming panel arrives from the side you moved toward and
+   settles out of a slight defocus, which reads as depth rather than a slide. */
 @keyframes fluxTabInR {
-  from { opacity: 0; transform: translate3d(26px, 6px, 0) scale(0.985); }
-  to   { opacity: 1; transform: none; }
+  from { opacity: 0; transform: translate3d(34px, 8px, 0) scale(0.972); filter: blur(7px); }
+  to   { opacity: 1; transform: none; filter: blur(0); }
 }
 @keyframes fluxTabInL {
-  from { opacity: 0; transform: translate3d(-26px, 6px, 0) scale(0.985); }
-  to   { opacity: 1; transform: none; }
+  from { opacity: 0; transform: translate3d(-34px, 8px, 0) scale(0.972); filter: blur(7px); }
+  to   { opacity: 1; transform: none; filter: blur(0); }
+}
+/* …and the outgoing one actually leaves. Without these the old panel was cut
+   dead on the frame the new one mounted, which is what made switching feel
+   abrupt no matter how nice the entrance was. */
+@keyframes fluxTabOutL {
+  from { opacity: 1; transform: none; filter: blur(0); }
+  to   { opacity: 0; transform: translate3d(-30px, 0, 0) scale(0.966); filter: blur(8px); }
+}
+@keyframes fluxTabOutR {
+  from { opacity: 1; transform: none; filter: blur(0); }
+  to   { opacity: 0; transform: translate3d(30px, 0, 0) scale(0.966); filter: blur(8px); }
 }
 @keyframes fluxRise {
-  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  from { opacity: 0; transform: translate3d(0, 16px, 0) scale(0.99); }
   to   { opacity: 1; transform: none; }
 }
 @keyframes fluxPop {
@@ -76,18 +89,31 @@ input[type=text], textarea { font-family: 'Space Grotesk', sans-serif; }
 .bootIn.d2 { animation-delay: 0.13s; }
 
 /* tab content: slides in from the side you travelled from */
-.tabIn-r { animation: fluxTabInR 0.34s var(--ease-out) both; }
-.tabIn-l { animation: fluxTabInL 0.34s var(--ease-out) both; }
+.tabIn-r { animation: fluxTabInR 0.42s var(--ease-out) both; }
+.tabIn-l { animation: fluxTabInL 0.42s var(--ease-out) both; }
+/* The leaving panel is stacked under the arriving one for the length of its
+   exit, so the two overlap instead of the layout jumping between them. */
+.tabWrap { position: relative; }
+.tabLeaving {
+  position: absolute; inset: 0; pointer-events: none;
+  overflow: hidden; will-change: transform, opacity, filter;
+}
+.tabOut-r { animation: fluxTabOutL 0.3s var(--ease-soft) both; }
+.tabOut-l { animation: fluxTabOutR 0.3s var(--ease-soft) both; }
 
 /* children of a freshly-shown tab rise in sequence */
-.stagger > * { animation: fluxRise 0.42s var(--ease-out) both; }
-.stagger > *:nth-child(1) { animation-delay: 0.02s; }
-.stagger > *:nth-child(2) { animation-delay: 0.06s; }
-.stagger > *:nth-child(3) { animation-delay: 0.10s; }
-.stagger > *:nth-child(4) { animation-delay: 0.14s; }
-.stagger > *:nth-child(5) { animation-delay: 0.18s; }
-.stagger > *:nth-child(6) { animation-delay: 0.22s; }
-.stagger > *:nth-child(n + 7) { animation-delay: 0.26s; }
+.stagger > * { animation: fluxRise 0.46s var(--ease-out) both; }
+.stagger > *:nth-child(1) { animation-delay: 0.03s; }
+.stagger > *:nth-child(2) { animation-delay: 0.07s; }
+.stagger > *:nth-child(3) { animation-delay: 0.11s; }
+.stagger > *:nth-child(4) { animation-delay: 0.15s; }
+.stagger > *:nth-child(5) { animation-delay: 0.19s; }
+.stagger > *:nth-child(6) { animation-delay: 0.23s; }
+.stagger > *:nth-child(7) { animation-delay: 0.27s; }
+.stagger > *:nth-child(8) { animation-delay: 0.31s; }
+.stagger > *:nth-child(n + 9) { animation-delay: 0.34s; }
+/* the panel that is on its way out must not replay its stagger */
+.tabLeaving .stagger > * { animation: none; }
 
 /* the active-tab pill slides between tabs instead of snapping */
 .tabInk {
@@ -114,6 +140,24 @@ button:active:not(:disabled) { transform: scale(0.955); }
 /* full-screen surfaces bloom open */
 .overlayIn { animation: fluxPop 0.34s var(--ease-out) both; }
 
+/* Panels that slide up from the bottom edge (the visualizer TUNE sheet). They
+   overshoot very slightly on the way in, which is what makes a sheet feel
+   attached to your thumb rather than teleported into place. */
+@keyframes fluxSheet {
+  from { opacity: 0; transform: translate3d(0, 26px, 0) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+.sheetIn { animation: fluxSheet 0.36s var(--ease-back) both; }
+
+/* the accent pill picks up a soft trail as it travels between tabs */
+.tabInk { box-shadow: 0 0 12px var(--ac1); }
+.tabBtn[data-on="1"] .tabIcon { animation: fluxIconPop 0.42s var(--ease-back); }
+@keyframes fluxIconPop {
+  0%   { transform: translateY(0) scale(1); }
+  45%  { transform: translateY(-5px) scale(1.26); }
+  100% { transform: translateY(-2px) scale(1.14); }
+}
+
 /* a light sweeps across the primary action once on load */
 .sheen { position: relative; overflow: hidden; }
 .sheen::after {
@@ -126,9 +170,12 @@ button:active:not(:disabled) { transform: scale(0.955); }
 /* Honour the OS setting: people who get motion sick, or who simply asked for
    less movement, get the same UI with the animation stripped out. */
 @media (prefers-reduced-motion: reduce) {
-  .bootIn, .tabIn-r, .tabIn-l, .stagger > *, .overlayIn, .sheen::after { animation: none !important; }
+  .bootIn, .tabIn-r, .tabIn-l, .tabOut-r, .tabOut-l, .stagger > *, .overlayIn,
+  .sheetIn, .sheen::after, .tabBtn[data-on="1"] .tabIcon, .dropin { animation: none !important; }
   .tabInk, .tabBtn, .tabBtn .tabIcon, button, .liftable { transition: none !important; }
   button:active:not(:disabled), .liftable:hover { transform: none !important; }
+  /* the outgoing panel has no exit to play, so it must not linger on top */
+  .tabLeaving { display: none !important; }
 }
 
 /* ── glass surfaces ──────────────────────────────────────────────────────
