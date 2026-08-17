@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BORDER, CYAN, MAG, MONO } from "../constants";
 import { getCurrentTrack, useStore } from "../store/useStore";
 import { chip, Module, NewTag, Slider } from "./ui";
 import {
-  loadMelody, PATCHES, playNotes, setRevoiceLevel, stopNotes, toMidiFile, transcribe,
-  type Melody, type Patch,
+  loadMelody, playArrangement, setRevoiceLevel, stopNotes, toMidiFile, transcribe,
+  type Melody, type PartMix,
 } from "../audio/revoice";
+import { arrange, KEY_NAMES, STYLES, type Arrangement, type Style } from "../audio/arrange";
 
 /** Common scales, as pitch-class sets. Locking to one pulls the handful of
  * mis-tracked notes back in tune instead of leaving them sour. */
@@ -31,8 +32,9 @@ export function Revoice() {
 
   const [open, setOpen] = useState(false);
   const [source, setSource] = useState<"vocals" | "full" | "instrumental">("vocals");
-  const [patch, setPatch] = useState<Patch>("SUPERSAW");
+  const [style, setStyle] = useState<Style>("EDM");
   const [level, setLevel] = useState(0.8);
+  const [mix, setMix] = useState<PartMix>({ lead: 1, bass: 1, chords: 0.8, drums: 1 });
   const [snap, setSnap] = useState(true);
   const [scaleIdx, setScaleIdx] = useState(2);
   const [root, setRoot] = useState(0);
@@ -52,17 +54,26 @@ export function Revoice() {
   useEffect(() => setRevoiceLevel(melody && !mute ? level : 0), [level, melody, mute]);
   useEffect(() => () => stopNotes(), []);
 
-  // (Re)schedule whenever playback jumps, the patch changes, or a new melody
-  // lands. Notes are scheduled in a rolling window rather than all at once, so
-  // a long track does not create thousands of oscillators up front.
+  // The arrangement is rebuilt only when its inputs change, not per frame —
+  // key detection and chord picking walk the whole melody.
+  const arrangement: Arrangement | null = useMemo(() => {
+    if (!melody) return null;
+    return arrange(melody.notes, melody.beats ?? [], melody.drops ?? [], style, {
+      drums: mix.drums > 0.001, bass: mix.bass > 0.001, chords: mix.chords > 0.001,
+    });
+  }, [melody, style, mix.drums > 0.001, mix.bass > 0.001, mix.chords > 0.001]);
+
+  // (Re)schedule whenever playback jumps, the style changes, or a new melody
+  // lands. A rolling window rather than the whole file, so a four-minute track
+  // does not create tens of thousands of oscillators up front.
   useEffect(() => {
-    if (!melody || !playing || mute) { stopNotes(); return; }
-    const key = `${patch}-${Math.floor(progress / 20)}`;
+    if (!arrangement || !playing || mute) { stopNotes(); return; }
+    const key = `${style}-${Math.floor(progress / 20)}-${JSON.stringify(mix)}`;
     if (key === lastKey.current) return;
     lastKey.current = key;
     const ac = (window as unknown as { __fluxEngine?: { nodes?: { ctx?: AudioContext } } }).__fluxEngine?.nodes?.ctx;
-    playNotes(melody.notes, patch, (ac?.currentTime ?? 0) + 0.08, progress);
-  }, [melody, playing, patch, mute, Math.floor(progress / 20)]);
+    playArrangement(arrangement, style, mix, (ac?.currentTime ?? 0) + 0.08, progress, melody?.bpm ?? 120);
+  }, [arrangement, playing, style, mute, mix, Math.floor(progress / 20)]);
 
   if (!track) return null;
 
@@ -98,8 +109,9 @@ export function Revoice() {
       }
     >
       <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.5)", lineHeight: 1.55 }}>
-        Reads the melody off this track and plays it back as a synth — the sung line becomes an
-        EDM lead. Export it as <b>.mid</b> to drop into FL Studio with your own sounds.
+        Reads the melody off this track, then builds a whole new arrangement around it —
+        lead, bass, chords and drums, played with FLUX's own sounds, locked to this song's beat
+        grid and key. Export the notes as <b>.mid</b> if you'd rather finish it in a DAW.
       </div>
 
       {open && (
@@ -158,13 +170,30 @@ export function Revoice() {
           {melody && (
             <div style={{ marginTop: 12 }}>
               <div style={{ fontSize: 9.5, letterSpacing: "0.16em", color: "rgba(255,255,255,0.35)", marginBottom: 5 }}>
-                SOUND — {melody.notes.length} notes @ {Math.round(melody.bpm)} BPM
+                STYLE — {melody.notes.length} notes @ {Math.round(melody.bpm)} BPM
+                {arrangement && <> · key {KEY_NAMES[arrangement.key.root]}{arrangement.key.minor ? "m" : ""}</>}
               </div>
-              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
-                {PATCHES.map((p) => (
-                  <button key={p} data-patch={p} onClick={() => setPatch(p)} style={{ ...chip(patch === p), padding: "7px 10px", fontSize: 9.5 }}>{p}</button>
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 4 }}>
+                {(Object.keys(STYLES) as Style[]).map((p) => (
+                  <button key={p} data-style={p} onClick={() => setStyle(p)} style={{ ...chip(style === p, MAG), padding: "7px 11px", fontSize: 9.5 }}>{p}</button>
                 ))}
               </div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, marginBottom: 8 }}>
+                Builds a whole backing from this track's own melody and beat grid — drums land on
+                the real beats, the bass and chords follow the key it detected, and everything
+                gets bigger at the drops.
+                {arrangement && <> {arrangement.drums.length} drum hits, {arrangement.chords.length} chord notes.</>}
+              </div>
+
+              <div style={{ fontSize: 9.5, letterSpacing: "0.16em", color: "rgba(255,255,255,0.35)", marginBottom: 4 }}>PARTS</div>
+              {([["lead", "LEAD"], ["bass", "BASS"], ["chords", "CHORDS"], ["drums", "DRUMS"]] as const).map(([k, label]) => (
+                <Slider
+                  key={k} label={label} value={mix[k]} min={0} max={1.4} step={0.05}
+                  format={(v) => (v < 0.01 ? "OFF" : `${Math.round(v * 100)}%`)}
+                  onChange={(v) => setMix((m) => ({ ...m, [k]: v }))}
+                  color={k === "drums" ? CYAN : MAG}
+                />
+              ))}
               <Slider
                 label="SYNTH LEVEL" value={level} min={0} max={1} step={0.02}
                 format={(v) => `${Math.round(v * 100)}%`} onChange={setLevel} color={MAG}

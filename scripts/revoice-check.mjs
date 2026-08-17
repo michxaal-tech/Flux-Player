@@ -134,6 +134,74 @@ if (typeof midiOk === "string" || midiOk.tag !== "MThd" || midiOk.trk !== "MTrk"
   console.log(`✔ MIDI file well-formed (${midiOk.bytes} bytes, MThd + MTrk)`);
 }
 
+// ── the arrangement ──────────────────────────────────────────────────────
+// Notes on paper are not sound. This taps the master output while the
+// arrangement plays and checks audio actually comes out, and that the drums
+// land on the analysed beats rather than on a synthetic click.
+const arrCheck = await page.evaluate(async () => {
+  const st = window.__fluxStore.getState();
+  const tr = st.playlists.flatMap((p) => p.tracks).find((t) => t.name.includes("melody test"));
+  const m = await window.__fluxRevoice.loadMelody(tr.fileId, "full");
+  if (!m) return { error: "no melody" };
+  const A = window.__fluxArrange.arrange(m.notes, m.beats, m.drops, "EDM", { drums: true, bass: true, chords: true });
+  const eng = window.__fluxEngine;
+  const ctx = eng?.nodes?.ctx;
+  if (!ctx) return { error: "no audio context" };
+  if (ctx.state === "suspended") await ctx.resume();
+
+  // measure the synth bus in isolation by muting the track itself
+  const prevVol = st.volume;
+  st.set({ volume: 0 });
+  window.__fluxRevoice.setRevoiceLevel(1);
+
+  const tap = ctx.createAnalyser();
+  tap.fftSize = 2048;
+  eng.nodes.master.connect(tap);
+  const buf = new Float32Array(tap.fftSize);
+
+  window.__fluxRevoice.playArrangement(A, "EDM", { lead: 1, bass: 1, chords: 1, drums: 1 }, ctx.currentTime + 0.05, 0, m.bpm);
+
+  let peak = 0;
+  const t0 = performance.now();
+  while (performance.now() - t0 < 2200) {
+    tap.getFloatTimeDomainData(buf);
+    for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  window.__fluxRevoice.stopNotes();
+  window.__fluxRevoice.setRevoiceLevel(0);
+  st.set({ volume: prevVol });
+
+  // how close each drum hit sits to a real analysed beat
+  let worstOff = 0;
+  const kicks = A.drums.filter((d) => d.kind === "kick").slice(0, 20);
+  for (const k of kicks) {
+    let best = Infinity;
+    for (const b of m.beats) best = Math.min(best, Math.abs(b - k.t));
+    worstOff = Math.max(worstOff, best);
+  }
+  return {
+    peak, key: A.key, drums: A.drums.length, bass: A.bass.length, chords: A.chords.length,
+    kicks: kicks.length, worstOff,
+  };
+});
+
+if (arrCheck.error) {
+  console.log(`✘ arrangement: ${arrCheck.error}`);
+  bad++;
+} else {
+  console.log(`\narrangement: ${arrCheck.drums} drum hits, ${arrCheck.bass} bass, ${arrCheck.chords} chord notes`);
+  if (!arrCheck.drums || !arrCheck.bass || !arrCheck.chords) { console.log("✘ a part came out empty"); bad++; }
+  else console.log("✔ every part built");
+  console.log(`peak output from the synth bus: ${arrCheck.peak.toFixed(4)}`);
+  if (arrCheck.peak < 0.01) { console.log("✘ the arrangement made no sound"); bad++; }
+  else if (arrCheck.peak > 0.99) { console.log("✘ the arrangement is clipping"); bad++; }
+  else console.log("✔ audible and not clipping");
+  console.log(`worst kick-to-beat offset: ${(arrCheck.worstOff * 1000).toFixed(1)}ms`);
+  if (arrCheck.worstOff > 0.002) { console.log("✘ drums are not on the analysed beats"); bad++; }
+  else console.log("✔ drums land on the analysed beat grid");
+}
+
 if (errors.length) {
   console.log(`✘ page errors: ${[...new Set(errors)].slice(0, 3).join(" | ")}`);
   bad++;

@@ -37,6 +37,9 @@ import("./visualPresets").then((m) => {
 import("./audio/revoice").then((m) => {
   (window as unknown as { __fluxRevoice: unknown }).__fluxRevoice = m;
 });
+import("./audio/arrange").then((m) => {
+  (window as unknown as { __fluxArrange: unknown }).__fluxArrange = m;
+});
 import("./audio/transport").then((m) => {
   (window as unknown as { __fluxPlayAt: unknown }).__fluxPlayAt = m.playAt;
 });

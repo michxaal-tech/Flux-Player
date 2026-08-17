@@ -9,51 +9,18 @@
 // audition an idea; they are not pretending to compete with a soft synth you
 // already own.
 import { engine } from "./engine";
+import { makeBus, playDrum, playVoice, VOICES, type SynthBus } from "./instruments";
+import { STYLES, type Arrangement, type Style } from "./arrange";
 import { blobStore, getUrl } from "../store/blobStore";
 import { useStore } from "../store/useStore";
 import type { Note, TranscribeResult } from "./transcribeWorker";
 
 export type { Note };
 
-/** Synth voices. Each is a small Web Audio graph, not a sample library. */
-export const PATCHES = [
-  "SUPERSAW", "PLUCK", "SQUARE LEAD", "BELL", "SUB", "ORGAN", "CHIP",
-] as const;
-export type Patch = (typeof PATCHES)[number];
-
-const midiToHz = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
-
-interface PatchSpec {
-  /** oscillators per voice, each an offset in cents */
-  detune: number[];
-  type: OscillatorType;
-  attack: number;
-  decay: number;
-  sustain: number;
-  release: number;
-  /** filter cutoff as a multiple of the note's own frequency */
-  cutoffMul: number;
-  q: number;
-  /** how far the filter opens over the note's attack */
-  envAmt: number;
-  gain: number;
-  /** add a square an octave below, for weight */
-  subOsc?: boolean;
-}
-
-const SPECS: Record<Patch, PatchSpec> = {
-  // seven detuned saws — the classic wide festival lead
-  SUPERSAW: { detune: [-14, -9, -4, 0, 4, 9, 14], type: "sawtooth", attack: 0.012, decay: 0.18, sustain: 0.72, release: 0.22, cutoffMul: 7, q: 3, envAmt: 5, gain: 0.1, subOsc: true },
-  PLUCK: { detune: [-6, 0, 6], type: "sawtooth", attack: 0.002, decay: 0.16, sustain: 0.06, release: 0.12, cutoffMul: 9, q: 6, envAmt: 9, gain: 0.2 },
-  "SQUARE LEAD": { detune: [-5, 0, 5], type: "square", attack: 0.006, decay: 0.12, sustain: 0.6, release: 0.14, cutoffMul: 6, q: 2, envAmt: 4, gain: 0.14 },
-  BELL: { detune: [0, 1200, 1902], type: "sine", attack: 0.004, decay: 0.9, sustain: 0.02, release: 0.5, cutoffMul: 20, q: 0.7, envAmt: 1, gain: 0.22 },
-  SUB: { detune: [0, -1200], type: "sine", attack: 0.02, decay: 0.2, sustain: 0.85, release: 0.18, cutoffMul: 4, q: 1, envAmt: 2, gain: 0.32 },
-  ORGAN: { detune: [0, 1200, 1902, 2400], type: "sine", attack: 0.01, decay: 0.05, sustain: 0.9, release: 0.1, cutoffMul: 14, q: 0.8, envAmt: 1, gain: 0.13 },
-  CHIP: { detune: [0], type: "square", attack: 0.001, decay: 0.05, sustain: 0.5, release: 0.05, cutoffMul: 30, q: 0.5, envAmt: 1, gain: 0.2 },
-};
 
 let scheduled: { stop: () => void } | null = null;
-let outGain: GainNode | null = null;
+let bus: SynthBus | null = null;
+let busBpm = 0;
 
 /** The engine's AudioContext, or null before playback has started it. */
 function ctx(): AudioContext | null {
@@ -61,92 +28,90 @@ function ctx(): AudioContext | null {
 }
 
 /**
- * Where the synth joins the graph: straight into the master bus, *after* the FX
- * chain. Feeding it in earlier would pitch the melody with tape speed and let
- * the vocal-cut filter — which exists to remove the original vocal — chew the
- * synth that replaced it.
+ * The shared output chain, joined to the master bus *after* the FX rack.
+ * Feeding it in earlier would pitch the synth with tape speed and let the
+ * vocal-cut filter — which exists to remove the original vocal — chew the
+ * parts that replaced it.
  */
-function output(): GainNode | null {
+function getBus(bpm: number): SynthBus | null {
   const ac = ctx();
   if (!ac) return null;
-  if (!outGain) {
-    outGain = ac.createGain();
-    outGain.gain.value = 0;
-    outGain.connect(engine.nodes?.master ?? ac.destination);
+  // the delay time is tempo-locked, so a tempo change needs a new bus
+  if (!bus || Math.abs(busBpm - bpm) > 0.5) {
+    bus = makeBus(ac, engine.nodes?.master ?? ac.destination, bpm);
+    busBpm = bpm;
+    bus.out.gain.value = level;
   }
-  return outGain;
+  return bus;
 }
 
-/** 0..1 — how loud the re-voiced melody sits against the track. */
+let level = 0;
+/** 0..1 — how loud the whole arrangement sits against the track. */
 export function setRevoiceLevel(v: number): void {
-  const g = output();
+  level = Math.max(0, Math.min(1, v));
   const ac = ctx();
-  if (!g || !ac) return;
-  g.gain.setTargetAtTime(Math.max(0, Math.min(1, v)), ac.currentTime, 0.05);
+  if (bus && ac) bus.out.gain.setTargetAtTime(level, ac.currentTime, 0.05);
 }
 
-/** Schedules every note relative to `startAt` (audio-clock seconds). */
-export function playNotes(notes: Note[], patch: Patch, startAt: number, fromSec: number): void {
+/** Per-part levels, 0..1. */
+export interface PartMix {
+  lead: number;
+  bass: number;
+  chords: number;
+  drums: number;
+}
+
+/**
+ * Schedules an arrangement from `fromSec` in the track, starting at `startAt`
+ * on the audio clock.
+ *
+ * Only a window is scheduled rather than the whole file: a four-minute track
+ * would otherwise create tens of thousands of oscillator nodes up front, and
+ * the caller re-arms this as playback advances.
+ */
+export function playArrangement(
+  arr: Arrangement, style: Style, mix: PartMix, startAt: number, fromSec: number,
+  bpm = 120, windowSec = 30,
+): void {
   stopNotes();
   const ac = ctx();
-  const out = output();
-  if (!ac || !out) return;
-  const spec = SPECS[patch] ?? SPECS.SUPERSAW;
-  const live: OscillatorNode[] = [];
+  if (!ac) return;
+  const S = STYLES[style];
+  // the send delay is tempo-locked, so the bus is built for this track's tempo
+  const b = getBus(bpm);
+  if (!b) return;
+  const nodes: OscillatorNode[] = [];
 
-  for (const n of notes) {
-    if (n.end < fromSec) continue;               // already gone by
-    const t0 = startAt + (n.start - fromSec);
-    if (t0 > ac.currentTime + 30) break;         // schedule a window, not the file
-    const t1 = startAt + (n.end - fromSec);
-    if (t1 <= ac.currentTime) continue;
-    const hz = midiToHz(n.midi);
-
-    const vca = ac.createGain();
-    const filt = ac.createBiquadFilter();
-    filt.type = "lowpass";
-    filt.Q.value = spec.q;
-    const base = Math.min(16000, hz * spec.cutoffMul);
-    filt.frequency.setValueAtTime(Math.min(16000, base * spec.envAmt), Math.max(t0, ac.currentTime));
-    filt.frequency.exponentialRampToValueAtTime(Math.max(80, base), Math.max(t0, ac.currentTime) + spec.decay + 0.001);
-
-    const peak = spec.gain * n.vel;
-    const a = Math.max(t0, ac.currentTime);
-    vca.gain.setValueAtTime(0.0001, a);
-    vca.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), a + spec.attack);
-    vca.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak * spec.sustain), a + spec.attack + spec.decay);
-    vca.gain.setTargetAtTime(0.0001, Math.max(a, t1), spec.release / 3);
-
-    filt.connect(vca);
-    vca.connect(out);
-
-    for (const cents of spec.detune) {
-      const o = ac.createOscillator();
-      o.type = spec.type;
-      o.frequency.value = hz;
-      o.detune.value = cents;
-      o.connect(filt);
-      o.start(a);
-      o.stop(t1 + spec.release + 0.05);
-      live.push(o);
+  const schedule = (notes: Note[], voiceName: string, gain: number) => {
+    if (gain <= 0.001) return;
+    const voice = VOICES[voiceName] ?? VOICES.SUPERSAW;
+    for (const n of notes) {
+      if (n.end < fromSec) continue;
+      const t0 = startAt + (n.start - fromSec);
+      if (t0 > ac.currentTime + windowSec) break;
+      const t1 = startAt + (n.end - fromSec);
+      if (t1 <= ac.currentTime) continue;
+      nodes.push(...playVoice(b, voice, n.midi, t0, t1, n.vel, gain));
     }
-    if (spec.subOsc) {
-      const o = ac.createOscillator();
-      o.type = "square";
-      o.frequency.value = hz / 2;
-      const sg = ac.createGain();
-      sg.gain.value = 0.35;
-      o.connect(sg);
-      sg.connect(filt);
-      o.start(a);
-      o.stop(t1 + spec.release + 0.05);
-      live.push(o);
+  };
+
+  schedule(arr.lead, S.lead, mix.lead);
+  schedule(arr.bass, S.bass, mix.bass);
+  schedule(arr.chords, S.chord, mix.chords);
+
+  if (mix.drums > 0.001) {
+    for (const d of arr.drums) {
+      if (d.t < fromSec) continue;
+      const t0 = startAt + (d.t - fromSec);
+      if (t0 > ac.currentTime + windowSec) break;
+      if (t0 <= ac.currentTime) continue;
+      playDrum(b, d.kind, t0, d.vel, mix.drums);
     }
   }
 
   scheduled = {
     stop: () => {
-      for (const o of live) {
+      for (const o of nodes) {
         try { o.stop(); } catch { /* already stopped */ }
       }
     },
@@ -156,6 +121,14 @@ export function playNotes(notes: Note[], patch: Patch, startAt: number, fromSec:
 export function stopNotes(): void {
   scheduled?.stop();
   scheduled = null;
+}
+
+/** Rebuilds the bus at a new tempo (delay time is tempo-locked). */
+export function setArrangementBpm(bpm: number): void {
+  if (Math.abs(busBpm - bpm) > 0.5) {
+    bus = null;
+    busBpm = bpm;
+  }
 }
 
 // ── Standard MIDI File ───────────────────────────────────────────────────
@@ -214,6 +187,10 @@ const KEY = (fileId: string, src: string) => `melody-${src}-${fileId}`;
 
 export interface Melody extends TranscribeResult {
   bpm: number;
+  /** the analyser's beat grid and drop times, carried along so the arranger can
+   * place drums on the real beats instead of a synthetic click */
+  beats: number[];
+  drops: number[];
 }
 
 /**
@@ -305,9 +282,9 @@ export async function transcribe(
     return null;
   }
 
-  const melody: Melody = { ...result, bpm: anal?.bpm ?? 120 };
-  // the pitch track is only for the preview strip and is by far the biggest
-  // part of the payload, so it is dropped before caching
+  const melody: Melody = { ...result, bpm: anal?.bpm ?? 120, beats: anal?.beats ?? [], drops: anal?.drops ?? [] };
+  // the per-frame pitch track is only for a preview strip and is by far the
+  // biggest part of the payload, so it is dropped before caching
   await blobStore.put(KEY(fileId, source), new Blob([JSON.stringify({ ...melody, track: [] })], { type: "application/json" }));
   set(`✓ ${melody.notes.length} notes`);
   setTimeout(() => set(""), 4000);
