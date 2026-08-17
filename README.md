@@ -38,8 +38,9 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
   first. 44 per-letter lyric effects — colour ramps, per-letter motion, karaoke
   fills and text treatments — compose with the 20 line animations. 15 tune
   controls (glow, trails, particles w/ 4 styles, reactivity, zoom, scene spin,
-  mirror, beat flash/shake, auto-cycle), 24 stackable beat impacts, 20 particle
-  drifts × 12 silhouettes × 3 size spreads, edge spectrum meters on every tab.
+  mirror, beat flash/shake, auto-cycle), 34 stackable beat impacts (including a signature set with a frame
+  history behind it — ghosting, datamosh, melt, fracture), 20 particle drifts × 12
+  silhouettes × 3 size spreads × a size multiplier, edge spectrum meters on every tab.
   Adaptive resolution keeps full-screen rendering at 60fps on any device (or
   pin MAX SHARPNESS to disable it). Themes also read a smoothed musical
   "energy" signal, so they move differently in a song's calm and driving parts.

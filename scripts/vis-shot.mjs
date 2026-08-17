@@ -98,6 +98,22 @@ if (LFX.length) {
   process.exit(0);
 }
 
+// IMP=SHARDS,MELT,... captures one frame per impact effect
+const IMPS = (process.env.IMP || "").split(",").filter(Boolean);
+if (IMPS.length) {
+  await page.waitForTimeout(3500);
+  for (const im of IMPS) {
+    await page.evaluate((k) => window.__fluxStore.getState().setVisKey("impacts", [k]), im);
+    await page.waitForTimeout(900);
+    const p = join(OUT, `imp-${im.toLowerCase()}.png`);
+    await page.screenshot({ path: p });
+    console.log(`saved ${p}`);
+  }
+  await browser.close();
+  preview.kill();
+  process.exit(0);
+}
+
 // MODE=FLOOR,ROOM,... captures one frame per 3D projection instead of a timeline
 const MODES = (process.env.MODES || "").split(",").filter(Boolean);
 if (MODES.length) {

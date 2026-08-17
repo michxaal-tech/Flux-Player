@@ -175,6 +175,45 @@ const setTheme = async (t) => {
   await page.waitForTimeout(120);
 };
 
+// IMPACTS=MELT,GHOST,... measures the impact layer instead of the 3D modes:
+// several of these redraw the whole frame, which is exactly the shape of bug
+// that ramps a picture to white.
+const IMPACTS_ARG = (process.env.IMPACTS || "").split(",").filter(Boolean);
+if (IMPACTS_ARG.length) {
+  await openTune();
+  await page.click('button[data-ptab="BEAT"]');
+  await page.waitForSelector("text=IMPACT");
+  let bad = 0;
+  const base = await sample();
+  console.log(`baseline (no impact)  mean=${base.mean.toFixed(3)} wht=${(base.white * 100).toFixed(1)}% core=${(base.core * 100).toFixed(0)}%\n`);
+  for (const im of IMPACTS_ARG) {
+    const btn = await page.$(`button:has-text("${im}")`);
+    if (!btn) { console.log(`${im.padEnd(10)} ✘ not in the picker`); bad++; continue; }
+    await btn.click();
+    await page.waitForTimeout(500);
+    const s2 = await sample();
+    const ft = await perf();
+    const issues = [];
+    // judged against the theme with no impact on: some themes are already
+    // near-clipping, and that is the theme's business, not the impact's
+    if (s2.white > Math.min(0.35, base.white * 1.45 + 0.05)) issues.push(`WHITE-OUT ${(s2.white * 100).toFixed(1)}% (base ${(base.white * 100).toFixed(1)}%)`);
+    // Relative, like the white check: an effect that rearranges an already-hot
+    // centre is not the same as one that clips it, and a fixed cap flags the
+    // former on any theme that is bright to begin with.
+    if (s2.core > Math.min(0.9, base.core * 1.4 + 0.15)) issues.push(`CORE ${(s2.core * 100).toFixed(0)}% (base ${(base.core * 100).toFixed(0)}%)`);
+    if (s2.black > 0.95) issues.push("BLANK");
+    if (issues.length) bad++;
+    console.log(`${im.padEnd(10)} mean=${s2.mean.toFixed(3)} wht=${(s2.white * 100).toFixed(1).padStart(4)}% core=${(s2.core * 100).toFixed(0).padStart(3)}% ${ft.toFixed(1)}ms ${issues.length ? "✘ " + issues.join(", ") : "✔"}`);
+    await btn.click(); // back off before the next one
+    await page.waitForTimeout(200);
+  }
+  console.log(`\n${bad === 0 ? "✔ all impacts clear" : `✘ ${bad} problems`}`);
+  process.exitCode = bad ? 1 : 0;
+  await browser.close();
+  preview.kill();
+  process.exit(bad ? 1 : 0);
+}
+
 let fails = 0;
 console.log(`palette=${PALETTE}  themes=${THEMES.length}  modes=${MODES.join("/")}\n`);
 

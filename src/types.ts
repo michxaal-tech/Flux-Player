@@ -79,6 +79,8 @@ export interface VisCfg {
   pShape: string;
   /** how widely particle sizes vary within one drift (see P_SIZES) */
   pSize: string;
+  /** overall particle size multiplier */
+  pScale: number;
   speed: number;
   intensity: number;
   zoom: number;

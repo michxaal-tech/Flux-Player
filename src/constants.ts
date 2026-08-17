@@ -135,7 +135,24 @@ export const IMPACTS = [
   "RINGS", "SCANLINE", "INVERT", "SQUEEZE", "VIGNETTE",
   "ZOOM", "TILT", "SLICE", "PIXELATE", "FLARE", "BARS", "TWIST",
   "SHOCK", "SPOTLIGHT", "SMEAR", "GRAIN", "EDGE",
+  // signature set — see visualizer/impactFx.ts
+  "MELT", "RIPPLE", "GHOST", "DATAMOSH", "HALFTONE",
+  "PRISM", "CRT", "STAMP", "SHARDS", "BREATH",
 ];
+
+/**
+ * Everything introduced by the most recent change, badged NEW in the pickers.
+ *
+ * Clear this and refill it with the next batch — the badge is meant to say
+ * "new since you last looked", so leaving old entries in makes it meaningless.
+ */
+export const NEW_ITEMS = new Set([
+  // themes
+  "MONOLITH", "ORRERY", "CANYON", "GYROSCOPE", "SINGULARITY",
+  // signature impacts
+  "MELT", "RIPPLE", "GHOST", "DATAMOSH", "HALFTONE",
+  "PRISM", "CRT", "STAMP", "SHARDS", "BREATH",
+]);
 
 /** Particle silhouettes. MIXED assigns one per particle, so a single drift can
  * carry several shapes at once. */
@@ -149,7 +166,7 @@ export const P_SIZES = ["UNIFORM", "VARIED", "WILD"];
 
 export const DEFAULT_VIS_CFG: VisCfg = {
   palette: "NEON", h1: 187, h2: 317,
-  glow: 0.7, trail: 0.55, particles: 0.35, pStyle: "RISE", pShape: "MIXED", pSize: "VARIED",
+  glow: 0.7, trail: 0.55, particles: 0.35, pStyle: "RISE", pShape: "MIXED", pSize: "VARIED", pScale: 1,
   speed: 1, intensity: 1, zoom: 1, spinV: 0, bgWash: 0.3, thick: 1,
   mirror: false, shake: false, flash: true, impacts: [], autoMode: "off", hiRes: false, fastBeats: true, syncMs: 0,
   vis3d: "OFF", vis3dAmt: 0.5, dropFx: 0.6,

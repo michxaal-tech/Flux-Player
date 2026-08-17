@@ -106,6 +106,9 @@ await step("visualizer opens, theme dropdown works, tune panel works", async () 
   await page.click("button:has-text('◉ VISUALS')");
   await page.click("button:has-text('◉ RING')"); // theme picker dropdown
   await page.waitForSelector("div:text-is('KALEIDO')");
+  // options added in the latest change carry a NEW badge in the pickers
+  const newCell = await page.$('[data-th="MONOLITH"]');
+  if (!newCell || !(await newCell.innerText()).includes("NEW")) throw new Error("NEW badge missing on a newly added theme");
   await page.click("div:text-is('TUNNEL')");
   await page.waitForSelector("button:has-text('◉ TUNNEL')");
   await page.click("button:has-text('⚙ TUNE')");

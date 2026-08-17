@@ -12,6 +12,13 @@ import type { ThemeCtx } from "./themeTypes";
 import { drawLyricOverlay } from "./lyricRenderer";
 import { project3d, type Mode3D } from "./project3d";
 import { drawDropFx, stepDropFx, MAX_TIER } from "./dropFx";
+import { drawSignatureImpacts, impactsNeedHistory, stepImpactHistory, SIGNATURE_IMPACTS } from "./impactFx";
+
+const SIG_SET = new Set<string>(SIGNATURE_IMPACTS);
+
+// Snapshot the signature impacts read from. They redraw the picture, so
+// sampling the canvas they draw into would compound frame over frame.
+const impSnapCv = document.createElement("canvas");
 
 // Offscreen buffer the theme renders into when a 3D mode is on. It carries the
 // trail, and the projection reads it as a texture — so the perspective is
@@ -771,13 +778,14 @@ export function startRenderLoop(): void {
       // read as static; a wide spread gives a foreground/background feel for
       // free, because bigger reads as nearer.
       const spread = cfg.pSize === "UNIFORM" ? 0 : cfg.pSize === "WILD" ? 1 : 0.5;
+      const pScale = cfg.pScale ?? 1;
       const targetCount = Math.floor(cfg.particles * 150);
       while (L.vparts.length < targetCount) {
-        const r = Math.random();
-        // r^3 keeps most particles small with a few much larger ones, which
-        // looks far more natural than a flat distribution
-        const sz = 0.9 + (spread === 0 ? 1.1 : Math.pow(r, 3) * (spread * 9) + r * 1.4);
-        L.vparts.push({ x: Math.random(), y: Math.random(), sp: 0.0004 + Math.random() * 0.0012, sz, ph: Math.random() * Math.PI * 2 });
+        // `sz` holds the particle's *rank* (0..1), not its radius. Sizes used to
+        // be baked in at spawn, so changing the spread did nothing until a
+        // particle recycled — and they never do. Keeping the rank and deriving
+        // the radius each frame makes both size controls live.
+        L.vparts.push({ x: Math.random(), y: Math.random(), sp: 0.0004 + Math.random() * 0.0012, sz: Math.random(), ph: Math.random() * Math.PI * 2 });
       }
       if (L.vparts.length > targetCount) L.vparts.length = targetCount;
       for (const p of L.vparts) {
@@ -824,7 +832,11 @@ export function startRenderLoop(): void {
             : 0.4 + Math.sin(vt * 0.05 + p.ph) * 0.3;
         const big = st === "SNOW" || st === "BUBBLES" || st === "PETALS" ? 1.3 : st === "STARS" ? 0.8 : 1;
         c.fillStyle = CMix((p.ph % 6.28) / 6.28, (0.28 + bassV * 0.5 + L.beatE * 0.3) * tw, fast ? 60 : 68);
-        const pr = p.sz * (1 + bassV * 1.6 + L.beatE * 0.8) * big * TK;
+        // rank → radius. r^3 keeps most particles small with a few much larger,
+        // which reads far more naturally than a flat distribution.
+        const rank = p.sz;
+        const base = spread === 0 ? 2 : Math.pow(rank, 3) * (spread * 9) + rank * 1.4 + 0.9;
+        const pr = base * pScale * (1 + bassV * 1.6 + L.beatE * 0.8) * big * TK;
         const cxp = p.x * w, cyp = p.y * h;
         if (st === "RAIN" || st === "METEOR") {
           // streaks read as motion far better than dots at these speeds
@@ -1108,6 +1120,29 @@ export function startRenderLoop(): void {
         const e = 1 + 0.012 + BE * 0.01;
         c.drawImage(vc, 0, 0, vc.width, vc.height, (w - w * e) / 2, (h - h * e) / 2, w * e, h * e);
         c.restore();
+      }
+
+      // ── signature impacts ──
+      // The ones with real machinery behind them (displacement fields, a frame
+      // history, dot screens) live in impactFx.ts.
+      let wantSig = false;
+      for (const k of IMP) if (SIG_SET.has(k)) { wantSig = true; break; }
+      if (wantSig) {
+        if (impSnapCv.width !== vc.width || impSnapCv.height !== vc.height) {
+          impSnapCv.width = vc.width;
+          impSnapCv.height = vc.height;
+        }
+        const ic = impSnapCv.getContext("2d")!;
+        ic.setTransform(1, 0, 0, 1, 0, 0);
+        ic.clearRect(0, 0, impSnapCv.width, impSnapCv.height);
+        ic.drawImage(vc, 0, 0);
+        const ictx = {
+          c, src: impSnapCv, sw: impSnapCv.width, sh: impSnapCv.height, w, h, R, TK,
+          beatE: L.beatE, hitE: L.hitE, beat, flow: L.flow, t,
+          C1, C2, CMix,
+        };
+        if (impactsNeedHistory(IMP)) stepImpactHistory(ictx);
+        drawSignatureImpacts(ictx, IMP);
       }
 
       // beat flash

@@ -50,6 +50,22 @@ export function Module({ title, children, extra }: { title: string; children: Re
   );
 }
 
+/**
+ * "NEW" marker for options added in the latest change. Rendered inline inside a
+ * chip's label so it rides along with wrapping instead of needing its own slot.
+ */
+export function NewTag() {
+  return (
+    <span
+      style={{
+        marginLeft: 4, padding: "1px 4px", borderRadius: 4,
+        fontSize: 7, fontWeight: 800, letterSpacing: "0.08em",
+        background: MAG, color: "#05060A", verticalAlign: "middle",
+      }}
+    >NEW</span>
+  );
+}
+
 export const chip = (active: boolean, color = CYAN): CSSProperties => ({
   padding: "9px 15px", borderRadius: 999, fontSize: 11.5, fontWeight: 700, letterSpacing: "0.04em",
   cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,

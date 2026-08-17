@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { BG, BORDER, CYAN, IMPACTS, MAG, P_SHAPES, P_SIZES, P_STYLES, PALETTES, STAGED_MARK, STAGED_THEMES, VIS_THEMES } from "../constants";
+import { BG, BORDER, CYAN, IMPACTS, MAG, NEW_ITEMS, P_SHAPES, P_SIZES, P_STYLES, PALETTES, STAGED_MARK, STAGED_THEMES, VIS_THEMES } from "../constants";
 import { nextTrack, prevTrack, togglePlay } from "../audio/transport";
 import { getCurrentTrack, useStore } from "../store/useStore";
 import { mix } from "../theme";
@@ -11,7 +11,7 @@ import { LYRIC_FX, LYRIC_FX_GROUPS } from "../visualizer/lyricFx";
 import { startVideoExport, stopVideoExport, videoExportSupported } from "../audio/videoRecorder";
 import { fmt } from "../utils";
 import { LYRIC_STYLES } from "../visualizer/lyricRenderer";
-import { chip, NextIcon, PauseIcon, playBtn, PlayIcon, PrevIcon, skipBtn, Slider, Toggle } from "./ui";
+import { chip, NewTag, NextIcon, PauseIcon, playBtn, PlayIcon, PrevIcon, skipBtn, Slider, Toggle } from "./ui";
 import { vibeToVisuals } from "../ai/features";
 import { AiPrompt } from "./ai/AiBits";
 
@@ -163,6 +163,7 @@ export function VisualizerOverlay() {
                     <span style={{ color: visTheme === v ? BG : MAG, marginRight: 3 }}>{STAGED_MARK}</span>
                   )}
                   {v}
+                  {NEW_ITEMS.has(v) && <NewTag />}
                 </div>
               ))}
               {/* auto-advance mode — OFF keeps the current theme forever */}
@@ -356,6 +357,10 @@ export function VisualizerOverlay() {
               >{sh}</button>
             ))}
           </div>
+          <Slider
+            label="SIZE" value={visCfg.pScale ?? 1} min={0.3} max={3} step={0.05}
+            format={(v) => `${v.toFixed(2)}×`} onChange={(v) => setV("pScale", v)} color={MAG}
+          />
           <div style={{ fontSize: 9, letterSpacing: "0.16em", color: "rgba(255,255,255,0.32)", margin: "2px 0 4px" }}>SIZE SPREAD</div>
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 4 }}>
             {P_SIZES.map((sz) => (
@@ -416,7 +421,7 @@ export function VisualizerOverlay() {
                   key={im}
                   onClick={() => setV("impacts", on ? (visCfg.impacts ?? []).filter((x) => x !== im) : [...(visCfg.impacts ?? []), im])}
                   style={{ ...chip(on, MAG), padding: "6px 10px", fontSize: 9.5 }}
-                >{im}</button>
+                >{im}{NEW_ITEMS.has(im) && <NewTag />}</button>
               );
             })}
             {(visCfg.impacts ?? []).length > 0 && (
