@@ -66,6 +66,7 @@ export default function App() {
   const bgRef = useRef<HTMLCanvasElement>(null);
   const pbgRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const anyInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     canvasRefs.bg = bgRef.current;
     canvasRefs.pbg = pbgRef.current;
@@ -109,8 +110,22 @@ export default function App() {
         </div>
       </div>
 
+      {/* iOS greys out .mp3 files under a bare accept="audio/*" — its Files
+          picker matches on UTI, and audio/* does not cover everything (files
+          from Drive/Dropbox especially). Listing concrete types AND extensions
+          is what makes them selectable. */}
       <input
-        ref={fileInputRef} type="file" accept="audio/*" multiple style={{ display: "none" }}
+        ref={fileInputRef} type="file" multiple style={{ display: "none" }}
+        accept={"audio/*,audio/mpeg,audio/mp3,audio/mp4,audio/x-m4a,audio/aac,audio/wav,audio/x-wav,audio/wave,audio/flac,audio/x-flac,audio/ogg,audio/opus,application/ogg,.mp3,.m4a,.m4b,.aac,.wav,.wave,.flac,.ogg,.oga,.opus,.aif,.aiff,.caf,.wma,.mp4,.alac"}
+        onChange={(e) => {
+          if (e.target.files) addFiles(e.target.files);
+          e.target.value = "";
+        }}
+      />
+      {/* last resort: no filter at all, so nothing can be greyed out. Files
+          are still validated after selection. */}
+      <input
+        ref={anyInputRef} type="file" multiple style={{ display: "none" }}
         onChange={(e) => {
           if (e.target.files) addFiles(e.target.files);
           e.target.value = "";
@@ -123,7 +138,7 @@ export default function App() {
           {tab === "player" && <PlayerTab />}
           {tab === "dj" && <DJTab />}
           {tab === "fx" && <FXRackTab />}
-          {tab === "library" && <LibraryTab onLoadClick={() => fileInputRef.current?.click()} />}
+          {tab === "library" && <LibraryTab onLoadClick={() => fileInputRef.current?.click()} onAnyFileClick={() => anyInputRef.current?.click()} />}
           {tab === "me" && <MeTab />}
         </div>
       </div>

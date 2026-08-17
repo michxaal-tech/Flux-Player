@@ -47,8 +47,24 @@ export async function playAt(plId: string, i: number): Promise<void> {
 }
 
 export async function addFiles(fileList: FileList | File[]): Promise<void> {
-  const audioFiles = Array.from(fileList).filter(isAudioFile);
-  if (!audioFiles.length) return;
+  const all = Array.from(fileList);
+  const audioFiles = all.filter(isAudioFile);
+  const rejected = all.length - audioFiles.length;
+  if (!audioFiles.length) {
+    // never fail silently: a picker that appears to do nothing is worse than
+    // an error, and on iOS this is the common outcome
+    S().set({
+      importMsg: all.length
+        ? `⚠ ${all.length === 1 ? "That file isn't" : "Those files aren't"} a recognised audio format (${all.map((f) => f.name.split(".").pop()).join(", ")})`
+        : "⚠ No file was selected",
+    });
+    setTimeout(() => S().set({ importMsg: "" }), 7000);
+    return;
+  }
+  if (rejected) {
+    S().set({ importMsg: `Added ${audioFiles.length}; skipped ${rejected} non-audio file${rejected > 1 ? "s" : ""}` });
+    setTimeout(() => S().set({ importMsg: "" }), 6000);
+  }
   const s = S();
   const targetId = (s.viewMode.type === "pl" ? s.viewMode.id : null) || s.playPl;
   const pairs = audioFiles.map((f) => ({ f, id: uid() }));

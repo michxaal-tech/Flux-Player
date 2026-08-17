@@ -8,5 +8,9 @@ export const fmt = (t: number) => {
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
+/** iOS often hands over files with an empty or wrong MIME type, so the
+ * extension is the more reliable signal of the two. */
 export const isAudioFile = (f: File) =>
-  f.type.startsWith("audio/") || /\.(mp3|wav|flac|ogg|m4a|aac)$/i.test(f.name);
+  f.type.startsWith("audio/") ||
+  f.type === "application/ogg" ||
+  /\.(mp3|wav|wave|flac|ogg|oga|opus|m4a|m4b|mp4|aac|aif|aiff|aifc|caf|wma|alac|3gp|amr|mka)$/i.test(f.name);

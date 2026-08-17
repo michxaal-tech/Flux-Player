@@ -10,7 +10,7 @@ import { Cover } from "./ai/Cover";
 import { EmojiSearch, LibraryAiBar, TrackAiMenu } from "./ai/LibraryAi";
 import { SpotifyImport } from "./SpotifyImport";
 
-export function LibraryTab({ onLoadClick }: { onLoadClick: () => void }) {
+export function LibraryTab({ onLoadClick, onAnyFileClick }: { onLoadClick: () => void; onAnyFileClick?: () => void }) {
   const aiReady = useStore((s) => s.aiReady);
   const [aiRow, setAiRow] = useState<string | null>(null);
   const playlists = useStore((s) => s.playlists);
@@ -26,6 +26,7 @@ export function LibraryTab({ onLoadClick }: { onLoadClick: () => void }) {
   );
   const viewingPlId = useStore(getViewingPlId);
   const exporting = useStore((s) => s.exporting);
+  const importMsg = useStore((s) => s.importMsg);
   const set = useStore((s) => s.set);
   const toggleFav = useStore((s) => s.toggleFav);
   const newPlaylist = useStore((s) => s.newPlaylist);
@@ -104,6 +105,13 @@ export function LibraryTab({ onLoadClick }: { onLoadClick: () => void }) {
                 fontSize: 11.5, fontWeight: 700, letterSpacing: "0.06em",
               }}
             >＋ LOAD INTO “{viewingList?.name}”</button>
+            {onAnyFileClick && (
+              <button
+                onClick={onAnyFileClick}
+                title="Some phones grey out audio files in the picker — this shows everything"
+                style={{ ...chip(false), fontSize: 10 }}
+              >ANY FILE</button>
+            )}
             {renaming ? (
               <span style={{ display: "flex", gap: 6 }}>
                 <input
@@ -128,6 +136,21 @@ export function LibraryTab({ onLoadClick }: { onLoadClick: () => void }) {
           <button key={k} onClick={() => set({ sortBy: k })} style={chip(sortBy === k)}>{l}</button>
         ))}
       </div>
+
+      {importMsg && (
+        <div style={{ padding: "9px 12px", marginBottom: 8, borderRadius: 10, fontSize: 11.5, lineHeight: 1.5,
+          border: `1px solid ${importMsg.startsWith("⚠") ? "rgba(255,120,120,0.35)" : mix(CYAN, 27)}`,
+          background: importMsg.startsWith("⚠") ? "rgba(255,73,73,0.08)" : mix(CYAN, 7),
+          color: importMsg.startsWith("⚠") ? "#FF9A9A" : CYAN }}>
+          {importMsg}
+          {importMsg.startsWith("⚠") && onAnyFileClick && (
+            <div style={{ marginTop: 6, color: "rgba(255,255,255,0.55)", fontSize: 10.5 }}>
+              If your music looks greyed out in the picker, use ANY FILE above — it removes the
+              filter that iOS applies.
+            </div>
+          )}
+        </div>
+      )}
 
       {exporting && (
         <div style={{ padding: "9px 12px", marginBottom: 8, borderRadius: 10, border: `1px solid ${mix(CYAN, 27)}`, background: mix(CYAN, 7), color: CYAN, fontSize: 12, fontFamily: MONO }}>

@@ -58,6 +58,8 @@ export interface StoreState {
   vidMsg: string;
   takes: Take[];
   exporting: string;
+  /** feedback from the file picker (iOS silently rejects a lot) */
+  importMsg: string;
   // on-device stem separation
   /** play AI instrumentals (when a track has one) instead of the original */
   instMode: boolean;
@@ -170,6 +172,7 @@ export const useStore = create<StoreState>()(
         vidMsg: "",
         takes: [],
         exporting: "",
+        importMsg: "",
         instMode: false,
         stemProgress: "",
         lyricsOn: true,
