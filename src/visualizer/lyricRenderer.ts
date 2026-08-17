@@ -95,6 +95,25 @@ const posFor = (i: number, w: number, h: number): [number, number] => {
   return [w * (0.28 + fx * 0.44), h * (0.22 + fy * 0.42)];
 };
 
+/**
+ * Position for a unit that is guaranteed to be far from the previous unit's.
+ * The golden-ratio scatter above walks in small steps, so consecutive chunks
+ * landed almost on top of each other. This walks a 3x3 zone grid with a
+ * stride co-prime to 9, so successive units jump across the frame, with
+ * deterministic jitter inside each zone so it never looks like a grid.
+ */
+const zonePos = (unit: number, w: number, h: number): [number, number] => {
+  const z = ((unit % 9) + 9) % 9;
+  const slot = (z * 5) % 9; // 0,5,1,6,2,7,3,8,4 — neighbours land far apart
+  const col = slot % 3;
+  const row = Math.floor(slot / 3);
+  const jx = (((unit * 2654435761) % 101) / 101 - 0.5) * 0.12;
+  const jy = (((unit * 40503) % 89) / 89 - 0.5) * 0.1;
+  const fx = 0.5 + (col - 1) * 0.26 + jx;
+  const fy = 0.44 + (row - 1) * 0.22 + jy;
+  return [w * Math.min(0.82, Math.max(0.18, fx)), h * Math.min(0.76, Math.max(0.2, fy))];
+};
+
 /** deterministic gentle tilt per unit, ±0.09 rad, never harsh */
 const angFor = (i: number): number => (((i * 2654435761) % 97) / 97 - 0.5) * 0.18;
 
@@ -230,21 +249,26 @@ export function drawLyricOverlay(x: LyricCtx): void {
       const pos2 = raw.frac * n;
       const active = Math.min(n - 1, Math.floor(pos2));
       const local = Math.min(1, pos2 - active);
-      const drawChunk = (k: number, alpha: number, scl: number) => {
+      // every chunk gets its own zone across the frame, never beside the last
+      const drawChunk = (k: number, alpha: number, scl: number, rise: number) => {
         if (k < 0 || k >= n || alpha <= 0.02) return;
-        const [wx, wy] = posFor(raw.index * 13 + k * 5, w, h);
+        const unit = raw.index * 7 + k;
+        const [wx, wy] = zonePos(unit, w, h);
         drawBlock(c, chunks[k], {
-          x: wx, y: wy, alpha, scale: scl,
-          rot: angFor(raw.index + k),
+          x: wx, y: wy + rise, alpha, scale: scl,
+          rot: angFor(unit),
           maxW: w * 0.62, size: size * 1.22,
           glowAmt: 18 + beatE * 22,
-          glowColor: CMix(((raw.index + k) % 9) / 9),
+          glowColor: CMix((unit % 9) / 9),
         }, w);
       };
-      drawChunk(active - 1, (1 - smooth(local * 2.4)) * 0.7, 1.02);
-      const appear2 = smooth(local * 2.6);
-      const out2 = local > 0.72 ? smooth((local - 0.72) / 0.28) : 0;
-      drawChunk(active, appear2 * (1 - out2 * 0.85), 0.86 + appear2 * 0.14 + beatE * 0.04);
+      // The outgoing chunk holds most of its brightness while the next one is
+      // already arriving, so there is a real overlap rather than a handoff.
+      const outAlpha = local < 0.42 ? 0.8 : 0.8 * (1 - smooth((local - 0.42) / 0.44));
+      drawChunk(active - 1, outAlpha, 1.0, -smooth(Math.max(0, local - 0.42) / 0.6) * 14);
+      const appear2 = smooth(local / 0.3);
+      const out2 = local > 0.86 ? smooth((local - 0.86) / 0.14) : 0;
+      drawChunk(active, appear2 * (1 - out2 * 0.5), 0.84 + appear2 * 0.16 + beatE * 0.05, (1 - appear2) * 12);
     }
     c.restore();
     return;
