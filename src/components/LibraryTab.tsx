@@ -3,11 +3,12 @@ import type React from "react";
 import { BORDER, CARD, CYAN, MAG, MONO, TAGS } from "../constants";
 import { deletePlaylist, playAt, removeTrack } from "../audio/transport";
 import { exportTrack } from "../audio/exporter";
-import { getCurrentTrack, getFavCount, getViewEntries, getViewingPlId, useStore } from "../store/useStore";
+import { getArtists, getCurrentTrack, getFavCount, getViewEntries, getViewingPlId, useStore } from "../store/useStore";
 import { mix } from "../theme";
 import { chip } from "./ui";
 import { Cover } from "./ai/Cover";
 import { EmojiSearch, LibraryAiBar, TrackAiMenu } from "./ai/LibraryAi";
+import { Discover } from "./Discover";
 import { SpotifyImport } from "./SpotifyImport";
 
 export function LibraryTab({ onLoadClick, onAnyFileClick }: { onLoadClick: () => void; onAnyFileClick?: () => void }) {
@@ -20,6 +21,7 @@ export function LibraryTab({ onLoadClick, onAnyFileClick }: { onLoadClick: () =>
   const playPl = useStore((s) => s.playPl);
   const currentTrack = useStore(getCurrentTrack);
   const favCount = useStore(getFavCount);
+  const artists = useMemo(() => getArtists(playlists), [playlists]);
   const entries = useMemo(
     () => getViewEntries({ playlists, viewMode, search, sortBy }),
     [playlists, viewMode, search, sortBy]
@@ -64,6 +66,7 @@ export function LibraryTab({ onLoadClick, onAnyFileClick }: { onLoadClick: () =>
       />
       {aiReady && <EmojiSearch />}
       {aiReady && <LibraryAiBar />}
+      <div style={{ marginBottom: 10 }}><Discover /></div>
       <div style={{ marginBottom: 10 }}><SpotifyImport onLoadClick={onLoadClick} /></div>
 
       <div className="hscroll" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8 }}>
@@ -73,6 +76,23 @@ export function LibraryTab({ onLoadClick, onAnyFileClick }: { onLoadClick: () =>
           <button key={tg} onClick={() => set({ viewMode: { type: "tag", tag: tg } })} style={chip(viewMode.type === "tag" && viewMode.tag === tg)}>#{tg}</button>
         ))}
       </div>
+
+      {/* Artists, from streamed metadata or parsed out of "Artist - Title"
+          filenames. Hidden entirely when nothing in the library has an artist,
+          rather than showing an empty rail. */}
+      {artists.length > 0 && (
+        <div className="hscroll" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, alignItems: "center" }}>
+          <span style={{ fontSize: 9, letterSpacing: "0.16em", color: "rgba(255,255,255,0.32)", flexShrink: 0 }}>ARTISTS</span>
+          {artists.slice(0, 40).map((a) => (
+            <button
+              key={a.name}
+              data-artist={a.name}
+              onClick={() => set({ viewMode: { type: "artist", artist: a.name } })}
+              style={chip(viewMode.type === "artist" && viewMode.artist === a.name, CYAN)}
+            >{a.name} <span style={{ opacity: 0.55 }}>{a.count}</span></button>
+          ))}
+        </div>
+      )}
       <div className="hscroll" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10, alignItems: "center" }}>
         {playlists.map((p, pi) => (
           <button
@@ -161,7 +181,7 @@ export function LibraryTab({ onLoadClick, onAnyFileClick }: { onLoadClick: () =>
       <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
         {entries.length === 0 && (
           <div style={{ color: "rgba(255,255,255,0.38)", fontSize: 13, padding: 24, textAlign: "center" }}>
-            {search ? "No matches." : viewMode.type === "fav" ? "No favorites yet — tap ♡ on a track." : viewMode.type === "recent" ? "Nothing played yet." : viewMode.type === "tag" ? "No tracks with this tag yet." : "This playlist is empty."}
+            {search ? "No matches." : viewMode.type === "fav" ? "No favorites yet — tap ♡ on a track." : viewMode.type === "recent" ? "Nothing played yet." : viewMode.type === "tag" ? "No tracks with this tag yet." : viewMode.type === "artist" ? "Nothing by this artist yet." : "This playlist is empty."}
           </div>
         )}
         {entries.map(({ tr, plId, idx }) => {

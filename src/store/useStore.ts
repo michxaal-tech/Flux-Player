@@ -104,6 +104,8 @@ export interface StoreState {
   miniStatus: string;
   /** progress/result text for melody transcription (see audio/revoice.ts) */
   melodyStatus: string;
+  /** progress/result text for the online catalogue (see audius.ts) */
+  audiusStatus: string;
   /** 0..1 attenuation applied to the original track only, so Revoice can
    * replace it rather than play on top of it. The synth joins after this. */
   revoiceDuck: number;
@@ -224,6 +226,7 @@ export const useStore = create<StoreState>()(
         analyzeStatus: "",
         miniStatus: "",
         melodyStatus: "",
+        audiusStatus: "",
         revoiceDuck: 1,
         spotifyReady: false,
         tab: "player",
@@ -490,6 +493,40 @@ export const getCurrentTrack = (s: StoreState): Track | null => {
 export const getViewingPlId = (s: StoreState) => (s.viewMode.type === "pl" ? s.viewMode.id : null);
 
 // Derives fresh arrays — call from useMemo, never pass directly to useStore as a selector.
+/**
+ * A track's artist. Streamed tracks carry it as metadata; local files usually
+ * encode it in the filename, so the common "Artist - Title" shape is parsed as
+ * a fallback rather than leaving every local import unattributed.
+ */
+export function artistOf(tr: Track): string | undefined {
+  if (tr.artist?.trim()) return tr.artist.trim();
+  const m = tr.name.match(/^\s*(.+?)\s+[-–—]\s+.+$/);
+  if (!m) return undefined;
+  const a = m[1].trim();
+  // guard against "01 - Title" and other numbering that looks like an artist
+  if (!a || /^\d+$/.test(a) || a.length > 48) return undefined;
+  return a;
+}
+
+/**
+ * Every artist in the library with a track count, most tracks first.
+ *
+ * Takes the playlists rather than the store because it builds a fresh array
+ * every call: used directly as a zustand selector, reference equality would see
+ * a change on every render and loop forever. Callers memoise it on `playlists`.
+ */
+export function getArtists(playlists: Playlist[]): { name: string; count: number }[] {
+  const map = new Map<string, number>();
+  for (const p of playlists)
+    for (const tr of p.tracks) {
+      const a = artistOf(tr);
+      if (a) map.set(a, (map.get(a) ?? 0) + 1);
+    }
+  return [...map.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((x, y) => y.count - x.count || x.name.localeCompare(y.name));
+}
+
 export function getViewEntries(s: Pick<StoreState, "playlists" | "viewMode" | "search" | "sortBy">) {
   let entries: { tr: Track; plId: string; idx: number }[];
   if (s.viewMode.type === "pl") {
@@ -503,11 +540,18 @@ export function getViewEntries(s: Pick<StoreState, "playlists" | "viewMode" | "s
         if (s.viewMode.type === "fav" && tr.fav) entries.push({ tr, plId: p.id, idx });
         if (s.viewMode.type === "recent" && tr.lastPlayedAt) entries.push({ tr, plId: p.id, idx });
         if (s.viewMode.type === "tag" && tr.tags?.includes(s.viewMode.tag)) entries.push({ tr, plId: p.id, idx });
+        if (s.viewMode.type === "artist" && artistOf(tr) === s.viewMode.artist) entries.push({ tr, plId: p.id, idx });
       });
     if (s.viewMode.type === "recent") entries.sort((a, b) => b.tr.lastPlayedAt - a.tr.lastPlayedAt);
   }
-  if (s.search.trim())
-    entries = entries.filter((e) => e.tr.name.toLowerCase().includes(s.search.trim().toLowerCase()));
+  if (s.search.trim()) {
+    const q = s.search.trim().toLowerCase();
+    // search the artist too — looking up a name and getting nothing because the
+    // artist lives in a separate field is the obvious way this would annoy
+    entries = entries.filter(
+      (e) => e.tr.name.toLowerCase().includes(q) || (artistOf(e.tr) ?? "").toLowerCase().includes(q),
+    );
+  }
   if (s.sortBy === "name") entries = [...entries].sort((a, b) => a.tr.name.localeCompare(b.tr.name));
   if (s.sortBy === "plays") entries = [...entries].sort((a, b) => (b.tr.plays || 0) - (a.tr.plays || 0));
   return entries;

@@ -31,6 +31,11 @@ export interface Track {
   /** Key of the audio blob in persistent storage. Copies of a track share one fileId. */
   fileId: string;
   name: string;
+  /** performer, from the source's metadata or parsed out of the filename */
+  artist?: string;
+  /** where the track came from; absent means a local file */
+  source?: "audius";
+  sourceId?: string;
   plays: number;
   fav: boolean;
   tags: string[];
@@ -55,7 +60,8 @@ export type ViewMode =
   | { type: "pl"; id: string }
   | { type: "fav" }
   | { type: "recent" }
-  | { type: "tag"; tag: string };
+  | { type: "tag"; tag: string }
+  | { type: "artist"; artist: string };
 
 export type RepeatMode = "off" | "all" | "one";
 export type TabId = "player" | "visuals" | "dj" | "fx" | "library" | "me";
