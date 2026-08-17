@@ -138,7 +138,7 @@ export const DEFAULT_VIS_CFG: VisCfg = {
   glow: 0.7, trail: 0.55, particles: 0.35, pStyle: "RISE",
   speed: 1, intensity: 1, zoom: 1, spinV: 0, bgWash: 0.3, thick: 1,
   mirror: false, shake: false, flash: true, impacts: [], autoMode: "off", hiRes: false, fastBeats: true, syncMs: 0,
-  vis3d: "OFF", vis3dAmt: 0.5,
+  vis3d: "OFF", vis3dAmt: 0.5, dropFx: 0.6,
 };
 
 export const MONO = "'JetBrains Mono', monospace";

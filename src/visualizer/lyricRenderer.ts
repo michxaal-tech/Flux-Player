@@ -3,6 +3,7 @@
 // what's on screen is short and large; long halves still wrap to ≤3 rows and
 // are never shrunk into a tiny strip.
 import type { LiveState } from "./live";
+import { LYRIC_FX, letterFx, makeRamp, type LetterFxCtx } from "./lyricFx";
 
 export interface LyricCtx {
   c: CanvasRenderingContext2D;
@@ -16,6 +17,12 @@ export interface LyricCtx {
   C1: (a?: number, l?: number) => string;
   C2: (a?: number, l?: number) => string;
   CMix: (f: number, a?: number, l?: number) => string;
+  /** live spectrum, for effects that colour letters by frequency */
+  freq?: Uint8Array;
+  /** active palette, for MATCH THEME letter effects */
+  h1?: number;
+  h2?: number;
+  sat?: number;
   L: LiveState;
 }
 
@@ -197,6 +204,13 @@ function blockMetrics(
   return { rows: block.rows, sizePx, lineH: sizePx * 1.16, widest, x };
 }
 
+/** Set by drawLyricOverlay for the duration of a frame. When non-null, blocks
+ * are drawn a character at a time so per-letter effects can be applied. */
+let letterCtx: {
+  fx: string;
+  base: Omit<LetterFxCtx, "i" | "n" | "row">;
+} | null = null;
+
 function drawBlock(c: CanvasRenderingContext2D, text: string, o: BlockOpts, w: number): void {
   if (o.alpha <= 0.01 || !text) return;
   const m = blockMetrics(c, text, o, w);
@@ -209,10 +223,96 @@ function drawBlock(c: CanvasRenderingContext2D, text: string, o: BlockOpts, w: n
   c.fillStyle = o.color ?? `rgba(255,255,255,${o.alpha})`;
   c.textAlign = "center";
   c.textBaseline = "middle";
+
+  if (letterCtx && letterCtx.fx !== "NONE") {
+    drawBlockLetters(c, m, o, letterCtx.fx, letterCtx.base);
+    c.restore();
+    return;
+  }
+
   m.rows.forEach((row, i) => {
     c.fillText(row, 0, (i - (m.rows.length - 1) / 2) * m.lineH);
   });
   c.restore();
+}
+
+/**
+ * Per-character render path. Only used when a letter effect is active — the
+ * whole-row fillText above is much cheaper, and most of the time nothing needs
+ * character-level control.
+ *
+ * Characters are laid out by walking each row's measured advances, so spacing
+ * and kerning match the single-call path exactly and switching an effect on
+ * never shifts the text.
+ */
+function drawBlockLetters(
+  c: CanvasRenderingContext2D,
+  m: BlockMetrics,
+  o: BlockOpts,
+  fx: string,
+  base: Omit<LetterFxCtx, "i" | "n" | "row">,
+): void {
+  const em = m.sizePx;                    // offsets are in em so they scale
+  const total = m.rows.reduce((s, r) => s + r.length, 0);
+  c.textAlign = "left";
+  let seen = 0;
+
+  m.rows.forEach((row, ri) => {
+    const rowW = c.measureText(row).width;
+    let x = -rowW / 2;
+    const y = (ri - (m.rows.length - 1) / 2) * m.lineH;
+
+    for (let ci = 0; ci < row.length; ci++) {
+      const ch = row[ci];
+      const adv = c.measureText(ch).width;
+      if (ch !== " ") {
+        const st = letterFx(fx, { ...base, i: seen, n: Math.max(1, total), row: ri });
+        const a = (st.alpha ?? 1) * o.alpha;
+        if (a > 0.01) {
+          c.save();
+          c.globalAlpha = a;
+          // position at the glyph's centre so scale and rotation pivot there
+          c.translate(x + adv / 2 + (st.dx ?? 0) * em, y + (st.dy ?? 0) * em);
+          if (st.rot) c.rotate(st.rot);
+          if (st.scale !== undefined || st.scaleY !== undefined) c.scale(st.scale ?? 1, (st.scale ?? 1) * (st.scaleY ?? 1));
+          if (st.glow !== undefined) c.shadowBlur = st.glow;
+          if (st.glowColor) c.shadowColor = st.glowColor;
+          c.textBaseline = "middle";
+
+          // depth copies first, so the glyph itself lands on top
+          if (st.extrude) {
+            c.fillStyle = st.extrudeColor ?? "rgba(0,0,0,0.8)";
+            const steps = 5;
+            for (let d = steps; d >= 1; d--) {
+              const k = (d / steps) * st.extrude * em;
+              c.fillText(ch, -adv / 2 + k, k);
+            }
+          }
+          if (st.ghosts) {
+            for (const g of st.ghosts) {
+              c.fillStyle = g.color;
+              c.fillText(ch, -adv / 2 + g.dx * em, g.dy * em);
+            }
+          }
+
+          if (st.stroke) {
+            c.strokeStyle = st.stroke;
+            c.lineWidth = (st.strokeW ?? 0.03) * em;
+            c.lineJoin = "round";
+            c.strokeText(ch, -adv / 2, 0);
+          }
+          if (!st.hollow) {
+            c.fillStyle = st.color ?? o.color ?? "#fff";
+            c.fillText(ch, -adv / 2, 0);
+          }
+          c.restore();
+        }
+        seen++;
+      }
+      x += adv;
+    }
+  });
+  c.textAlign = "center";
 }
 
 /** reusable colour ramp for the per-character WAVE style (filled each frame) */
@@ -234,6 +334,20 @@ export function drawLyricOverlay(x: LyricCtx): void {
   const size = Math.min(w * 0.058, h * 0.072);
   c.save();
   c.globalCompositeOperation = "source-over";
+
+  // Arm the per-letter path for this frame. Kept as module state rather than
+  // threaded through every style branch: the styles all funnel into drawBlock,
+  // so this is the one place that needs to know.
+  const fx = L.lyricFx && LYRIC_FX.includes(L.lyricFx) ? L.lyricFx : "NONE";
+  letterCtx = fx === "NONE" ? null : {
+    fx,
+    base: {
+      t: time, flow: L.flow, beatE, hitE: L.hitE,
+      bass: Math.min(1, L.energy), frac: raw.frac,
+      freq: x.freq ?? new Uint8Array(0), C1, C2, CMix,
+      ramp: makeRamp(!!L.lyricFxMatch, x.h1 ?? 187, x.h2 ?? 317, x.sat ?? 100),
+    },
+  };
 
   if (style === "KARAOKE") {
     const cur = halved(raw);

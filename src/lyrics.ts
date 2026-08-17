@@ -164,3 +164,81 @@ export async function importLrcFile(tr: Track, file: File): Promise<void> {
   useStore.setState({ lyricStatus: `✓ ${lines.length} lines imported` });
   setTimeout(() => useStore.setState({ lyricStatus: "" }), 3000);
 }
+
+
+// ── manual correction ────────────────────────────────────────────────────
+// Automatic matching works from the filename, so a track whose file is named
+// after something else — or a title that collides with a more famous song —
+// lands on the wrong lyrics with no way back. This lets you say what the song
+// actually is and choose from the candidates yourself. Same public API as the
+// automatic path, so nothing has to be downloaded.
+
+export interface LyricPick {
+  artist: string;
+  title: string;
+  duration: number;
+  synced: string;
+  lines: number;
+}
+
+/** Searches by an explicit title/artist and puts the candidates in the store. */
+export async function searchLyricPicks(title: string, artist: string): Promise<void> {
+  const set = (lyricStatus: string) => useStore.setState({ lyricStatus });
+  const t = title.trim(), a = artist.trim();
+  if (!t && !a) return;
+  set("Searching…");
+  useStore.setState({ lyricPicks: [] });
+  try {
+    const attempts: string[] = [];
+    if (t && a) attempts.push(`track_name=${encodeURIComponent(t)}&artist_name=${encodeURIComponent(a)}`);
+    if (t) attempts.push(`q=${encodeURIComponent(a ? `${a} ${t}` : t)}`);
+    if (a && !t) attempts.push(`artist_name=${encodeURIComponent(a)}`);
+
+    const seen = new Set<string>();
+    const picks: LyricPick[] = [];
+    for (const params of attempts) {
+      for (const h of await search(params)) {
+        if (!h.syncedLyrics) continue;              // unsynced can't drive the overlay
+        const key = `${h.artistName}∷${h.trackName}∷${h.duration}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const lines = parseLrc(h.syncedLyrics).length;
+        if (!lines) continue;
+        picks.push({
+          artist: h.artistName ?? "?", title: h.trackName ?? "?",
+          duration: h.duration ?? 0, synced: h.syncedLyrics, lines,
+        });
+      }
+      if (picks.length >= 12) break;
+    }
+    // closest duration first — the strongest signal that it is *this* recording
+    const dur = useStore.getState().duration;
+    if (dur > 0) picks.sort((x, y) => Math.abs(x.duration - dur) - Math.abs(y.duration - dur));
+    useStore.setState({ lyricPicks: picks.slice(0, 12) });
+    set(picks.length ? `${picks.length} match${picks.length === 1 ? "" : "es"} — pick one` : "Nothing found — try a different spelling");
+    if (!picks.length) setTimeout(() => useStore.setState({ lyricStatus: "" }), 5000);
+  } catch (e) {
+    console.warn("lyric search failed:", e);
+    set("Search failed (offline?)");
+    setTimeout(() => useStore.setState({ lyricStatus: "" }), 4000);
+  }
+}
+
+/** Applies a chosen candidate to the track. */
+export function applyLyricPick(tr: Track, pick: LyricPick): void {
+  const lines = parseLrc(pick.synced);
+  if (!lines.length) return;
+  useStore.getState().updateTrack(tr.id, { lyrics: lines });
+  useStore.setState({
+    lyricPicks: [], lyricAskArtist: false,
+    lyricStatus: `\u2713 ${pick.title} — ${pick.artist} · ${lines.length} lines`,
+  });
+  setTimeout(() => useStore.setState({ lyricStatus: "" }), 4000);
+}
+
+/** Drops the lyrics attached to a track, so a wrong match can simply be removed. */
+export function clearLyrics(tr: Track): void {
+  useStore.getState().updateTrack(tr.id, { lyrics: undefined });
+  useStore.setState({ lyricPicks: [], lyricStatus: "Lyrics cleared" });
+  setTimeout(() => useStore.setState({ lyricStatus: "" }), 3000);
+}

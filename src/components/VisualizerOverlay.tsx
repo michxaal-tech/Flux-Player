@@ -5,13 +5,18 @@ import { nextTrack, prevTrack, togglePlay } from "../audio/transport";
 import { getCurrentTrack, useStore } from "../store/useStore";
 import { mix } from "../theme";
 import { canvasRefs, live } from "../visualizer/live";
-import { MODES_3D } from "../visualizer/project3d";
+import { MODE_3D_HELP, MODES_3D } from "../visualizer/project3d";
+import { DROP_LADDER } from "../visualizer/dropFx";
+import { LYRIC_FX, LYRIC_FX_GROUPS } from "../visualizer/lyricFx";
 import { startVideoExport, stopVideoExport, videoExportSupported } from "../audio/videoRecorder";
 import { fmt } from "../utils";
 import { LYRIC_STYLES } from "../visualizer/lyricRenderer";
 import { chip, NextIcon, PauseIcon, playBtn, PlayIcon, PrevIcon, skipBtn, Slider, Toggle } from "./ui";
 import { vibeToVisuals } from "../ai/features";
 import { AiPrompt } from "./ai/AiBits";
+
+/** TUNE panel groups, in nav order. */
+const PANEL_TABS = ["LOOK", "MOTION", "3D", "BEAT", "LYRICS"];
 
 export function VisualizerOverlay() {
   const visTheme = useStore((s) => s.visTheme);
@@ -22,6 +27,9 @@ export function VisualizerOverlay() {
   const lyricsOn = useStore((s) => s.lyricsOn);
   const lyricAuto = useStore((s) => s.lyricAuto);
   const lyricStyle = useStore((s) => s.lyricStyle);
+  const lyricFx = useStore((s) => s.lyricFx);
+  const lyricFxMatch = useStore((s) => s.lyricFxMatch);
+  const lyricPicks = useStore((s) => s.lyricPicks);
   const lyricStatus = useStore((s) => s.lyricStatus);
   const lyricAskArtist = useStore((s) => s.lyricAskArtist);
   const [artistText, setArtistText] = useState("");
@@ -38,6 +46,10 @@ export function VisualizerOverlay() {
   const lrcInputRef = useRef<HTMLInputElement>(null);
 
   const [themeMenu, setThemeMenu] = useState(false);
+  const [panelTab, setPanelTab] = useState<string>("LOOK");
+  const [fixOpen, setFixOpen] = useState(false);
+  const [fixTitle, setFixTitle] = useState("");
+  const [fixArtist, setFixArtist] = useState("");
   const visRef = useRef<HTMLCanvasElement>(null);
   const lyrRef = useRef<HTMLCanvasElement>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -218,6 +230,26 @@ export function VisualizerOverlay() {
 
       {visPanel && (
         <div className="dropin" style={{ position: "absolute", top: 62, right: 16, width: "min(88vw, 330px)", maxHeight: "68vh", overflowY: "auto", background: "rgba(10,12,18,0.93)", border: BORDER, borderRadius: 16, padding: 14, backdropFilter: "blur(20px)", zIndex: 5 }}>
+          {/* The panel used to be one long scroll of eleven sections, which
+              meant hunting for anything past the fold. Grouping it means every
+              control is at most one tap plus a short scroll away. */}
+          <div style={{ display: "flex", gap: 3, marginBottom: 12, background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: 3 }}>
+            {PANEL_TABS.map((pt) => (
+              <button
+                key={pt}
+                data-ptab={pt}
+                onClick={() => setPanelTab(pt)}
+                style={{
+                  flex: 1, padding: "7px 2px", borderRadius: 8, border: "none", cursor: "pointer",
+                  fontSize: 9, fontWeight: 700, letterSpacing: "0.06em",
+                  background: panelTab === pt ? CYAN : "transparent",
+                  color: panelTab === pt ? BG : "rgba(255,255,255,0.6)",
+                }}
+              >{pt}</button>
+            ))}
+          </div>
+
+          {panelTab === "LOOK" && (<>
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", marginBottom: 8 }}>COLOR PALETTE — {PALETTES.length - 1} + CUSTOM</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
             {PALETTES.map((p) => {
@@ -250,12 +282,18 @@ export function VisualizerOverlay() {
           <Slider label="BG WASH" value={visCfg.bgWash} min={0} max={1} step={0.01} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setV("bgWash", v)} />
           <Slider label="THICKNESS" value={visCfg.thick} min={0.4} max={2.5} step={0.05} format={(v) => `${v.toFixed(2)}×`} onChange={(v) => setV("thick", v)} />
 
+          </>)}
+
+          {panelTab === "MOTION" && (<>
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "10px 0 8px" }}>MOTION</div>
           <Slider label="ANIM SPEED" value={visCfg.speed} min={0.2} max={2.2} step={0.05} format={(v) => `${v.toFixed(2)}×`} onChange={(v) => setV("speed", v)} />
           <Slider label="REACTIVITY" value={visCfg.intensity} min={0.3} max={2} step={0.05} format={(v) => `${v.toFixed(2)}×`} onChange={(v) => setV("intensity", v)} />
           <Slider label="ZOOM" value={visCfg.zoom} min={0.6} max={1.6} step={0.02} format={(v) => `${v.toFixed(2)}×`} onChange={(v) => setV("zoom", v)} />
           <Slider label="SCENE SPIN" value={visCfg.spinV} min={-1} max={1} step={0.05} format={(v) => (Math.abs(v) < 0.05 ? "OFF" : v.toFixed(2))} onChange={(v) => setV("spinV", v)} />
 
+          </>)}
+
+          {panelTab === "3D" && (<>
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 6px" }}>3D SPACE</div>
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
             {MODES_3D.map((m) => (
@@ -269,14 +307,36 @@ export function VisualizerOverlay() {
           </div>
           <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, margin: "6px 0 4px" }}>
             Works with <em>every</em> theme — the visualizer is rendered as normal, then mapped
-            into perspective. FLOOR lays it on a plane running to the horizon, ROOM makes a
-            corridor of floor and ceiling, SPIN turns it on a panel, DEPTH extrudes it into a
-            tunnel coming at you.
+            into perspective.
+            {(visCfg.vis3d ?? "OFF") !== "OFF" && MODE_3D_HELP[visCfg.vis3d] && (
+              <> <span style={{ color: MAG }}>{visCfg.vis3d}</span> — {MODE_3D_HELP[visCfg.vis3d]}.</>
+            )}
           </div>
           {(visCfg.vis3d ?? "OFF") !== "OFF" && (
             <Slider label="DEPTH" value={visCfg.vis3dAmt ?? 0.5} min={0} max={1} step={0.02} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setV("vis3dAmt", v)} color={MAG} />
           )}
 
+          </>)}
+
+          {panelTab === "BEAT" && (<>
+          <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 6px" }}>DROP FX</div>
+          <Slider
+            label="ESCALATION" value={visCfg.dropFx ?? 1} min={0} max={1} step={0.05}
+            format={(v) => (v < 0.03 ? "OFF" : `${Math.min(DROP_LADDER.length, Math.round(DROP_LADDER.length * v))} EFFECTS`)}
+            onChange={(v) => setV("dropFx", v)} color={MAG}
+          />
+          <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, margin: "2px 0 4px" }}>
+            Every drop in the track switches on one more effect, so the last chorus hits harder
+            than the first — {DROP_LADDER.join(" → ").toLowerCase()}. Needs
+            SYNC MODE → ANALYZED to land on the real drops; without it, it guesses from the low end.
+            {analyzedMode && live.anal && (
+              <> <span style={{ color: MAG }}>{live.anal.drops.length} drops</span> found in this track.</>
+            )}
+          </div>
+
+          </>)}
+
+          {panelTab === "MOTION" && (<>
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "10px 0 8px" }}>PARTICLES</div>
           <Slider label="COUNT" value={visCfg.particles} min={0} max={1} step={0.01} format={(v) => `${Math.round(v * 150)}`} onChange={(v) => setV("particles", v)} />
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
@@ -285,6 +345,9 @@ export function VisualizerOverlay() {
             ))}
           </div>
 
+          </>)}
+
+          {panelTab === "BEAT" && (<>
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 6px" }}>SYNC MODE</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             <Toggle label="ANALYZED" on={analyzedMode} onChange={(v) => set({ analyzedMode: v })} color={MAG} />
@@ -345,6 +408,9 @@ export function VisualizerOverlay() {
               format={(v) => `${v > 0 ? "+" : ""}${v}ms`} onChange={(v) => setV("syncMs", v)}
             />
           </div>
+          </>)}
+
+          {panelTab === "LYRICS" && (<>
           {aiReady && (
             <>
               <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 8px" }}>✦ VIBE TO VISUALS</div>
@@ -363,6 +429,58 @@ export function VisualizerOverlay() {
               <button key={s2} onClick={() => set({ lyricStyle: s2 })} style={{ ...chip(lyricStyle === s2), padding: "6px 10px", fontSize: 9.5 }}>{s2}</button>
             ))}
           </div>
+
+          {/* Letter effects are a separate dimension from the styles above: the
+              styles animate a line in and out, these decide what the letters do
+              while they sit there. Any pairing works. */}
+          <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 4px" }}>
+            LETTER FX — {LYRIC_FX.length - 1}
+          </div>
+          <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, marginBottom: 7 }}>
+            Applies on top of whichever animation you picked above — colour ramps, per-letter
+            motion, karaoke fills and text treatments.
+          </div>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
+            <button
+              data-lfx="NONE"
+              onClick={() => set({ lyricFx: "NONE" })}
+              style={{ ...chip(lyricFx === "NONE"), padding: "6px 10px", fontSize: 9.5 }}
+            >✕ NONE</button>
+          </div>
+          {LYRIC_FX_GROUPS.map((g) => (
+            <div key={g.name} style={{ marginBottom: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, marginBottom: 4 }}>
+                <div style={{ fontSize: 9, letterSpacing: "0.16em", color: "rgba(255,255,255,0.32)" }}>{g.name}</div>
+                {/* Several colour effects are defined by fixed hues — fire is
+                    orange, ice is cyan — which is the point of picking them, but
+                    it means they clash with the palette. Matching keeps each
+                    effect's gradient and glow structure and only moves the hues
+                    onto the current palette. */}
+                {g.name === "COLOR" && (
+                  <label style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 9, letterSpacing: "0.06em", color: lyricFxMatch ? MAG : "rgba(255,255,255,0.45)" }}>
+                    <input
+                      type="checkbox"
+                      data-lfxmatch
+                      checked={lyricFxMatch}
+                      onChange={(e) => set({ lyricFxMatch: e.target.checked })}
+                      style={{ accentColor: MAG, width: 13, height: 13, margin: 0 }}
+                    />
+                    MATCH THEME
+                  </label>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {g.items.map((f) => (
+                  <button
+                    key={f}
+                    data-lfx={f}
+                    onClick={() => set({ lyricFx: f })}
+                    style={{ ...chip(lyricFx === f, MAG), padding: "6px 9px", fontSize: 9 }}
+                  >{f}</button>
+                ))}
+              </div>
+            </div>
+          ))}
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
             <button
               onClick={async () => {
@@ -373,10 +491,85 @@ export function VisualizerOverlay() {
               style={{ ...chip(false, MAG), padding: "7px 11px", fontSize: 9.5, opacity: track ? 1 : 0.4 }}
             >🔍 FIND LYRICS</button>
             <button onClick={() => lrcInputRef.current?.click()} style={{ ...chip(false), padding: "7px 11px", fontSize: 9.5, opacity: track ? 1 : 0.4 }}>＋ .LRC FILE</button>
+            <button
+              onClick={() => { setFixOpen((v) => !v); if (track) { setFixTitle(track.name); setFixArtist(""); } }}
+              style={{ ...chip(fixOpen), padding: "7px 11px", fontSize: 9.5, opacity: track ? 1 : 0.4 }}
+            >✎ WRONG LYRICS?</button>
+            {track?.lyrics && (
+              <button
+                onClick={async () => { const { clearLyrics } = await import("../lyrics"); if (track) clearLyrics(track); }}
+                style={{ ...chip(false), padding: "7px 11px", fontSize: 9.5 }}
+              >✕ CLEAR</button>
+            )}
             <span style={{ fontSize: 9.5, color: CYAN }}>
               {lyricStatus || (track?.lyrics ? `${track.lyrics.length} lines loaded` : track ? "no lyrics yet" : "")}
             </span>
           </div>
+          {/* Automatic matching goes off the filename, so a file named after
+              something else lands on the wrong song with no way back. Searching
+              by the real title and artist and picking from the candidates fixes
+              it without leaving the app. */}
+          {fixOpen && track && (
+            <div style={{ marginTop: 8, padding: 10, borderRadius: 10, background: "rgba(255,255,255,0.04)", border: BORDER }}>
+              <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.45)", lineHeight: 1.5, marginBottom: 7 }}>
+                Type the song's real title and artist — the file name is often not either of them.
+              </div>
+              <div style={{ display: "flex", gap: 5, marginBottom: 6 }}>
+                <input
+                  value={fixTitle}
+                  onChange={(e) => setFixTitle(e.target.value)}
+                  placeholder="song title"
+                  style={{ flex: 1, minWidth: 0, background: "rgba(255,255,255,0.06)", border: BORDER, borderRadius: 9, padding: "8px 10px", fontSize: 11, color: "#fff", outline: "none" }}
+                />
+                <input
+                  value={fixArtist}
+                  onChange={(e) => setFixArtist(e.target.value)}
+                  placeholder="artist"
+                  onKeyDown={async (e) => {
+                    if (e.key !== "Enter") return;
+                    const { searchLyricPicks } = await import("../lyrics");
+                    searchLyricPicks(fixTitle, fixArtist);
+                  }}
+                  style={{ flex: 1, minWidth: 0, background: "rgba(255,255,255,0.06)", border: BORDER, borderRadius: 9, padding: "8px 10px", fontSize: 11, color: "#fff", outline: "none" }}
+                />
+              </div>
+              <button
+                data-lyricsearch
+                onClick={async () => {
+                  const { searchLyricPicks } = await import("../lyrics");
+                  searchLyricPicks(fixTitle, fixArtist);
+                }}
+                style={{ ...chip(true, MAG), padding: "8px 12px", fontSize: 9.5, width: "100%" }}
+              >🔍 SEARCH</button>
+              {lyricPicks.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
+                  {lyricPicks.map((pk, i) => (
+                    <button
+                      key={`${pk.artist}-${pk.title}-${i}`}
+                      data-lyricpick={i}
+                      onClick={async () => {
+                        const { applyLyricPick } = await import("../lyrics");
+                        applyLyricPick(track, pk);
+                        setFixOpen(false);
+                      }}
+                      style={{
+                        textAlign: "left", padding: "8px 10px", borderRadius: 9, cursor: "pointer",
+                        background: "rgba(255,255,255,0.05)", border: BORDER, color: "#fff",
+                        display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center",
+                      }}
+                    >
+                      <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11 }}>
+                        <b>{pk.title}</b> <span style={{ opacity: 0.6 }}>— {pk.artist}</span>
+                      </span>
+                      <span style={{ flexShrink: 0, fontSize: 9, opacity: 0.55 }}>
+                        {fmt(pk.duration)} · {pk.lines}L
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {lyricAskArtist && track && (
             <div style={{ display: "flex", gap: 5, alignItems: "center", marginTop: 8 }}>
               <input
@@ -419,6 +612,7 @@ export function VisualizerOverlay() {
             🎲 randomizes the whole look. Theme auto-cycle/shuffle lives in the theme menu (top left).
             MARQUEE and NEONSIGN themes are built around lyrics.
           </div>
+          </>)}
         </div>
       )}
 

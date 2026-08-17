@@ -78,28 +78,51 @@ await page.waitForTimeout(400);
 await page.click("button:has-text('⚙ TUNE')");
 await page.waitForSelector("text=COLOR PALETTE");
 await page.click(`button:has-text('${PALETTE}')`);
+await page.keyboard.press("Escape");
 
-/** Reads the visualizer canvas and reports its luminance distribution. */
-const sample = () =>
-  page.evaluate(() => {
-    const cvs = [...document.querySelectorAll("canvas")];
-    // the visualizer canvas is the largest one on screen
-    const cv = cvs.sort((a, b) => b.width * b.height - a.width * a.height)[0];
-    if (!cv) return null;
-    const s = document.createElement("canvas");
-    s.width = 160; s.height = 120;
-    const sc = s.getContext("2d", { willReadFrequently: true });
-    sc.drawImage(cv, 0, 0, 160, 120);
-    const d = sc.getImageData(0, 0, 160, 120).data;
-    let sum = 0, black = 0, white = 0, n = 0;
-    for (let i = 0; i < d.length; i += 4) {
-      const l = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
-      sum += l; n++;
-      if (l < 8) black++;
-      if (l > 248) white++;
-    }
-    return { mean: sum / n / 255, black: black / n, white: white / n };
-  });
+/** Reads the visualizer canvas and reports its luminance distribution.
+ *
+ * Sampled repeatedly and reduced by max, because saturation is transient: a
+ * tunnel that clips to white on the beat looks fine in the frame between
+ * beats. The centre is measured separately — centred compositions blow out in
+ * the middle first, and a middle-only blowout is a small fraction of the whole
+ * frame, so a global white ratio misses it entirely. */
+const sample = async () => {
+  const one = () =>
+    page.evaluate(() => {
+      const cvs = [...document.querySelectorAll("canvas")];
+      const cv = cvs.sort((a, b) => b.width * b.height - a.width * a.height)[0];
+      if (!cv) return null;
+      const s = document.createElement("canvas");
+      s.width = 160; s.height = 120;
+      const sc = s.getContext("2d", { willReadFrequently: true });
+      sc.drawImage(cv, 0, 0, 160, 120);
+      const d = sc.getImageData(0, 0, 160, 120).data;
+      let sum = 0, black = 0, white = 0, n = 0, cWhite = 0, cN = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        const px = (i / 4) % 160, py = (i / 4 / 160) | 0;
+        const l = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+        sum += l; n++;
+        if (l < 8) black++;
+        if (l > 248) white++;
+        // central third, where a centred composition saturates first
+        if (px > 53 && px < 107 && py > 40 && py < 80) {
+          cN++;
+          if (l > 248) cWhite++;
+        }
+      }
+      return { mean: sum / n / 255, black: black / n, white: white / n, core: cN ? cWhite / cN : 0 };
+    });
+  let best = null;
+  for (let i = 0; i < 6; i++) {
+    const r = await one();
+    if (!r) return null;
+    if (!best || r.white > best.white) best = { ...r, core: Math.max(best?.core ?? 0, r.core) };
+    else best.core = Math.max(best.core, r.core);
+    await page.waitForTimeout(140);
+  }
+  return best;
+};
 
 /** Frame time over ~1.2s of real rendering, as the median of rAF deltas. */
 const perf = () =>
@@ -124,13 +147,16 @@ const perf = () =>
 // every later click when this was implicit.
 const openTune = async () => {
   if (await page.$("text=3D SPACE")) return;
-  await page.click("button:has-text('⚙ TUNE')");
+  if (!(await page.$('button[data-ptab="3D"]'))) await page.click("button:has-text('⚙ TUNE')");
+  // the panel is grouped now — the 3D controls live behind their own tab
+  await page.waitForSelector('button[data-ptab="3D"]', { timeout: 5000 });
+  await page.click('button[data-ptab="3D"]');
   await page.waitForSelector("text=3D SPACE", { timeout: 5000 });
 };
 const closeTune = async () => {
-  if (!(await page.$("text=3D SPACE"))) return;
+  if (!(await page.$('button[data-ptab="3D"]'))) return;
   await page.keyboard.press("Escape");
-  await page.waitForSelector("text=3D SPACE", { state: "detached", timeout: 5000 });
+  await page.waitForSelector('button[data-ptab="3D"]', { state: "detached", timeout: 5000 });
 };
 
 const setMode = async (m) => {
@@ -168,6 +194,7 @@ for (const t of THEMES) {
     if (!s) bad.push("no canvas");
     else {
       if (s.white > 0.06) bad.push(`WHITE-OUT ${(s.white * 100).toFixed(1)}%`);
+      if (s.core > 0.3) bad.push(`CORE BLOWN ${(s.core * 100).toFixed(0)}%`);
       if (s.black > 0.94) bad.push(`BLANK ${(s.black * 100).toFixed(1)}% black`);
       if (s.mean < 0.006) bad.push(`DARK mean=${s.mean.toFixed(4)}`);
     }
@@ -179,7 +206,7 @@ for (const t of THEMES) {
     if (bad.length) fails++;
     row.push(
       `${m.padEnd(5)} mean=${s ? s.mean.toFixed(3) : "--"} blk=${s ? (s.black * 100).toFixed(0).padStart(2) : "--"}% ` +
-      `wht=${s ? (s.white * 100).toFixed(1).padStart(4) : "--"}% ${ft.toFixed(1)}ms ${bad.length ? "✘ " + bad.join(", ") : "✔"}`
+      `wht=${s ? (s.white * 100).toFixed(1).padStart(4) : "--"}% core=${s ? (s.core * 100).toFixed(0).padStart(3) : "--"}% ${ft.toFixed(1)}ms ${bad.length ? "✘ " + bad.join(", ") : "✔"}`
     );
   }
   console.log(`${t}\n  ${row.join("\n  ")}`);

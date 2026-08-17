@@ -1,6 +1,6 @@
 # FLUX PRO
 
-Local music player with a live Web Audio FX rack, DJ performance deck, and a 43-theme
+Local music player with a live Web Audio FX rack, DJ performance deck, and a 75-theme
 audio-reactive visualizer — the production build of the `flux-studio-pro.tsx` prototype
 (kept as the design spec in [`docs/prototype/`](docs/prototype/flux-studio-pro.tsx)).
 
@@ -31,7 +31,11 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
 - **Visualizer** — 75 canvas themes × 31 palettes (+ custom hue pair), including
   5 staged themes (◈) whose effects layer in as the arrangement builds and
   detonate on drops, and 2 natively 3D ones. Any theme can be projected into 3D
-  (floor plane, corridor, rotating panel, extruded tunnel). 15 tune
+  eight ways (floor plane, corridor, flying tunnel, vortex, rotating panel,
+  cube, dome, cylinder). Drop escalation unlocks one more full-screen effect at
+  every drop the analyser finds, so a track's last chorus hits harder than its
+  first. 44 per-letter lyric effects — colour ramps, per-letter motion, karaoke
+  fills and text treatments — compose with the 20 line animations. 15 tune
   controls (glow, trails, particles w/ 4 styles, reactivity, zoom, scene spin,
   mirror, beat flash/shake, auto-cycle), edge spectrum meters on every tab.
   Adaptive resolution keeps full-screen rendering at 60fps on any device (or
@@ -40,8 +44,10 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
   Analysis is delayed to compensate for audio output latency, so beats land on
   the sound rather than ahead of it (with a BEAT SYNC offset for Bluetooth).
 - **Synced lyrics** — lrclib.net lookup with filename analysis + confidence
-  scoring, auto-search per track, .lrc import, 14 animation styles drawn on
-  a dedicated canvas layer.
+  scoring, auto-search per track, .lrc import, and a manual "wrong lyrics?"
+  search so a mismatched file can be corrected by picking the right song
+  yourself. 20 line animations × 44 per-letter effects, drawn on a dedicated
+  canvas layer.
 - **Recorder** — captures the master output (FX, stutters, ambience included)
   via MediaRecorder; takes are stored and downloadable.
 - **Offline export** — renders a whole track through the FX graph with
@@ -72,6 +78,8 @@ src/
   components/   one file per tab (Player, DJ, FXRack, Library, Me),
                 visualizer overlay, shortcuts panel, shared UI atoms
   visualizer/   render loop engine, live (mutable frame state),
+                project3d (perspective projections), dropFx (drop escalation),
+                lyricRenderer + lyricFx (line animations and per-letter effects),
                 themes/ — one file per theme; register new ones in themes/index.ts
   store/        zustand store (persisted) + blob storage (IndexedDB/OPFS)
   hooks/        keyboard, media session, sleep timer

@@ -124,10 +124,17 @@ await step("visualizer opens, theme dropdown works, tune panel works", async () 
 await step("3D projection applies to any theme", async () => {
   await page.click("button:has-text('◉ VISUALS')");
   await page.click("button:has-text('⚙ TUNE')");
+  // the tune panel is grouped now — 3D lives behind its own tab
+  await page.click('button[data-ptab="3D"]');
   await page.waitForSelector("text=3D SPACE");
   await page.click('button[data-3d="FLOOR"]');
   await page.waitForSelector("text=DEPTH"); // amount slider appears once on
   await page.click('button[data-3d="OFF"]');
+  // letter effects are a second, independent dimension from the lyric styles
+  await page.click('button[data-ptab="LYRICS"]');
+  await page.waitForSelector("text=LETTER FX");
+  await page.click('button[data-lfx="RAINBOW WAVE"]');
+  await page.waitForSelector("input[data-lfxmatch]");
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   await page.waitForSelector("button[data-themechip]", { state: "detached" });

@@ -67,6 +67,12 @@ export interface StoreState {
   // lyrics
   lyricsOn: boolean;
   lyricStyle: string;
+  /** per-letter lyric effect, independent of the entry/exit style */
+  lyricFx: string;
+  /** re-hue fixed-colour letter effects onto the active palette */
+  lyricFxMatch: boolean;
+  /** manual-search candidates awaiting a choice (see lyrics.ts) */
+  lyricPicks: import("../lyrics").LyricPick[];
   lyricStatus: string;
   /** auto-search lyrics when a track starts (manual FIND when off) */
   lyricAuto: boolean;
@@ -181,6 +187,9 @@ export const useStore = create<StoreState>()(
         stemProgress: "",
         lyricsOn: true,
         lyricStyle: "DRIFT",
+        lyricFx: "NONE",
+        lyricFxMatch: true,
+        lyricPicks: [],
         lyricStatus: "",
         lyricAuto: true,
         lyricAskArtist: false,
@@ -398,6 +407,8 @@ export const useStore = create<StoreState>()(
           instMode: s.instMode,
           lyricsOn: s.lyricsOn,
           lyricStyle: s.lyricStyle,
+          lyricFx: s.lyricFx,
+          lyricFxMatch: s.lyricFxMatch,
           lyricAuto: s.lyricAuto,
           trackBpm: s.trackBpm,
           radioMode: s.radioMode,

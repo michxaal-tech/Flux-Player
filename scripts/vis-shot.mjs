@@ -66,13 +66,54 @@ await page.evaluate(() => {
   if (cv) cv.click();
 });
 
-const shots = [];
-for (const [label, waitMs] of [["intro", 1200], ["build", 2600], ["drop", 2600], ["peak", 2000]]) {
-  await page.waitForTimeout(waitMs);
-  const p = join(OUT, `${THEME.toLowerCase()}-${label}.png`);
-  await page.screenshot({ path: p });
-  shots.push(p);
-  console.log(`saved ${p}`);
+// LFX=RAINBOW,FIRE,... captures one frame per letter effect, with lyrics loaded
+const LFX = (process.env.LFX || "").split(",").filter(Boolean);
+if (LFX.length) {
+  // inject synced lyrics directly — no network in the sandbox
+  await page.evaluate(() => {
+    const st = window.__fluxStore.getState();
+    const words = "NEON LIGHTS BURN THROUGH THE NIGHT";
+    const lyrics = [];
+    for (let i = 0; i < 14; i++) lyrics.push({ t: i * 2.2, text: words });
+    for (const pl of st.playlists) {
+      for (const tr of pl.tracks) tr.lyrics = lyrics;
+    }
+    st.set({ playlists: [...st.playlists], lyricsOn: true, lyricStyle: "FOCUS" });
+  });
+  await page.waitForTimeout(1500);
+  for (const f of LFX) {
+    await page.evaluate((fx) => window.__fluxStore.getState().set({ lyricFx: fx }), f);
+    await page.waitForTimeout(900);
+    const p = join(OUT, `lfx-${f.toLowerCase().replace(/ /g, "-")}.png`);
+    await page.screenshot({ path: p });
+    console.log(`saved ${p}`);
+  }
+  await browser.close();
+  preview.kill();
+  process.exit(0);
+}
+
+// MODE=FLOOR,ROOM,... captures one frame per 3D projection instead of a timeline
+const MODES = (process.env.MODES || "").split(",").filter(Boolean);
+if (MODES.length) {
+  await page.waitForTimeout(4000); // let the track reach its loud section
+  for (const m of MODES) {
+    if (!(await page.$("text=3D SPACE"))) await page.click("button:has-text('⚙ TUNE')");
+    await page.waitForSelector("text=3D SPACE");
+    await page.click(`button[data-3d="${m}"]`);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(1400);
+    const p = join(OUT, `${THEME.toLowerCase()}-3d-${m.toLowerCase()}.png`);
+    await page.screenshot({ path: p });
+    console.log(`saved ${p}`);
+  }
+} else {
+  for (const [label, waitMs] of [["intro", 1200], ["build", 2600], ["drop", 2600], ["peak", 2000]]) {
+    await page.waitForTimeout(waitMs);
+    const p = join(OUT, `${THEME.toLowerCase()}-${label}.png`);
+    await page.screenshot({ path: p });
+    console.log(`saved ${p}`);
+  }
 }
 
 await browser.close();

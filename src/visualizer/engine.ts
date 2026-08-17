@@ -11,11 +11,16 @@ import { themes } from "./themes";
 import type { ThemeCtx } from "./themeTypes";
 import { drawLyricOverlay } from "./lyricRenderer";
 import { project3d, type Mode3D } from "./project3d";
+import { drawDropFx, stepDropFx, MAX_TIER } from "./dropFx";
 
 // Offscreen buffer the theme renders into when a 3D mode is on. It carries the
 // trail, and the projection reads it as a texture — so the perspective is
 // applied once per frame instead of compounding into the trail.
 const sceneCv = document.createElement("canvas");
+
+// Snapshot of the finished frame, so drop effects that redraw the picture over
+// itself read from a copy instead of from their own output.
+const fxSnapCv = document.createElement("canvas");
 
 /** themes that render lyrics themselves — the shared overlay stays out of their way */
 const LYRIC_NATIVE_THEMES = new Set(["MARQUEE", "NEONSIGN", "CLOCK"]);
@@ -82,6 +87,8 @@ function syncLive(): void {
   sub((s) => getCurrentTrack(s)?.fileId, wantAnalysis, { fireImmediately: true });
   sub((s) => s.lyricsOn, (v) => { live.lyricsOn = v; }, { fireImmediately: true });
   sub((s) => s.lyricStyle, (v) => { live.lyricStyle = v; }, { fireImmediately: true });
+  sub((s) => s.lyricFx, (v) => { live.lyricFx = v; }, { fireImmediately: true });
+  sub((s) => s.lyricFxMatch, (v) => { live.lyricFxMatch = v; }, { fireImmediately: true });
 }
 
 /**
@@ -350,6 +357,14 @@ export function startRenderLoop(): void {
           L.dropE = de;
           if (de > 0.05) L.energy = Math.max(L.energy, 0.55 + de * 0.45);
 
+          // Which drop are we on? The analyser knows the whole timeline, so the
+          // renderer can treat the fourth drop as the fourth rather than as
+          // "loud again" — that ordinal is what the escalation ladder rides on.
+          let di = 0;
+          for (const d of A.drops) if (d <= media) di++;
+          if (di > L.dropIdx) L.dropNew = true;
+          if (di !== L.dropIdx) L.dropIdx = di;
+
           // section index = how many section marks we have passed
           let sec = 0;
           for (const t2 of A.sections) if (t2 <= media) sec++;
@@ -360,7 +375,18 @@ export function startRenderLoop(): void {
         hit = beat;
         const jump = bass - L.prevBassSlow;
         L.prevBassSlow += (bass - L.prevBassSlow) * 0.01;
+        const prevDrop = L.dropE;
         L.dropE = Math.max(L.dropE * 0.97, Math.min(1, Math.max(0, jump - 0.18) * 3));
+        // no timeline to count against, so a rising edge stands in for a drop —
+        // escalation still works without analysis, just less reliably placed
+        // A loud four-to-the-floor track crosses this threshold constantly, so
+        // without a minimum spacing the escalation ladder tops out in seconds.
+        // Real drops are tens of seconds apart.
+        if (L.dropE > 0.55 && prevDrop <= 0.55 && t - L.lastDropAt > 60 * 20) {
+          L.dropIdx++;
+          L.dropNew = true;
+          L.lastDropAt = t;
+        }
         L.section = 0;
       }
     }
@@ -376,6 +402,7 @@ export function startRenderLoop(): void {
     const bps = L.bpm > 0 ? (L.bpm * (L.speed || 1)) / 60 : 2;
     const beatStep = L.playing ? dtSec * bps : dtSec * 2;
     const decay = (k: number) => Math.exp(-beatStep * k);
+    L.flow += beatStep;
 
     L.hitE = hit ? 1 : L.hitE * decay(9);
     // beat envelope: back-to-back beats read as separate hits instead of one
@@ -604,9 +631,22 @@ export function startRenderLoop(): void {
 
       // trail fade + bg wash
       const fade = 0.06 + (1 - cfg.trail) * 0.34;
-      c.fillStyle = `rgba(5,6,10,${fade})`;
-      c.fillRect(0, 0, w, h);
-      if (cfg.bgWash > 0.01) {
+      if (use3d) {
+        // In 3D the scene is a *texture*, and it has to keep an alpha channel:
+        // fading toward opaque black would make every projected layer a solid
+        // rectangle, so a stack of them could only sum — which is exactly how
+        // the tunnel ended up as a white blob. Fading alpha instead leaves
+        // empty space genuinely empty, so layers show through each other.
+        c.save();
+        c.globalCompositeOperation = "destination-out";
+        c.fillStyle = `rgba(0,0,0,${fade})`;
+        c.fillRect(0, 0, w, h);
+        c.restore();
+      } else {
+        c.fillStyle = `rgba(5,6,10,${fade})`;
+        c.fillRect(0, 0, w, h);
+      }
+      if (!use3d && cfg.bgWash > 0.01) {
         const wg = c.createLinearGradient(0, 0, w, h);
         wg.addColorStop(0, C1(cfg.bgWash * (0.05 + bassV * 0.05), 40));
         wg.addColorStop(1, C2(cfg.bgWash * (0.05 + bassV * 0.05), 40));
@@ -723,10 +763,43 @@ export function startRenderLoop(): void {
         project3d({
           c, src: sceneCv, sw: sceneCv.width, sh: sceneCv.height, w, h,
           mode: mode3d, amt: cfg.vis3dAmt ?? 0.5,
-          vt, bass: bassV, beatE: L.beatE, dropE: L.dropE,
-          tint: C1(0.5, 70),
+          vt, flow: L.flow, bass: bassV, beatE: L.beatE, dropE: L.dropE,
+          wash: cfg.bgWash, C1, C2,
         });
       }
+
+      // ── drop escalation ──
+      // Screen-space, so it stacks on top of whatever the theme and the 3D
+      // projection produced. Each drop in the analysed timeline unlocks one
+      // more effect, so the last chorus of a track is visibly bigger than the
+      // first — without any theme knowing about it.
+      const dropAmt = cfg.dropFx ?? 1;
+      if (dropAmt > 0.01) {
+        // Approximated drops (no analysis) are unreliable enough that the
+        // ladder would race to the top within seconds of a loud track, so the
+        // tier is capped until there is a real timeline to count against.
+        const ceiling = L.anal ? MAX_TIER : 3;
+        stepDropFx(L, beatStep, Math.min(ceiling, Math.round(MAX_TIER * Math.min(1, dropAmt))));
+        if (L.dropTier >= 2) {
+          // Several of these effects redraw the frame over itself. Sampling the
+          // visible canvas directly makes that a feedback loop — each frame
+          // adds to the last and the picture ramps to white in about a second.
+          // Snapshotting first keeps every pass a one-shot overlay.
+          if (fxSnapCv.width !== vc.width || fxSnapCv.height !== vc.height) {
+            fxSnapCv.width = vc.width;
+            fxSnapCv.height = vc.height;
+          }
+          const fc = fxSnapCv.getContext("2d")!;
+          fc.setTransform(1, 0, 0, 1, 0, 0);
+          fc.clearRect(0, 0, fxSnapCv.width, fxSnapCv.height);
+          fc.drawImage(vc, 0, 0);
+        }
+        drawDropFx({
+          c, src: fxSnapCv, sw: fxSnapCv.width, sh: fxSnapCv.height, w, h,
+          L, amt: dropAmt, R, TK, C1, C2, CMix,
+        });
+      }
+      L.dropNew = false;
 
       // ── per-beat impact layer ──
       if (IMP.has("CHROMA") && L.beatE > 0.04) {
@@ -805,7 +878,7 @@ export function startRenderLoop(): void {
         if (lyricActive) {
           drawLyricOverlay({
             c: c2, w: lw2, h: lh2, time: engine.audio.currentTime, beatE: L.beatE, vt, TK,
-            C1, C2, CMix, L,
+            C1, C2, CMix, freq, h1, h2, sat, L,
           });
         }
       }

@@ -19,6 +19,10 @@ export interface LiveState {
   lyricLines: { t: number; text: string }[] | null;
   lyricsOn: boolean;
   lyricStyle: string;
+  /** per-letter lyric effect (see lyricFx.ts), independent of lyricStyle */
+  lyricFx: string;
+  /** re-hue the fixed-colour letter effects onto the active palette */
+  lyricFxMatch: boolean;
   prog: number; // 0..1
   dur: number;
   loopA: number | null;
@@ -77,18 +81,36 @@ export interface LiveState {
   impScan: number;
   /** total A/V compensation currently applied, ms (measured + user offset) */
   syncMs: number;
+  /** Musical time, in beats. Advances with the detected tempo rather than with
+   * frames, so anything driven by it stays in phase at any BPM or refresh rate. */
+  flow: number;
+  /** how many drops of the analysed timeline have gone by (see dropFx.ts) */
+  dropIdx: number;
+  /** frame index of the last approximated drop, for rate limiting */
+  lastDropAt: number;
+  /** true on the single frame a new drop lands */
+  dropNew: boolean;
+  /** escalation tier: how many drop effects have been unlocked so far */
+  dropTier: number;
+  /** one-shot detonation envelope, 1 on the drop frame */
+  dropBang: number;
+  /** expanding drop shockwaves, 0..1 each */
+  dropRings: number[];
+  /** frame-shatter tiles, spawned at the top of the ladder */
+  dropTiles: { x: number; y: number; vx: number; vy: number; rot: number; a: number }[];
   /** Per-theme scratch buckets keyed by theme; new themes park their state here. */
   scratch: Record<string, any>;
 }
 
 export const live: LiveState = {
   playing: false, speed: 1, spin: false, spinRate: 0.55, visOpen: false, visTheme: "RING",
-  cfg: { ...DEFAULT_VIS_CFG }, trackName: "", peaks: null, lyricLines: null, lyricsOn: true, lyricStyle: "FADE",
+  cfg: { ...DEFAULT_VIS_CFG }, trackName: "", peaks: null, lyricLines: null, lyricsOn: true, lyricStyle: "FADE", lyricFx: "NONE", lyricFxMatch: true,
   prog: 0, dur: 0, loopA: null, loopB: null,
   rot: 0, vt: 0, tunnel: [], stars: [], vparts: [], specHist: [], ripples: [],
   flies: [], vort: [], cityH: [], shakeVal: 0,
   beatAvg: 0, prevBass: 0, fluxAvg: 0, fluxDev: 0, lastBeatAt: 0, beats: [], bpm: 0, flashVal: 0, cycleT: 0,
   beatE: 0, energy: 0.35, anal: null, analOn: false, analBeat: 0, dropE: 0, prevBassSlow: 0, hitE: 0, section: 0, analHit: 0, impRings: [], impScan: -1, syncMs: 0, playerTheme: "AURORA", playerBgOn: true, scratch: {},
+  flow: 0, lastDropAt: -9999, dropIdx: 0, dropNew: false, dropTier: 0, dropBang: 0, dropRings: [], dropTiles: [],
 };
 
 // Debug handle: inspect the render-loop state from the console (window.__flux).
