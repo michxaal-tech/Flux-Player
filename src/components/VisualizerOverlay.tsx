@@ -6,7 +6,7 @@ import { getCurrentTrack, useStore } from "../store/useStore";
 import { mix } from "../theme";
 import { canvasRefs, live } from "../visualizer/live";
 import { MODE_3D_HELP, MODES_3D } from "../visualizer/project3d";
-import { DROP_LADDER } from "../visualizer/dropFx";
+import { layersFor, MAX_SLOTS } from "../visualizer/dropLayers";
 import { applyLook, captureLook, copyText, decodeLook, encodeLook } from "../visualPresets";
 import { LYRIC_FX, LYRIC_FX_GROUPS } from "../visualizer/lyricFx";
 import { startVideoExport, stopVideoExport, videoExportSupported } from "../audio/videoRecorder";
@@ -83,6 +83,9 @@ export function VisualizerOverlay() {
 
   const [themeMenu, setThemeMenu] = useState(false);
   const [panelTab, setPanelTab] = useState<string>("LOOK");
+  // manual drop-layer depth, for auditioning a theme's set without waiting for
+  // the track to actually drop
+  const [previewSlots, setPreviewSlots] = useState(-1);
   const [fixOpen, setFixOpen] = useState(false);
   const [lookName, setLookName] = useState("");
   const [lookMsg, setLookMsg] = useState("");
@@ -492,19 +495,49 @@ export function VisualizerOverlay() {
           </>)}
 
           {panelTab === "BEAT" && (<>
-          <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 6px" }}>DROP FX</div>
+          <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 6px" }}>DROP LAYERS <NewTag /></div>
           <Slider
             label="ESCALATION" value={visCfg.dropFx ?? 1} min={0} max={1} step={0.05}
-            format={(v) => (v < 0.03 ? "OFF" : `${Math.min(DROP_LADDER.length, Math.round(DROP_LADDER.length * v))} EFFECTS`)}
+            format={(v) => (v < 0.03 ? "OFF" : `${Math.min(MAX_SLOTS, Math.round(MAX_SLOTS * v))} LAYERS`)}
             onChange={(v) => setV("dropFx", v)} color={MAG}
           />
           <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, margin: "2px 0 4px" }}>
-            Every drop in the track switches on one more effect, so the last chorus hits harder
-            than the first — {DROP_LADDER.join(" → ").toLowerCase()}. Needs
+            Every drop adds a layer to the visual and <i>leaves it there</i>. When the track calms
+            the newest layers thin out; when it lifts again they come back — so a song builds
+            rather than flashing. Each theme has its own set: {visTheme} gets{" "}
+            <span style={{ color: MAG }}>{layersFor(visTheme).join(" → ").toLowerCase()}</span>. Needs
             SYNC MODE → ANALYZED to land on the real drops; without it, it guesses from the low end.
             {analyzedMode && live.anal && (
               <> <span style={{ color: MAG }}>{live.anal.drops.length} drops</span> found in this track.</>
             )}
+          </div>
+
+          {/* Escalation is otherwise only visible by waiting for the track to
+              drop, which makes the layer set impossible to audition. These jump
+              straight to a depth; the next real drop takes over again. */}
+          <div style={{ fontSize: 9.5, letterSpacing: "0.14em", color: "rgba(255,255,255,0.4)", margin: "8px 0 5px" }}>PREVIEW DEPTH</div>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {Array.from({ length: MAX_SLOTS + 1 }, (_, n) => (
+              <button
+                key={n}
+                data-slots={n}
+                onClick={() => {
+                  // the slider is the ceiling, so previewing past it has to
+                  // raise it or the depth would silently snap back
+                  const need = n / MAX_SLOTS;
+                  if ((visCfg.dropFx ?? 1) < need) setV("dropFx", need);
+                  live.dropSlots = n;
+                  live.dropAmts = new Array(n).fill(1);
+                  setPreviewSlots(n);
+                }}
+                style={{ ...chip(previewSlots === n, MAG), padding: "6px 10px", fontSize: 9.5 }}
+              >{n === 0 ? "NONE" : n}</button>
+            ))}
+          </div>
+          <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.3)", lineHeight: 1.5, margin: "4px 0 0" }}>
+            {previewSlots === 0
+              ? "The theme with no layers earned yet."
+              : <>Showing {previewSlots} {previewSlots === 1 ? "layer" : "layers"}: {layersFor(visTheme).slice(0, previewSlots).join(", ").toLowerCase()}.</>}
           </div>
 
           </>)}

@@ -109,8 +109,8 @@ export interface VisCfg {
   vis3d: string;
   /** 0..1 — how aggressive the 3D perspective is */
   vis3dAmt: number;
-  /** 0..1 — drop escalation strength. 0 disables it; higher also unlocks more
-   * of the effect ladder (see dropFx.ts) */
+  /** 0..1 — drop escalation strength. 0 disables it; higher also allows more
+   * of the theme's layer set to be unlocked (see dropLayers.ts) */
   dropFx: number;
   /** extra A/V sync offset in ms on top of the measured output latency —
    * raise it for Bluetooth headphones, which delay sound but not the screen */

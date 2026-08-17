@@ -28,14 +28,22 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
   wind) are synthesized in the audio graph, no samples.
 - **DJ deck** — live BPM detection, output meter, 4 hot cues, hold-to-stutter
   (⅛/¼/½), tape brake & spin-up, speed nudge.
-- **Visualizer** — 80 canvas themes × 31 palettes (+ custom hue pair), including
-  10 staged themes (◈) whose effects layer in as the arrangement builds and
-  detonate on drops, half of them natively 3D (real perspective projection and
-  depth sorting), plus 2 more 3D ones. Any theme can be projected into 3D
+- **Visualizer** — 85 canvas themes × 31 palettes (+ custom hue pair), including
+  15 staged themes (◈) whose effects layer in as the arrangement builds, most of
+  them natively 3D (real perspective projection and depth sorting), plus 2 more
+  3D ones. Any theme can be projected into 3D
   eight ways (floor plane, corridor, flying tunnel, vortex, rotating panel,
-  cube, dome, cylinder). Drop escalation unlocks one more full-screen effect at
-  every drop the analyser finds, so a track's last chorus hits harder than its
-  first. 44 per-letter lyric effects — colour ramps, per-letter motion, karaoke
+  cube, dome, cylinder). **Drop layers**: every drop the analyser finds adds a
+  persistent layer to the picture — orbits, embers, light shafts, rainfall,
+  scan bars, drifting shards and more — and it *stays*. When the track calms the
+  newest layers thin out; when it lifts they come back, so a song builds through
+  its length instead of flashing at each drop. Each theme has its own curated
+  set of 7, drawn in the theme's own space (so a 3D projection carries them onto
+  the surface with everything else), and a PREVIEW DEPTH stepper auditions any
+  depth without waiting for a drop. Five themes — STRATA, CROWN, CASCADE,
+  FISSION, PARALLAX — are built around this: each drop adds another stratum,
+  tier, terrace, shell or depth plane to their own structure.
+  44 per-letter lyric effects — colour ramps, per-letter motion, karaoke
   fills and text treatments — compose with the 20 line animations. 15 tune
   controls (glow, trails, particles w/ 4 styles, reactivity, zoom, scene spin,
   mirror, beat flash/shake, auto-cycle), starrable favourites pinned to the top
@@ -102,7 +110,8 @@ src/
   components/   one file per tab (Player, DJ, FXRack, Library, Me),
                 visualizer overlay, shortcuts panel, shared UI atoms
   visualizer/   render loop engine, live (mutable frame state),
-                project3d (perspective projections), dropFx (drop escalation),
+                project3d (perspective projections), dropLayers (per-theme
+                layers unlocked by drops),
                 lyricRenderer + lyricFx (line animations and per-letter effects),
                 themes/ — one file per theme; register new ones in themes/index.ts
   store/        zustand store (persisted) + blob storage (IndexedDB/OPFS)

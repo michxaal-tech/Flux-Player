@@ -21,8 +21,8 @@ const arg = (name, dflt) => {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1].split(",") : dflt;
 };
-const THEMES = arg("themes", ["ASCENSION", "LEVIATHAN", "CATHODE", "CITADEL", "SYNAPSE", "VOXEL", "TESSERACT"]);
-const MODES = arg("modes", ["OFF", "FLOOR", "ROOM", "SPIN", "DEPTH"]);
+const THEMES = arg("themes", ["ASCENSION", "LEVIATHAN", "CATHODE", "CITADEL", "SYNAPSE", "VOXEL", "TESSERACT", "STRATA", "CROWN", "CASCADE", "FISSION", "PARALLAX"]);
+const MODES = arg("modes", ["OFF", "FLOOR", "ROOM", "TUNNEL", "SPIN", "CUBE"]);
 // bright palettes are where white-out shows up, so test against the worst case
 const PALETTE = process.env.PALETTE || "VOLT";
 
@@ -167,11 +167,14 @@ const setMode = async (m) => {
 
 const setTheme = async (t) => {
   await closeTune();
-  if (!(await page.$("[data-th]"))) await page.click("button[data-themechip]");
-  await page.waitForSelector("[data-th]", { timeout: 5000 });
-  const cell = await page.$(`[data-th="${t}"]`);
-  if (!cell) throw new Error(`theme ${t} is not registered in VIS_THEMES`);
-  await cell.click();
+  // Straight onto the store rather than through the picker: the theme list is
+  // long enough to need scrolling, and its cells re-render as the menu settles,
+  // which detaches an element handle mid-click.
+  const ok = await page.evaluate((th) => {
+    window.__fluxStore.getState().set({ visTheme: th });
+    return window.__fluxStore.getState().visTheme === th;
+  }, t);
+  if (!ok) throw new Error(`theme ${t} could not be selected`);
   await page.waitForTimeout(120);
 };
 

@@ -58,6 +58,7 @@ export const VIS_THEMES = [
   "ASCENSION", "LEVIATHAN", "CATHODE", "CITADEL", "SYNAPSE",
   "VOXEL", "TESSERACT",
   "MONOLITH", "ORRERY", "CANYON", "GYROSCOPE", "SINGULARITY",
+  "STRATA", "CROWN", "CASCADE", "FISSION", "PARALLAX",
 ];
 
 /** Staged themes: instead of one look reacting to volume, these build in layers.
@@ -68,6 +69,7 @@ export const VIS_THEMES = [
 export const STAGED_THEMES = new Set([
   "ASCENSION", "LEVIATHAN", "CATHODE", "CITADEL", "SYNAPSE",
   "MONOLITH", "ORRERY", "CANYON", "GYROSCOPE", "SINGULARITY",
+  "STRATA", "CROWN", "CASCADE", "FISSION", "PARALLAX",
 ]);
 
 export const STAGED_MARK = "◈";
@@ -147,8 +149,7 @@ export const IMPACTS = [
  * "new since you last looked", so leaving old entries in makes it meaningless.
  */
 export const NEW_ITEMS = new Set<string>([
-  // Nothing list-shaped this time: the change is the favourites section itself,
-  // which carries its own badge in the theme picker.
+  "STRATA", "CROWN", "CASCADE", "FISSION", "PARALLAX",
 ]);
 
 /** Particle silhouettes. MIXED assigns one per particle, so a single drift can

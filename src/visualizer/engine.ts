@@ -11,7 +11,7 @@ import { themes } from "./themes";
 import type { ThemeCtx } from "./themeTypes";
 import { drawLyricOverlay } from "./lyricRenderer";
 import { project3d, type Mode3D } from "./project3d";
-import { drawDropFx, stepDropFx, MAX_TIER } from "./dropFx";
+import { drawDropLayers, stepDropLayers, MAX_SLOTS } from "./dropLayers";
 import { drawSignatureImpacts, impactsNeedHistory, stepImpactHistory, SIGNATURE_IMPACTS } from "./impactFx";
 
 const SIG_SET = new Set<string>(SIGNATURE_IMPACTS);
@@ -24,10 +24,6 @@ const impSnapCv = document.createElement("canvas");
 // trail, and the projection reads it as a texture — so the perspective is
 // applied once per frame instead of compounding into the trail.
 const sceneCv = document.createElement("canvas");
-
-// Snapshot of the finished frame, so drop effects that redraw the picture over
-// itself read from a copy instead of from their own output.
-const fxSnapCv = document.createElement("canvas");
 
 // tiny buffer for the PIXELATE impact (downscale, then blit back unsmoothed)
 const pixCv = document.createElement("canvas");
@@ -484,7 +480,10 @@ export function startRenderLoop(): void {
         // A loud four-to-the-floor track crosses this threshold constantly, so
         // without a minimum spacing the escalation ladder tops out in seconds.
         // Real drops are tens of seconds apart.
-        if (L.dropE > 0.55 && prevDrop <= 0.55 && t - L.lastDropAt > 60 * 20) {
+        // Approximated drops are unreliable enough that letting them run the
+        // whole ladder would bury a loud track in layers it never earned, so
+        // guessed drops only ever unlock the first few.
+        if (L.dropE > 0.55 && prevDrop <= 0.55 && t - L.lastDropAt > 60 * 20 && L.dropIdx < 3) {
           L.dropIdx++;
           L.dropNew = true;
           L.lastDropAt = t;
@@ -861,6 +860,19 @@ export function startRenderLoop(): void {
 
       c.restore();
 
+      // ── drop layers ──
+      // Every drop the analyser found unlocks one more layer, and unlocked
+      // layers stay for the rest of the track — receding when the music calms,
+      // returning when it lifts. Drawn here, in the theme's own space and
+      // before the 3D pass, so they read as part of the piece rather than as a
+      // filter over it, and so a projected scene carries them onto the surface.
+      const dropAmt = cfg.dropFx ?? 1;
+      if (dropAmt > 0.01) {
+        stepDropLayers(L, beatStep, Math.round(MAX_SLOTS * Math.min(1, dropAmt)));
+        drawDropLayers(themeCtx, dropAmt);
+      }
+      L.dropNew = false;
+
       // mirror — folds the left half of whatever was just drawn onto the right
       const sceneSrc = use3d ? sceneCv : vc;
       if (cfg.mirror) {
@@ -886,39 +898,6 @@ export function startRenderLoop(): void {
           wash: cfg.bgWash, C1, C2,
         });
       }
-
-      // ── drop escalation ──
-      // Screen-space, so it stacks on top of whatever the theme and the 3D
-      // projection produced. Each drop in the analysed timeline unlocks one
-      // more effect, so the last chorus of a track is visibly bigger than the
-      // first — without any theme knowing about it.
-      const dropAmt = cfg.dropFx ?? 1;
-      if (dropAmt > 0.01) {
-        // Approximated drops (no analysis) are unreliable enough that the
-        // ladder would race to the top within seconds of a loud track, so the
-        // tier is capped until there is a real timeline to count against.
-        const ceiling = L.anal ? MAX_TIER : 3;
-        stepDropFx(L, beatStep, Math.min(ceiling, Math.round(MAX_TIER * Math.min(1, dropAmt))));
-        if (L.dropTier >= 2) {
-          // Several of these effects redraw the frame over itself. Sampling the
-          // visible canvas directly makes that a feedback loop — each frame
-          // adds to the last and the picture ramps to white in about a second.
-          // Snapshotting first keeps every pass a one-shot overlay.
-          if (fxSnapCv.width !== vc.width || fxSnapCv.height !== vc.height) {
-            fxSnapCv.width = vc.width;
-            fxSnapCv.height = vc.height;
-          }
-          const fc = fxSnapCv.getContext("2d")!;
-          fc.setTransform(1, 0, 0, 1, 0, 0);
-          fc.clearRect(0, 0, fxSnapCv.width, fxSnapCv.height);
-          fc.drawImage(vc, 0, 0);
-        }
-        drawDropFx({
-          c, src: fxSnapCv, sw: fxSnapCv.width, sh: fxSnapCv.height, w, h,
-          L, amt: dropAmt, R, TK, C1, C2, CMix,
-        });
-      }
-      L.dropNew = false;
 
       // ── per-beat impact layer ──
       if (IMP.has("CHROMA") && L.beatE > 0.04) {

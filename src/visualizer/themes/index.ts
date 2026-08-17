@@ -82,6 +82,13 @@ import { ORRERY } from "./orrery";
 import { CANYON } from "./canyon";
 import { GYROSCOPE } from "./gyroscope";
 import { SINGULARITY } from "./singularity";
+// escalation themes — the drop-layer system is their whole structure: each
+// drop adds another tier/shell/plane that stays for the rest of the track
+import { STRATA } from "./strata";
+import { CROWN } from "./crown";
+import { CASCADE } from "./cascade";
+import { FISSION } from "./fission";
+import { PARALLAX } from "./parallax";
 
 export const themes: Record<string, ThemeDraw> = {
   RING, KALEIDO, HELIX, WAVES, LASERS, GRID, ORB, RIPPLES, SPIRAL, FIREFLIES,
@@ -96,4 +103,5 @@ export const themes: Record<string, ThemeDraw> = {
   ASCENSION, LEVIATHAN, CATHODE, CITADEL, SYNAPSE,
   VOXEL, TESSERACT,
   MONOLITH, ORRERY, CANYON, GYROSCOPE, SINGULARITY,
+  STRATA, CROWN, CASCADE, FISSION, PARALLAX,
 };
