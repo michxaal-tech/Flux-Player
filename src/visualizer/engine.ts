@@ -17,7 +17,14 @@ const LYRIC_NATIVE_THEMES = new Set(["MARQUEE", "NEONSIGN", "CLOCK"]);
 function syncLive(): void {
   const sub = useStore.subscribe;
   sub((s) => s.playing, (v) => { live.playing = v; }, { fireImmediately: true });
-  sub((s) => s.fx.speed, (v) => { live.speed = v; }, { fireImmediately: true });
+  sub((s) => s.fx.speed, (v) => {
+    live.speed = v;
+    // tempo history is in wall-clock ms — after a speed change those
+    // intervals describe the old tempo, so a stale lock would fight the
+    // phase gate. Drop it and re-lock at the new speed.
+    live.beats.length = 0;
+    live.bpm = 0;
+  }, { fireImmediately: true });
   sub((s) => s.fx.spin, (v) => { live.spin = v; }, { fireImmediately: true });
   sub((s) => s.fx.spinRate, (v) => { live.spinRate = v; }, { fireImmediately: true });
   sub((s) => s.visOpen, (v) => { live.visOpen = v; }, { fireImmediately: true });
@@ -95,15 +102,18 @@ export function startRenderLoop(): void {
   let t = 0;
   let lastFrame = 0;
 
-  // Adaptive resolution: a full-screen high-DPR canvas is more pixels than
-  // many devices can raster at 60fps (shadowBlur cost scales with area), which
-  // is why the visualizer felt smooth small but choppy full-screen. Watch real
-  // frame pacing and trade backing resolution for frame rate — under heavy
-  // glow the CSS upscale is invisible, dropped frames are not.
+  // Adaptive resolution: a full-screen high-DPR canvas can be more pixels than
+  // a device rasters at 60fps (shadowBlur cost scales with area). Trade
+  // backing resolution for frame rate — but only under *real* sustained load.
+  //
+  // The frame gate below quantizes draw deltas to multiples of the display's
+  // refresh interval (16.7ms or 25ms on a 120Hz panel), so judging single
+  // frames misreads one dropped tick as jank. Track a smoothed frame time and
+  // act only when it stays bad, with a floor that keeps the image sharp.
+  const MIN_RES = 0.62;
   let resScale = 1;
-  let resCeil = 1; // learned "this scale janked" ceiling, re-probed per theme
-  let resTheme = "";
-  let slowRun = 0, fastRun = 0, lastResChange = 0;
+  let frameEma = 16.7;
+  let lastResChange = 0;
 
   const draw = () => {
     // cap at ~60fps: animation constants are tuned per-frame, so 120Hz
@@ -117,29 +127,19 @@ export function startRenderLoop(): void {
     lastFrame = nowMs;
     t++;
 
-    if (live.visTheme !== resTheme) {
-      // every theme has a different cost profile — re-probe the ceiling
-      resTheme = live.visTheme;
-      resCeil = 1;
-      slowRun = 0;
-      fastRun = 0;
-    }
     // ignore giant deltas (tab was hidden — rAF stops, that isn't slowness)
-    if (delta < 250) {
-      if (delta > 20) { slowRun++; fastRun = 0; } // missing 60fps at all counts
-      else if (delta < 17.5) { fastRun++; slowRun = 0; }
-      else { slowRun = 0; fastRun = 0; }
-    }
-    if (slowRun > 10 && resScale > 0.35 && nowMs - lastResChange > 900) {
-      // don't let the recovery path climb back into a scale that janked
-      resCeil = Math.min(resCeil, resScale * 0.95);
-      resScale = Math.max(0.35, resScale * 0.75); // jank → step down fast
+    if (delta < 250) frameEma += (delta - frameEma) * 0.05;
+    if (live.cfg.hiRes) {
+      // user asked for maximum sharpness — never trade resolution away
+      if (resScale !== 1) { resScale = 1; lastResChange = nowMs; }
+    } else if (frameEma > 27 && resScale > MIN_RES && nowMs - lastResChange > 1500) {
+      resScale = Math.max(MIN_RES, resScale * 0.85); // sustained sub-37fps
       lastResChange = nowMs;
-      slowRun = 0;
-    } else if (fastRun > 600 && resScale < resCeil && nowMs - lastResChange > 8000) {
-      resScale = Math.min(resCeil, resScale * 1.12); // ~10s of headroom → creep up
+      frameEma = 20; // don't re-trigger before the new scale is measured
+    } else if (frameEma < 18.5 && resScale < 1 && nowMs - lastResChange > 6000) {
+      resScale = Math.min(1, resScale * 1.12); // steady headroom → sharpen up
       lastResChange = nowMs;
-      fastRun = 0;
+      frameEma = 20;
     }
     const n = engine.nodes;
     const L = live;
@@ -174,14 +174,19 @@ export function startRenderLoop(): void {
       L.fluxAvg = L.fluxAvg * 0.95 + flux * 0.05;
       L.fluxDev = L.fluxDev * 0.95 + Math.abs(flux - L.fluxAvg) * 0.05;
       const now = performance.now();
+      // Every timing constant below is wall-clock, but playback speed
+      // compresses the music in wall-clock time: at 1.4× a 150bpm track's
+      // beats land 285ms apart, inside a refractory tuned for 1×, so every
+      // other beat was being swallowed. Divide the windows by speed.
+      const sp = Math.max(0.5, Math.min(2, L.speed || 1));
       let thresh = L.fluxAvg + 2.2 * L.fluxDev + 0.008;
-      let refractory = 180;
+      let refractory = 180 / sp;
       const iv = L.bpm ? 60000 / L.bpm : 0;
       if (iv) {
         const phase = ((now - L.lastBeatAt) % iv) / iv;
         const onGrid = phase < 0.18 || phase > 0.82;
         thresh *= onGrid ? 0.65 : 1.6;
-        refractory = Math.min(240, Math.max(140, iv * 0.4));
+        refractory = Math.min(240 / sp, Math.max(140 / sp, iv * 0.4));
       }
       if (flux > thresh && now - L.lastBeatAt > refractory) {
         L.lastBeatAt = now;
@@ -189,9 +194,12 @@ export function startRenderLoop(): void {
         L.beats.push(now);
         if (L.beats.length > 16) L.beats.shift();
         const ivs: number[] = [];
+        // plausible-interval window also scales: 1.5× turns a 180bpm track
+        // into 270bpm (222ms), which the fixed 250ms floor rejected outright
+        const loI = 250 / sp, hiI = 1200 / sp;
         for (let i = 1; i < L.beats.length; i++) {
           const d = L.beats[i] - L.beats[i - 1];
-          if (d > 250 && d < 1200) ivs.push(d);
+          if (d > loI && d < hiI) ivs.push(d);
         }
         if (ivs.length >= 4) {
           ivs.sort((a, b) => a - b);
@@ -203,7 +211,20 @@ export function startRenderLoop(): void {
       // idle demo pulse so themes still show their beat effects
       if (L.visOpen && t % 75 === 0) beat = true;
     }
-    L.beatE = beat ? 1 : L.beatE * 0.9;
+    // beat envelope decays faster at high speed too, so back-to-back beats
+    // read as separate hits instead of one smeared glow
+    L.beatE = beat ? 1 : L.beatE * (L.playing ? Math.pow(0.9, Math.max(0.5, Math.min(2, L.speed || 1))) : 0.9);
+
+    // musical intensity: loudness + how fast beats arrive + brightness, all
+    // smoothed over seconds so themes drift between calm and driving motion
+    // instead of twitching frame to frame
+    {
+      const beatRate = L.bpm ? (L.bpm * (L.speed || 1)) / 60 : 0; // beats/sec
+      const inst = liveAudio
+        ? Math.min(1, rms * 2.2) * 0.45 + Math.min(1, beatRate / 3.4) * 0.35 + Math.min(1, treb * 4.5) * 0.2
+        : 0.3;
+      L.energy += (inst - L.energy) * 0.012;
+    }
 
     for (const el of canvasRefs.bpm) el.textContent = L.bpm ? `${L.bpm}` : "––";
     if (canvasRefs.level) canvasRefs.level.style.width = `${Math.min(100, rms * 240)}%`;
@@ -211,7 +232,7 @@ export function startRenderLoop(): void {
     // ── ambient background + edge spectrum meters ──
     const bg = canvasRefs.bg;
     if (bg) {
-      const [w, h] = sizeCanvas(bg, 1000 * resScale); // soft ambient layer — low res is invisible
+      const [w, h] = sizeCanvas(bg, 1100 * resScale); // soft ambient layer — low res is invisible
       const c = bg.getContext("2d")!;
       c.fillStyle = "rgba(8,9,13,0.3)";
       c.fillRect(0, 0, w, h);
@@ -270,7 +291,7 @@ export function startRenderLoop(): void {
     // ── fullscreen visual engine ──
     const vc = canvasRefs.vis;
     if (vc && L.visOpen) {
-      const [w, h] = sizeCanvas(vc, 1440 * resScale, true);
+      const [w, h] = sizeCanvas(vc, 1800 * resScale, true);
       const c = vc.getContext("2d")!;
       const cx = w / 2, cy = h / 2, R = Math.min(w, h);
 
@@ -333,7 +354,7 @@ export function startRenderLoop(): void {
 
       const themeCtx: ThemeCtx = {
         c, w, h, cx, cy, R, t, vt, freq, wave, liveAudio,
-        bass, mid, treb, bassV, midV, trebV, beat, beatE: L.beatE, cfg, I, TK,
+        bass, mid, treb, bassV, midV, trebV, beat, beatE: L.beatE, energy: L.energy, cfg, I, TK,
         C1, C2, CMix, glow, noGlow, L, trackName: L.trackName,
       };
       themes[TH]?.(themeCtx);
@@ -383,7 +404,7 @@ export function startRenderLoop(): void {
       const lc = canvasRefs.lyr;
       const lyricActive = !!(L.lyricsOn && L.lyricLines && !LYRIC_NATIVE_THEMES.has(TH));
       if (lc && (lyricActive || lyricWasActive)) {
-        const [lw2, lh2] = sizeCanvas(lc, 1440 * resScale);
+        const [lw2, lh2] = sizeCanvas(lc, 1800 * resScale);
         const c2 = lc.getContext("2d")!;
         c2.clearRect(0, 0, lw2, lh2);
         if (lyricActive) {

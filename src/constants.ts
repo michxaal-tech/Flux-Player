@@ -49,7 +49,10 @@ export const VIS_THEMES = [
   "CITY", "VORTEX", "SCOPE", "AURORA", "DOTGRID", "BARS", "NEBULA", "TUNNEL", "STARFIELD",
   "TIDE", "NOVA", "HALO", "COMETS", "FIREWORKS", "LANTERNS", "JELLY", "CRYSTAL", "BLOOM",
   "ECLIPSE", "GALAXY", "SILK", "LIQUID", "TERMINAL", "GLITCH", "PIXEL", "BRUTAL",
-  "VINYL", "THUNDER", "KOI", "CASSETTE", "MARQUEE", "NEONSIGN", "CLOCK",
+  "VINYL", "THUNDER", "KOI", "CASSETTE",
+  "MURMUR", "INKFLOW", "SHATTER", "SERPENT", "BLOOMRAIL", "MAGNETIC", "ORACLE",
+  "AURORAFALL", "GRAVITY", "CIRCUITRY",
+  "MARQUEE", "NEONSIGN", "CLOCK",
 ];
 
 export interface Palette {
@@ -94,7 +97,7 @@ export const DEFAULT_VIS_CFG: VisCfg = {
   palette: "NEON", h1: 187, h2: 317,
   glow: 0.7, trail: 0.55, particles: 0.35, pStyle: "RISE",
   speed: 1, intensity: 1, zoom: 1, spinV: 0, bgWash: 0.3, thick: 1,
-  mirror: false, shake: false, flash: true, autoMode: "off",
+  mirror: false, shake: false, flash: true, autoMode: "off", hiRes: false,
 };
 
 export const MONO = "'JetBrains Mono', monospace";

@@ -8,6 +8,8 @@ import { mix } from "../theme";
 import type { Take } from "../types";
 import { fmt } from "../utils";
 import { bigBtn, chip, Module, Toggle } from "./ui";
+import { AiSettings } from "./ai/AiSettings";
+import { AiStudio } from "./ai/AiStudio";
 
 function TakeRow({ take }: { take: Take }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -50,6 +52,7 @@ export function MeTab() {
   const track = useStore(getCurrentTrack);
   const favCount = useStore(getFavCount);
   const set = useStore((s) => s.set);
+  const aiReady = useStore((s) => s.aiReady);
 
   const minutes = Math.floor(stats.seconds / 60);
   let lvlIdx = 0;
@@ -73,6 +76,9 @@ export function MeTab() {
           {nextLvl ? `${minutes} min listened — ${nextLvl.min - minutes} min to ${nextLvl.name}` : `${minutes} min listened — max level!`}
         </div>
       </div>
+
+      <AiSettings />
+      {aiReady && <AiStudio />}
 
       <Module title="⏺ SESSION RECORDER" extra={recState === "rec" && <span style={{ fontFamily: MONO, fontSize: 11, color: "#FF4949" }}>● {fmt(recTime)}</span>}>
         <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.5)", lineHeight: 1.55, marginBottom: 10 }}>

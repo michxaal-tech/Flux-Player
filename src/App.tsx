@@ -17,11 +17,14 @@ import { PlayerTab } from "./components/PlayerTab";
 import { ShortcutsPanel } from "./components/ShortcutsPanel";
 import { VisualizerOverlay } from "./components/VisualizerOverlay";
 import { PlayIcon } from "./components/ui";
+import { AiBusyChip } from "./components/ai/AiBits";
+import { CopilotFab, CopilotPanel } from "./components/ai/CopilotPanel";
 
 export default function App() {
   const tab = useStore((s) => s.tab);
   const visOpen = useStore((s) => s.visOpen);
   const shortcutsOpen = useStore((s) => s.shortcutsOpen);
+  const aiReady = useStore((s) => s.aiReady);
   const recState = useStore((s) => s.recState);
   const recTime = useStore((s) => s.recTime);
   const set = useStore((s) => s.set);
@@ -103,6 +106,10 @@ export default function App() {
 
       {visOpen && <VisualizerOverlay />}
       {shortcutsOpen && <ShortcutsPanel />}
+      {/* AI surfaces stay entirely absent until a key is connected */}
+      {aiReady && !visOpen && <CopilotFab />}
+      {aiReady && <CopilotPanel />}
+      <AiBusyChip />
     </div>
   );
 }

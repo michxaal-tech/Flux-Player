@@ -42,6 +42,16 @@ import { KOI } from "./koi";
 import { CASSETTE } from "./cassette";
 import { MARQUEE } from "./marquee";
 import { NEONSIGN } from "./neonsign";
+import { MURMUR } from "./murmur";
+import { INKFLOW } from "./inkflow";
+import { SHATTER } from "./shatter";
+import { SERPENT } from "./serpent";
+import { BLOOMRAIL } from "./bloomrail";
+import { MAGNETIC } from "./magnetic";
+import { ORACLE } from "./oracle";
+import { AURORAFALL } from "./aurorafall";
+import { GRAVITY } from "./gravity";
+import { CIRCUITRY } from "./circuitry";
 import { CLOCK } from "./clock";
 
 export const themes: Record<string, ThemeDraw> = {
@@ -49,5 +59,7 @@ export const themes: Record<string, ThemeDraw> = {
   CITY, VORTEX, SCOPE, AURORA, DOTGRID, BARS, NEBULA, TUNNEL, STARFIELD,
   TIDE, NOVA, HALO, COMETS, FIREWORKS, LANTERNS, JELLY, CRYSTAL, BLOOM,
   ECLIPSE, GALAXY, SILK, LIQUID, TERMINAL, GLITCH, PIXEL, BRUTAL,
-  VINYL, THUNDER, KOI, CASSETTE, MARQUEE, NEONSIGN, CLOCK,
+  VINYL, THUNDER, KOI, CASSETTE,
+  MURMUR, INKFLOW, SHATTER, SERPENT, BLOOMRAIL, MAGNETIC, ORACLE, AURORAFALL, GRAVITY, CIRCUITRY,
+  MARQUEE, NEONSIGN, CLOCK,
 };

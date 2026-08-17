@@ -2,6 +2,7 @@
 import { engine } from "./engine";
 import { nextTrack } from "./transport";
 import { getCurrentTrack, useStore } from "../store/useStore";
+import { live } from "../visualizer/live";
 
 let wired = false;
 
@@ -71,6 +72,44 @@ export function wireAudio(): void {
         const { fetchLyrics } = await import("../lyrics");
         fetchLyrics(tr);
       }, 1600);
+    }
+  );
+
+  // ── AI runtime hooks (no-ops until a key is connected) ──
+  // Remember the live BPM reading per track so AI features can reason about
+  // tempo; sampled a few seconds in, once detection has locked.
+  let bpmTimer: ReturnType<typeof setTimeout> | null = null;
+  // Spoken transitions (radio host / hype man) as each track starts.
+  let lastTrackName = "";
+  useStore.subscribe(
+    (s) => getCurrentTrack(s)?.id,
+    (id) => {
+      if (bpmTimer) { clearTimeout(bpmTimer); bpmTimer = null; }
+      if (!id) return;
+      bpmTimer = setTimeout(() => {
+        const s = useStore.getState();
+        const tr = getCurrentTrack(s);
+        const bpm = live.bpm;
+        if (tr && tr.id === id && bpm >= 50 && bpm <= 220) {
+          useStore.setState({ trackBpm: { ...s.trackBpm, [tr.id]: bpm } });
+        }
+      }, 12000);
+
+      const s0 = useStore.getState();
+      const tr = getCurrentTrack(s0);
+      const mode = s0.radioMode;
+      const prevName = lastTrackName;
+      lastTrackName = tr?.name ?? "";
+      if (mode === "off" || !s0.aiReady || !tr || !navigator.onLine) return;
+      // let the intro start before talking over it
+      setTimeout(async () => {
+        const s = useStore.getState();
+        if (!s.playing || getCurrentTrack(s)?.id !== id || s.radioMode === "off") return;
+        try {
+          const { radioLine } = await import("../ai/features");
+          await radioLine(s.radioMode === "hype" ? "hype" : "host", prevName, tr.name);
+        } catch { /* a failed line must never interrupt playback */ }
+      }, 1200);
     }
   );
 

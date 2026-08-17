@@ -30,6 +30,12 @@ export interface ThemeCtx {
    * Multiply sizes/glow/speeds by (1 + beatE * k) for dramatic hits.
    */
   beatE: number;
+  /**
+   * Musical intensity, 0 (sparse/slow passage) → 1 (dense/fast passage),
+   * smoothed over seconds. Branch on it to move differently in a song's calm
+   * sections versus its driving ones.
+   */
+  energy: number;
   cfg: VisCfg;
   /** cfg.intensity */
   I: number;

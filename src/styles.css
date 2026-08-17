@@ -27,3 +27,6 @@ input[type=text], textarea { font-family: 'Space Grotesk', sans-serif; }
 }
 .viszone:hover .visarrow { opacity: 1; transform: scale(1); }
 .visarrow:active { transform: scale(0.92); }
+
+@keyframes fluxspin { to { transform: rotate(360deg); } }
+@keyframes fluxpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }

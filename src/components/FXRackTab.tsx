@@ -1,9 +1,12 @@
 import { useStore } from "../store/useStore";
-import { MAG } from "../constants";
+import { BORDER, MAG } from "../constants";
+import { vibeToFx } from "../ai/features";
+import { AiPrompt } from "./ai/AiBits";
 import { PresetRow } from "./PresetRow";
 import { Module, Slider, Toggle } from "./ui";
 
 export function FXRackTab() {
+  const aiReady = useStore((s) => s.aiReady);
   const fx = useStore((s) => s.fx);
   const amb = useStore((s) => s.amb);
   const setFxKey = useStore((s) => s.setFxKey);
@@ -12,6 +15,24 @@ export function FXRackTab() {
   return (
     <div>
       <PresetRow />
+      {aiReady && (
+        <div style={{ marginBottom: 10 }}>
+          <Module title="✦ VIBE TO FX" extra={<span style={{ fontSize: 9.5, color: "rgba(255,255,255,0.4)" }}>DESCRIBE IT</span>}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <AiPrompt
+                placeholder="a rainy tokyo rooftop at 3am…"
+                cta="✦ BUILD"
+                run={vibeToFx}
+                examples={["underwater cathedral", "AM radio 1974", "sludgy phonk", "crisp club system"]}
+              />
+              <button
+                onClick={() => useStore.getState().saveUserPreset()}
+                style={{ padding: "9px", borderRadius: 10, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", background: "rgba(255,255,255,0.05)", border: BORDER, color: "rgba(255,255,255,0.7)" }}
+              >＋ SAVE CURRENT AS PRESET</button>
+            </div>
+          </Module>
+        </div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 10 }}>
         <Module title="⏱ TIME & PITCH" extra={<Toggle label="TAPE" on={fx.vinyl} onChange={(v) => setFxKey("vinyl", v)} />}>
           <Slider label="SPEED" value={fx.speed} min={0.5} max={1.5} step={0.01} format={(v) => `${v.toFixed(2)}×`} onChange={(v) => setFxKey("speed", v)} />

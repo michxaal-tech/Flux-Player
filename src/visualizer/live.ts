@@ -51,6 +51,12 @@ export interface LiveState {
   cycleT: number;
   /** Beat punch envelope: jumps to 1 on every detected beat, decays ~10%/frame. */
   beatE: number;
+  /**
+   * Musical intensity, 0 (sparse/slow passage) → 1 (dense/fast passage),
+   * smoothed over seconds from loudness, beat rate and brightness. Themes use
+   * it to move differently through a song's calm and driving sections.
+   */
+  energy: number;
   /** Per-theme scratch buckets keyed by theme; new themes park their state here. */
   scratch: Record<string, any>;
 }
@@ -62,7 +68,7 @@ export const live: LiveState = {
   rot: 0, vt: 0, tunnel: [], stars: [], vparts: [], specHist: [], ripples: [],
   flies: [], vort: [], cityH: [], shakeVal: 0,
   beatAvg: 0, prevBass: 0, fluxAvg: 0, fluxDev: 0, lastBeatAt: 0, beats: [], bpm: 0, flashVal: 0, cycleT: 0,
-  beatE: 0, scratch: {},
+  beatE: 0, energy: 0.35, scratch: {},
 };
 
 // Debug handle: inspect the render-loop state from the console (window.__flux).

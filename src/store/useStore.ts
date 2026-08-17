@@ -8,6 +8,13 @@ import type {
 import { DEFAULT_FX, DEFAULT_VIS_CFG, P_STYLES, PALETTES, VIS_THEMES } from "../constants";
 import { uid } from "../utils";
 
+export interface ChatMsg {
+  role: "user" | "ai";
+  text: string;
+  /** what the executor actually did, shown under the reply */
+  notes?: string[];
+}
+
 export interface StoreState {
   // library
   playlists: Playlist[];
@@ -57,6 +64,20 @@ export interface StoreState {
   lyricAskArtist: boolean;
   // profile
   stats: Stats;
+  // ── AI layer (all optional; the app is fully functional with no API key) ──
+  /** a validated Anthropic key exists in this browser */
+  aiReady: boolean;
+  /** a request is in flight (drives the ✦ spinner) */
+  aiBusy: boolean;
+  aiLabel: string;
+  aiPanel: boolean;
+  aiChat: ChatMsg[];
+  /** last live BPM reading per track id, used as AI context */
+  trackBpm: Record<string, number>;
+  /** bumped whenever cover art changes so views re-read the cache */
+  coverRev: number;
+  /** spoken transitions between tracks */
+  radioMode: "off" | "host" | "hype";
   // ui
   tab: TabId;
   shortcutsOpen: boolean;
@@ -134,6 +155,14 @@ export const useStore = create<StoreState>()(
         lyricAuto: true,
         lyricAskArtist: false,
         stats: { plays: 0, seconds: 0 },
+        aiReady: false,
+        aiBusy: false,
+        aiLabel: "",
+        aiPanel: false,
+        aiChat: [],
+        trackBpm: {},
+        coverRev: 0,
+        radioMode: "off",
         tab: "player",
         shortcutsOpen: false,
 
@@ -330,6 +359,8 @@ export const useStore = create<StoreState>()(
           lyricsOn: s.lyricsOn,
           lyricStyle: s.lyricStyle,
           lyricAuto: s.lyricAuto,
+          trackBpm: s.trackBpm,
+          radioMode: s.radioMode,
         }),
         merge: (persisted, current) => {
           const p = (persisted ?? {}) as Partial<StoreState>;
@@ -348,6 +379,9 @@ export const useStore = create<StoreState>()(
             playing: false,
             visOpen: false,
             recState: "idle",
+            aiBusy: false,
+            aiLabel: "",
+            aiPanel: false,
           };
         },
       }

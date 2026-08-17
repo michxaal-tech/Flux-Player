@@ -7,6 +7,8 @@ import { mix } from "../theme";
 import { canvasRefs } from "../visualizer/live";
 import { LYRIC_STYLES } from "../visualizer/lyricRenderer";
 import { chip, NextIcon, PauseIcon, playBtn, PlayIcon, PrevIcon, skipBtn, Slider, Toggle } from "./ui";
+import { vibeToVisuals } from "../ai/features";
+import { AiPrompt } from "./ai/AiBits";
 
 export function VisualizerOverlay() {
   const visTheme = useStore((s) => s.visTheme);
@@ -23,6 +25,7 @@ export function VisualizerOverlay() {
   const set = useStore((s) => s.set);
   const setV = useStore((s) => s.setVisKey);
   const visChaos = useStore((s) => s.visChaos);
+  const aiReady = useStore((s) => s.aiReady);
   const lrcInputRef = useRef<HTMLInputElement>(null);
 
   const [themeMenu, setThemeMenu] = useState(false);
@@ -190,7 +193,19 @@ export function VisualizerOverlay() {
             <Toggle label="BEAT FLASH" on={visCfg.flash} onChange={(v) => setV("flash", v)} />
             <Toggle label="BEAT SHAKE" on={visCfg.shake} onChange={(v) => setV("shake", v)} />
             <Toggle label="MIRROR" on={visCfg.mirror} onChange={(v) => setV("mirror", v)} />
+            <Toggle label="MAX SHARPNESS" on={visCfg.hiRes} onChange={(v) => setV("hiRes", v)} />
           </div>
+          {aiReady && (
+            <>
+              <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 8px" }}>✦ VIBE TO VISUALS</div>
+              <AiPrompt
+                placeholder="describe a look…"
+                cta="✦ SET"
+                run={vibeToVisuals}
+                examples={["deep ocean trance", "80s arcade", "blood moon ritual", "soft dawn"]}
+              />
+            </>
+          )}
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 8px" }}>♪ LYRICS</div>
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
             <Toggle label={lyricsOn ? "ON" : "OFF"} on={lyricsOn} onChange={(v) => set({ lyricsOn: v })} />

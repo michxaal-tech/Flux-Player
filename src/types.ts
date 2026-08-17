@@ -86,6 +86,8 @@ export interface VisCfg {
   flash: boolean;
   /** theme auto-advance every ~16s: off (stay put), cycle (in order), shuffle (random) */
   autoMode: "off" | "cycle" | "shuffle";
+  /** force maximum backing resolution, disabling adaptive quality scaling */
+  hiRes: boolean;
 }
 
 export interface Stats {

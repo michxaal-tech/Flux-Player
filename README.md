@@ -28,10 +28,12 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
   wind) are synthesized in the audio graph, no samples.
 - **DJ deck** — live BPM detection, output meter, 4 hot cues, hold-to-stutter
   (⅛/¼/½), tape brake & spin-up, speed nudge.
-- **Visualizer** — 43 canvas themes × 26 palettes (+ custom hue pair), 15 tune
+- **Visualizer** — 53 canvas themes × 26 palettes (+ custom hue pair), 15 tune
   controls (glow, trails, particles w/ 4 styles, reactivity, zoom, scene spin,
   mirror, beat flash/shake, auto-cycle), edge spectrum meters on every tab.
-  Adaptive resolution keeps full-screen rendering at 60fps on any device.
+  Adaptive resolution keeps full-screen rendering at 60fps on any device (or
+  pin MAX SHARPNESS to disable it). Themes also read a smoothed musical
+  "energy" signal, so they move differently in a song's calm and driving parts.
 - **Synced lyrics** — lrclib.net lookup with filename analysis + confidence
   scoring, auto-search per track, .lrc import, 14 animation styles drawn on
   a dedicated canvas layer.
@@ -76,3 +78,30 @@ Create `src/visualizer/themes/mytheme.ts` exporting a `ThemeDraw`, register it
 in `themes/index.ts`, and add its name to `VIS_THEMES` in `src/constants.ts`.
 The draw context gives you the canvas, FFT/waveform data, beat flag,
 palette helpers (`C1`/`C2`/`CMix`), and a scratch state bucket (`L`).
+
+## Optional AI layer (BYOK)
+
+FLUX works completely without AI. Add your own Anthropic API key in **ME → AI
+SETTINGS** and a `✦` layer appears across the app; remove the key and every AI
+surface disappears again. The key is stored only in this browser (IndexedDB)
+and is sent only to `api.anthropic.com` — there is no backend.
+
+Every feature speaks one command protocol (`src/ai/commands.ts`): Claude returns
+`{reply, actions[]}` and the app executes the actions (`fx`, `visuals`, `queue`,
+`playlist`, `say`, `sleepTimer`, `tags`, `note`, `preset`, `cover`, `ui`).
+Values are clamped to the real slider ranges before they are applied, and
+malformed JSON is repaired with one automatic retry. Adding a feature means
+writing a prompt in `src/ai/features.ts`, not new plumbing.
+
+- **Copilot + Voice DJ** — chat or speak to control the whole app
+- **Vibe to FX / Vibe to Visuals** — describe a feeling, get a preset or a look
+- **Library** — auto-tag (with review), genre sorter, AI playlists, daily mix,
+  smart shuffle (energy arc), emoji search, BPM coach, SVG cover art
+- **Atmosphere** — radio host & hype man between tracks, sleep story DJ with an
+  FX wind-down ramp, mood check-in, preset packs, time machine, dream setlist,
+  studio notes
+- **Fun** — taste roast, FLUX Wrapped card, weekly rewind, album critic, trivia,
+  track duel, AI take naming
+
+Run `node scripts/ai-smoke.mjs` to exercise the whole layer against a mocked
+Anthropic endpoint (no key or network required).

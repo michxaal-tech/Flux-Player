@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "icons": "node scripts/gen-icons.mjs"
+    "icons": "node scripts/gen-icons.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:ai": "node scripts/ai-smoke.mjs"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
