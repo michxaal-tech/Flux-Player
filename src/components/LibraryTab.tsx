@@ -63,7 +63,7 @@ export function LibraryTab({ onLoadClick }: { onLoadClick: () => void }) {
       />
       {aiReady && <EmojiSearch />}
       {aiReady && <LibraryAiBar />}
-      <div style={{ marginBottom: 10 }}><SpotifyImport /></div>
+      <div style={{ marginBottom: 10 }}><SpotifyImport onLoadClick={onLoadClick} /></div>
 
       <div className="hscroll" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8 }}>
         <button onClick={() => set({ viewMode: { type: "fav" } })} style={chip(viewMode.type === "fav", MAG)}>♥ FAVORITES ({favCount})</button>

@@ -148,3 +148,20 @@ button:active:not(:disabled) { transform: scale(0.955); }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass { background: rgba(14, 16, 23, 0.93) !important; }
 }
+
+/* ── iOS focus zoom ──────────────────────────────────────────────────────
+   Safari on iPhone force-zooms the page whenever you focus a form field
+   whose font-size is under 16px, and it never zooms back out — you're left
+   panning around a magnified layout. The app's fields are 10-13px for
+   density, which triggers it on every single tap.
+
+   The fix is the font size, not the viewport: disabling user-scalable would
+   stop the zoom but also take away pinch-zoom, which people rely on. 16px on
+   touch pointers only, so the desktop layout keeps its density. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}

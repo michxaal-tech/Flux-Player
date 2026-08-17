@@ -340,6 +340,6 @@ export function buildPlaylistFromMatches(name: string, rows: MatchRow[]): { id: 
 export function missingList(rows: MatchRow[]): string {
   return rows
     .filter((r) => !r.track)
-    .map((r) => `${r.item.artists} — ${r.item.name}`)
+    .map((r) => (r.item.artists ? `${r.item.artists} — ${r.item.name}` : r.item.name))
     .join("\n");
 }

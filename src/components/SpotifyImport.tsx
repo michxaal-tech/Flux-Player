@@ -11,8 +11,9 @@ import { useStore } from "../store/useStore";
 import { mix } from "../theme";
 import { Module } from "./ui";
 
-export function SpotifyImport() {
+export function SpotifyImport({ onLoadClick }: { onLoadClick?: () => void }) {
   const ready = useStore((s) => s.spotifyReady);
+  const libraryCount = useStore((s) => new Set(s.playlists.flatMap((p) => p.tracks.map((t) => t.fileId))).size);
   const [clientId, setClientId] = useState("");
   const [savedId, setSavedId] = useState("");
   const [link, setLink] = useState("");
@@ -139,9 +140,27 @@ export function SpotifyImport() {
         {rows && (
           <>
             <div style={{ fontSize: 11, color: "#fff" }}>
-              <span style={{ color: CYAN, fontWeight: 700 }}>{found}</span> of {rows.length} found in your library
+              <span style={{ color: found ? CYAN : "#FF9A9A", fontWeight: 700 }}>{found}</span> of {rows.length} found in your library
               {missing > 0 && <span style={{ color: "rgba(255,255,255,0.5)" }}> · {missing} missing</span>}
             </div>
+            {found === 0 && (
+              <div style={{ fontSize: 10.5, lineHeight: 1.6, color: "rgba(255,255,255,0.62)", background: "rgba(255,255,255,0.04)", border: BORDER, borderRadius: 10, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+                <div>
+                  {libraryCount === 0
+                    ? "Your library is empty, so there's nothing to match this against. This tool doesn't download from Spotify — it finds the song among audio files you already have on this device."
+                    : "None of your files matched this one. FLUX matches on filename, so a file named like “Artist - Title” matches best."}
+                </div>
+                {onLoadClick && (
+                  <button
+                    onClick={onLoadClick}
+                    style={{ padding: "10px", borderRadius: 10, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", background: mix(CYAN, 14), border: `1px solid ${mix(CYAN, 42)}`, color: CYAN }}
+                  >＋ ADD MUSIC FILES FROM THIS DEVICE</button>
+                )}
+                <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.4)" }}>
+                  Tap FIND ↗ next to a track to look for a legitimate download or purchase.
+                </div>
+              </div>
+            )}
             <div style={{ maxHeight: 240, overflowY: "auto", display: "flex", flexDirection: "column", gap: 3 }}>
               {rows.map((r, i) => (
                 <div
@@ -154,9 +173,19 @@ export function SpotifyImport() {
                 >
                   <span style={{ fontSize: 10, color: r.track ? CYAN : "rgba(255,255,255,0.3)", flexShrink: 0 }}>{r.track ? "✓" : "○"}</span>
                   <span style={{ flex: 1, minWidth: 0, fontSize: 10.5, color: "rgba(255,255,255,0.8)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {r.item.artists} — {r.item.name}
+                    {r.item.artists ? `${r.item.artists} — ${r.item.name}` : r.item.name}
                   </span>
-                  {r.track && <span style={{ fontSize: 8.5, fontFamily: MONO, color: "rgba(255,255,255,0.35)", flexShrink: 0 }}>{Math.round(r.score * 100)}%</span>}
+                  {r.track
+                    ? <span style={{ fontSize: 8.5, fontFamily: MONO, color: "rgba(255,255,255,0.35)", flexShrink: 0 }}>{Math.round(r.score * 100)}%</span>
+                    : (
+                      <a
+                        href={`https://duckduckgo.com/?q=${encodeURIComponent(`${r.item.artists} ${r.item.name} buy download`)}`}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        title="Find somewhere to buy or download this track"
+                        style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: MAG, textDecoration: "none", flexShrink: 0, padding: "2px 6px", borderRadius: 6, border: `1px solid ${mix(MAG, 30)}` }}
+                      >FIND ↗</a>
+                    )}
                 </div>
               ))}
             </div>
