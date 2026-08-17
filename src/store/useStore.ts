@@ -46,6 +46,9 @@ export interface StoreState {
   visTheme: string;
   visCfg: VisCfg;
   visPanel: boolean;
+  /** ambient theme rendered (blurred) behind the player page */
+  playerTheme: string;
+  playerBgOn: boolean;
   // recorder / exports
   recState: RecState;
   recTime: number;
@@ -153,6 +156,8 @@ export const useStore = create<StoreState>()(
         visTheme: "RING",
         visCfg: { ...DEFAULT_VIS_CFG },
         visPanel: false,
+        playerTheme: "AURORA",
+        playerBgOn: true,
         recState: "idle",
         recTime: 0,
         vidState: "idle",
@@ -369,6 +374,8 @@ export const useStore = create<StoreState>()(
           userPresets: s.userPresets,
           visTheme: s.visTheme,
           visCfg: s.visCfg,
+          playerTheme: s.playerTheme,
+          playerBgOn: s.playerBgOn,
           takes: s.takes,
           stats: s.stats,
           instMode: s.instMode,

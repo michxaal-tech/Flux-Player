@@ -22,6 +22,7 @@ export interface LyricCtx {
 export const LYRIC_STYLES = [
   "DRIFT", "SCATTER", "STACK", "POP", "RISE", "SPIN", "FLIP", "SLIDE",
   "FOCUS", "PULSE", "ORBIT", "CASCADE", "TYPE", "KARAOKE",
+  "WAVE", "BOUNCE", "GLITCH", "ECHO", "SWEEP", "SPOTLIGHT",
 ];
 
 export interface CurrentLyric {
@@ -165,16 +166,42 @@ interface BlockOpts {
   glowColor: string;
 }
 
-function drawBlock(c: CanvasRenderingContext2D, text: string, o: BlockOpts, w: number): void {
-  if (o.alpha <= 0.01 || !text) return;
+/** geometry of a laid-out block, exactly as drawBlock would place it. Leaves
+ * the context font set to the block's font so rows/chars can be measured. */
+interface BlockMetrics {
+  rows: string[];
+  /** font size actually used, in px (before o.scale) */
+  sizePx: number;
+  lineH: number;
+  /** widest row in device px, already multiplied by o.scale */
+  widest: number;
+  /** on-screen centre x after edge clamping */
+  x: number;
+}
+
+function blockMetrics(
+  c: CanvasRenderingContext2D,
+  text: string,
+  o: { x: number; scale: number; maxW: number; size: number },
+  w: number,
+): BlockMetrics {
   const block = layoutBlock(c, text, o.size, o.maxW);
   const sizePx = o.size * block.scale;
-  const lineH = sizePx * 1.16;
   c.font = `700 ${Math.floor(sizePx)}px 'Space Grotesk', sans-serif`;
-  const widest = Math.max(...block.rows.map((r) => c.measureText(r).width)) * o.scale;
-  const x = Math.min(Math.max(o.x, widest / 2 + 14), w - widest / 2 - 14);
+  let widest = 0;
+  for (const r of block.rows) widest = Math.max(widest, c.measureText(r).width);
+  widest *= o.scale;
+  const lo = widest / 2 + 14;
+  const hi = w - widest / 2 - 14;
+  const x = hi > lo ? Math.min(Math.max(o.x, lo), hi) : w / 2;
+  return { rows: block.rows, sizePx, lineH: sizePx * 1.16, widest, x };
+}
+
+function drawBlock(c: CanvasRenderingContext2D, text: string, o: BlockOpts, w: number): void {
+  if (o.alpha <= 0.01 || !text) return;
+  const m = blockMetrics(c, text, o, w);
   c.save();
-  c.translate(x, o.y);
+  c.translate(m.x, o.y);
   if (o.rot) c.rotate(o.rot);
   c.scale(o.scale, o.scale * (o.scaleY ?? 1));
   c.shadowBlur = o.glowAmt;
@@ -182,11 +209,20 @@ function drawBlock(c: CanvasRenderingContext2D, text: string, o: BlockOpts, w: n
   c.fillStyle = o.color ?? `rgba(255,255,255,${o.alpha})`;
   c.textAlign = "center";
   c.textBaseline = "middle";
-  block.rows.forEach((row, i) => {
-    c.fillText(row, 0, (i - (block.rows.length - 1) / 2) * lineH);
+  m.rows.forEach((row, i) => {
+    c.fillText(row, 0, (i - (m.rows.length - 1) / 2) * m.lineH);
   });
   c.restore();
 }
+
+/** reusable colour ramp for the per-character WAVE style (filled each frame) */
+const WAVE_PAL: string[] = new Array<string>(9).fill("");
+
+/** deterministic 0..1 hash — stable jitter without per-frame allocation */
+const hash01 = (n: number): number => {
+  const s = Math.sin(n * 12.9898 + 78.233) * 43758.5453;
+  return s - Math.floor(s);
+};
 
 export function drawLyricOverlay(x: LyricCtx): void {
   const { c, w, h, time, beatE, vt, TK, C1, C2, CMix, L } = x;
@@ -473,6 +509,167 @@ export function drawLyricOverlay(x: LyricCtx): void {
       maxW: w * 0.66, size,
       glowAmt: 14 + beatE * 16, glowColor: C1(),
     }, w);
+  } else if (style === "WAVE") {
+    // characters ride a travelling sine wave; the swell grows on every beat
+    const scl = 0.97 + appear * 0.03 + beatE * 0.03;
+    const m = blockMetrics(c, cur.text, { x: w / 2, scale: scl, maxW: w * 0.62, size }, w);
+    const amp = m.sizePx * (0.1 + beatE * 0.4) * appear;
+    // colour ramp built once per frame, then indexed per character (no
+    // per-character string building in the inner loop)
+    const last = WAVE_PAL.length - 1;
+    for (let i = 0; i <= last; i++) {
+      const f2 = i / last;
+      WAVE_PAL[i] = CMix(f2, alpha, 54 + f2 * 26);
+    }
+    c.save();
+    c.translate(m.x, h * 0.45);
+    c.scale(scl, scl);
+    c.shadowBlur = 14 + beatE * 20;
+    c.shadowColor = C1();
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    let ci = 0;
+    for (let r = 0; r < m.rows.length; r++) {
+      const row = m.rows[r];
+      const ry = (r - (m.rows.length - 1) / 2) * m.lineH;
+      let px = -c.measureText(row).width / 2;
+      for (const ch of row) {
+        const cw = c.measureText(ch).width;
+        const s2 = Math.sin(vt * 0.08 - ci * 0.5);
+        c.fillStyle = WAVE_PAL[Math.round((s2 + 1) * 0.5 * last)];
+        c.fillText(ch, px + cw / 2, ry + s2 * amp);
+        px += cw;
+        ci++;
+      }
+    }
+    c.restore();
+  } else if (style === "BOUNCE") {
+    // drops in from above the frame and settles with decaying overshoots
+    const t2 = Math.max(0, cur.age);
+    const damp = Math.exp(-3.1 * t2);
+    const dropY = -h * 0.34 * damp * Math.cos(7.4 * t2);
+    const squash = 1 - 0.14 * damp * Math.sin(7.4 * t2);
+    drawBlock(c, cur.text, {
+      x: lx,
+      y: ly + dropY + leave * h * 0.16,
+      alpha: Math.min(1, cur.age * 6) * (1 - leave),
+      scale: 0.96 + beatE * 0.03,
+      scaleY: Math.max(0.05, squash),
+      maxW: w * 0.56, size,
+      glowAmt: 16 + beatE * 22, glowColor: C1(),
+    }, w);
+  } else if (style === "GLITCH") {
+    // clean and readable between beats, tearing into split copies on the hits
+    const gy = h * 0.45;
+    const hit = Math.min(1, beatE);
+    const tick = Math.floor(vt / 5) + cur.index * 13;
+    const jx = (hash01(tick) - 0.5) * size * 0.9 * hit;
+    const jy = (hash01(tick + 91) - 0.5) * size * 0.26 * hit;
+    const off = size * (0.05 + hit * 0.45);
+    const ga = alpha * (0.16 + hit * 0.5);
+    const split = { y: gy, scale: 0.98 + beatE * 0.03, maxW: w * 0.6, size, glowAmt: 0, alpha };
+    c.globalCompositeOperation = "lighter";
+    drawBlock(c, cur.text, { ...split, x: w / 2 - off + jx, color: CMix(0, ga, 58), glowColor: C1() }, w);
+    drawBlock(c, cur.text, { ...split, x: w / 2 + off - jx, color: CMix(1, ga, 58), glowColor: C2() }, w);
+    c.globalCompositeOperation = "source-over";
+    drawBlock(c, cur.text, {
+      x: w / 2 + jx * 0.25, y: gy + jy,
+      alpha,
+      scale: 0.98 + beatE * 0.03,
+      maxW: w * 0.6, size,
+      glowAmt: 12 + hit * 26, glowColor: C1(),
+    }, w);
+    if (hit > 0.3) {
+      // a single torn slice slides sideways for one beat
+      const bh = size * (0.16 + hash01(tick + 7) * 0.3);
+      const by = gy - size * 1.2 + hash01(tick + 3) * size * 2.4;
+      c.save();
+      c.beginPath();
+      c.rect(0, by, w, bh);
+      c.clip();
+      drawBlock(c, cur.text, {
+        x: w / 2 + (hash01(tick + 17) - 0.5) * size * 1.6, y: gy,
+        alpha, scale: 0.98, maxW: w * 0.6, size,
+        color: CMix(0.5, alpha, 88), glowAmt: 0, glowColor: C1(),
+      }, w);
+      c.restore();
+    }
+  } else if (style === "ECHO") {
+    // a motion trail: ghost copies lag behind the live line and fade out
+    const dir = cur.index % 2 ? 1 : -1;
+    for (let k = 3; k >= 0; k--) {
+      const tt = cur.age - k * 0.075;
+      const e2 = 1 - easeOut(Math.max(0, tt) * 2.2);
+      const fade = k === 0 ? alpha : alpha * (0.22 - k * 0.05);
+      drawBlock(c, cur.text, {
+        x: lx + Math.sin(tt * 1.9 + cur.index) * w * 0.045 + dir * e2 * w * 0.12,
+        y: ly + Math.cos(tt * 1.35 + cur.index) * h * 0.018 + e2 * 16,
+        alpha: fade,
+        scale: (0.95 + beatE * 0.02) * (1 - k * 0.035),
+        maxW: w * 0.52, size,
+        color: k === 0 ? undefined : CMix(k / 3, fade, 62),
+        glowAmt: k === 0 ? 20 + beatE * 22 : 0,
+        glowColor: C1(),
+      }, w);
+    }
+  } else if (style === "SWEEP") {
+    // a bright band of light travels across the line, lighting it as it goes
+    const scl = 0.98 + appear * 0.02 + beatE * 0.03;
+    const base = { x: w / 2, y: h * 0.45, scale: scl, maxW: w * 0.62, size, alpha };
+    const m = blockMetrics(c, cur.text, base, w);
+    const band = Math.max(24, m.sizePx * 1.1);
+    const p = smooth(Math.min(1, Math.max(0, cur.frac / 0.72)));
+    const sxp = m.x - m.widest / 2 - band + (m.widest + band * 2) * p;
+    drawBlock(c, cur.text, { ...base, color: CMix(0.5, alpha * 0.82, 68), glowAmt: 8, glowColor: C2() }, w);
+    c.save();
+    c.beginPath();
+    c.rect(0, 0, Math.max(0, sxp), h);
+    c.clip();
+    drawBlock(c, cur.text, { ...base, color: `rgba(255,255,255,${alpha})`, glowAmt: 16 + beatE * 20, glowColor: C1() }, w);
+    c.restore();
+    c.save();
+    c.beginPath();
+    c.rect(sxp - band, 0, band, h);
+    c.clip();
+    c.globalCompositeOperation = "lighter";
+    drawBlock(c, cur.text, { ...base, color: CMix(0.1, alpha * 0.8, 88), glowAmt: 22 + beatE * 26, glowColor: C1() }, w);
+    c.restore();
+  } else if (style === "SPOTLIGHT") {
+    // a soft pool of light walks the rows, revealing the words it lands on
+    const scl = 0.98 + appear * 0.02 + beatE * 0.02;
+    const cy2 = h * 0.45;
+    const base = { x: w / 2, y: cy2, scale: scl, maxW: w * 0.62, size, alpha };
+    const m = blockMetrics(c, cur.text, base, w);
+    const n = Math.max(1, m.rows.length);
+    const p = Math.min(0.9999, Math.max(0, smooth(Math.min(1, cur.frac / 0.86))));
+    const ri = Math.min(n - 1, Math.floor(p * n));
+    const rw = c.measureText(m.rows[ri] ?? "").width * scl;
+    const px = m.x - rw / 2 + rw * (p * n - ri);
+    const py = cy2 + (ri - (n - 1) / 2) * m.lineH * scl;
+    const rad = Math.max(10, m.sizePx * scl * (1.45 + beatE * 0.3));
+    drawBlock(c, cur.text, { ...base, color: CMix(0.5, alpha * 0.26, 44), glowAmt: 0, glowColor: C2() }, w);
+    c.save();
+    c.globalCompositeOperation = "lighter";
+    const pool = c.createRadialGradient(px, py, 0, px, py, rad * 1.9);
+    pool.addColorStop(0, C1(alpha * 0.18, 70));
+    pool.addColorStop(1, C1(0, 70));
+    c.fillStyle = pool;
+    c.beginPath();
+    c.arc(px, py, rad * 1.9, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+    for (const [rr, aa] of [[rad * 1.5, 0.4], [rad, 1]] as const) {
+      c.save();
+      c.beginPath();
+      c.arc(px, py, rr, 0, Math.PI * 2);
+      c.clip();
+      drawBlock(c, cur.text, {
+        ...base,
+        color: CMix(0.15, alpha * aa, 82),
+        glowAmt: 16 + beatE * 18, glowColor: C1(),
+      }, w);
+      c.restore();
+    }
   }
   c.restore();
 }

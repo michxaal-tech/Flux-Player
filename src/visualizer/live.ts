@@ -57,6 +57,8 @@ export interface LiveState {
    * it to move differently through a song's calm and driving sections.
    */
   energy: number;
+  playerTheme: string;
+  playerBgOn: boolean;
   /** total A/V compensation currently applied, ms (measured + user offset) */
   syncMs: number;
   /** Per-theme scratch buckets keyed by theme; new themes park their state here. */
@@ -70,7 +72,7 @@ export const live: LiveState = {
   rot: 0, vt: 0, tunnel: [], stars: [], vparts: [], specHist: [], ripples: [],
   flies: [], vort: [], cityH: [], shakeVal: 0,
   beatAvg: 0, prevBass: 0, fluxAvg: 0, fluxDev: 0, lastBeatAt: 0, beats: [], bpm: 0, flashVal: 0, cycleT: 0,
-  beatE: 0, energy: 0.35, syncMs: 0, scratch: {},
+  beatE: 0, energy: 0.35, syncMs: 0, playerTheme: "AURORA", playerBgOn: true, scratch: {},
 };
 
 // Debug handle: inspect the render-loop state from the console (window.__flux).
@@ -81,6 +83,8 @@ export const canvasRefs = {
   bg: null as HTMLCanvasElement | null,
   wave: null as HTMLCanvasElement | null,
   vis: null as HTMLCanvasElement | null,
+  /** low-res ambient theme behind the player page (CSS-blurred) */
+  pbg: null as HTMLCanvasElement | null,
   /** crisp overlay above the vis canvas (lyrics) — cleared every frame */
   lyr: null as HTMLCanvasElement | null,
   disc: null as HTMLDivElement | null,

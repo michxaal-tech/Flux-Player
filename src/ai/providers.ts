@@ -125,7 +125,7 @@ const GEMINI: Provider = {
   badge: "FREE",
   blurb: "Free tier, no credit card. The best free option for FLUX.",
   keyUrl: "https://aistudio.google.com/apikey",
-  keyHint: "AIza…",
+  keyHint: "paste your AI Studio key…",
   limits: "Free tier: roughly 15 requests/min and 1,500 requests/day on Flash — far more than FLUX needs. No credit card required.",
   caveat: "Google may use free-tier prompts to improve their models. FLUX sends your track names, tags and settings as context, so use the paid tier or Anthropic if that matters to you.",
   // seeds only — the real list is fetched from the key on connect, because

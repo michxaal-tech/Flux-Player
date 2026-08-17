@@ -98,6 +98,16 @@ export const PALETTES: Palette[] = [
   { id: "CUSTOM", h: null, s: 100 },
 ];
 
+/** Themes that read well as a soft, blurred backdrop behind the player UI.
+ * A curated subset of VIS_THEMES — busy/high-contrast ones fight the glass. */
+export const PLAYER_THEMES = [
+  "AURORA", "NEBULA", "GALAXY", "TIDE", "SILK", "LIQUID", "BLOOM", "HALO",
+  "ORB", "RIPPLES", "FIREFLIES", "LANTERNS", "JELLY", "COMETS", "STARFIELD",
+  "NOVA", "ECLIPSE", "SPIRAL", "HELIX", "WAVES", "KALEIDO", "VORTEX", "TUNNEL",
+  "INKFLOW", "MURMUR", "BIOLUME", "AURORAFALL", "LAVALAMP", "CONSTELLATION",
+  "WORMHOLE",
+];
+
 export const P_STYLES = ["RISE", "SNOW", "DUST", "EMBERS"];
 
 export const DEFAULT_VIS_CFG: VisCfg = {

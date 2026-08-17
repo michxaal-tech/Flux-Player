@@ -159,10 +159,10 @@ await step("Gemini is the default provider and its free key flow works", async (
   await page.click("button:has(div:text-is('ME'))");
   const prov = await page.evaluate(() => window.__fluxStore.getState().aiProvider);
   if (prov !== "gemini") throw new Error(`default provider is ${prov}, expected gemini`);
-  await page.fill("input[placeholder='AIza…']", "AIzaBAD");
+  await page.fill("input[placeholder='paste your AI Studio key…']", "AIzaBAD");
   await page.click("button:has-text('CONNECT')");
   await page.waitForSelector("text=isn't valid", { timeout: 8000 });
-  await page.fill("input[placeholder='AIza…']", "AIzaGOOD");
+  await page.fill("input[placeholder='paste your AI Studio key…']", "AIzaGOOD");
   await page.click("button:has-text('CONNECT')");
   await page.waitForSelector("text=Connected to Google Gemini", { timeout: 8000 });
   const g = [...geminiSeen].reverse().find((x) => x.userText === "ping");
@@ -184,7 +184,7 @@ await step("a stale stored model id is replaced on reconnect", async () => {
   // simulate a config saved before Google retired the id
   await page.evaluate(() => window.__fluxStore.getState().set({ aiModel: "gemini-2.5-flash" }));
   await page.click("button:has-text('REMOVE KEY')");
-  await page.fill("input[placeholder='AIza…']", "AIzaGOOD");
+  await page.fill("input[placeholder='paste your AI Studio key…']", "AIzaGOOD");
   await page.click("button:has-text('CONNECT')");
   await page.waitForSelector("text=Connected to Google Gemini", { timeout: 10000 });
   const m = await page.evaluate(() => window.__fluxStore.getState().aiModel);
