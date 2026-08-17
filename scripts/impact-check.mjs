@@ -108,14 +108,19 @@ const run = async (name) => {
 
 const a = await run("slow 80");
 const b = await run("fast 160");
-console.log(`80bpm  → detected ${a?.bpm} bpm, ${a?.rings} ring impacts / 8s, ${a?.flashes} flashes`);
-console.log(`160bpm → detected ${b?.bpm} bpm, ${b?.rings} ring impacts / 8s, ${b?.flashes} flashes`);
+// Flash retriggers are the honest count: the ring array is capped at 8 and
+// entries expire, so growth in its length under-reports at high tempo.
+const EXP_SLOW = (80 / 60) * 8, EXP_FAST = (160 / 60) * 8;
+console.log(`80bpm  → detected ${a?.bpm} bpm, ${a?.flashes} impacts / 8s (expect ~${EXP_SLOW.toFixed(0)})`);
+console.log(`160bpm → detected ${b?.bpm} bpm, ${b?.flashes} impacts / 8s (expect ~${EXP_FAST.toFixed(0)})`);
 
 let bad = 0;
 if (!a || !b) { console.log("✘ could not read live state"); bad++; }
 else {
-  const ratio = b.rings / Math.max(1, a.rings);
-  console.log(`\nimpact ratio fast/slow = ${ratio.toFixed(2)} (a fixed timer would give ~1.0)`);
+  if (Math.abs(a.bpm - 80) > 4) { console.log(`✘ tempo misread on the slow track: ${a.bpm}`); bad++; }
+  if (Math.abs(b.bpm - 160) > 8) { console.log(`✘ tempo misread on the fast track: ${b.bpm}`); bad++; }
+  const ratio = b.flashes / Math.max(1, a.flashes);
+  console.log(`\nimpact ratio fast/slow = ${ratio.toFixed(2)} (a fixed timer would give ~1.0, tempo-locked ~2.0)`);
   if (ratio < 1.5) { console.log("✘ impacts are NOT tracking tempo"); bad++; }
   else console.log("✔ impacts scale with tempo — they follow the beat, not a timer");
 }

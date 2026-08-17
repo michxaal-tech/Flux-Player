@@ -116,20 +116,34 @@ function analyse(mono: Float32Array, rate: number, post: (p: number) => void): A
   let bestLag = minLag, bestAc = -1;
   for (let lag = minLag; lag <= maxLag; lag++) if (ac[lag] > bestAc) { bestAc = ac[lag]; bestLag = lag; }
 
+  // Total onset energy, so a candidate grid can be judged on how much of the
+  // track it actually explains rather than only on whether its own points are
+  // loud. Without this, a half-tempo grid scores identically to the true one:
+  // it lands on every other onset, and every one it lands on is strong.
+  let onsetTotal = 0;
+  for (let i = 0; i < frames; i++) onsetTotal += onset[i];
+
   const gridScore = (period: number): { score: number; phase: number } => {
     if (period < 2) return { score: -1, phase: 0 };
     let bestP = 0, best = -1;
     for (let p = 0; p < Math.floor(period); p++) {
-      let acc = 0, cnt = 0;
+      let acc = 0, cnt = 0, cov = 0;
       for (let x = p; x < frames; x += period) {
         const i = Math.round(x);
         // a little tolerance: take the best onset within a couple of frames
         let v = 0;
-        for (let k = Math.max(0, i - 2); k <= Math.min(frames - 1, i + 2); k++) v = Math.max(v, onset[k]);
+        for (let k = Math.max(0, i - 2); k <= Math.min(frames - 1, i + 2); k++) {
+          if (onset[k] > v) v = onset[k];
+          cov += onset[k]; // windows never overlap: period is >= 25 frames here
+        }
         acc += v;
         cnt++;
       }
-      const sc = cnt ? acc / cnt : 0;
+      const mean = cnt ? acc / cnt : 0;
+      const coverage = onsetTotal > 0 ? Math.min(1, cov / onsetTotal) : 0;
+      // strength alone picks the octave, coverage breaks the tie toward the
+      // grid that accounts for the most onsets
+      const sc = mean * (0.4 + 0.6 * coverage);
       if (sc > best) { best = sc; bestP = p; }
     }
     return { score: best, phase: bestP };

@@ -62,13 +62,18 @@ function syncLive(): void {
     const tr = getCurrentTrack(st);
     if (!st.analyzedMode || !tr) { live.anal = null; return; }
     live.anal = null;
+    // Both cursors must be rewound. Leaving analHit parked at the previous
+    // track's index left it pointing past most of the new track's hits, so with
+    // FAST BEATS driving the pulse from hits the new song barely flashed.
     live.analBeat = 0;
+    live.analHit = 0;
     import("../audio/analysis").then(({ ensureAnalysis }) =>
       ensureAnalysis(tr.fileId).then((a) => {
         const now = getCurrentTrack(useStore.getState());
         if (a && now?.fileId === tr.fileId && useStore.getState().analyzedMode) {
           live.anal = a;
           live.analBeat = 0;
+          live.analHit = 0;
         }
       })
     );
