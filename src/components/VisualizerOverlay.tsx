@@ -55,20 +55,31 @@ export function VisualizerOverlay() {
   };
 
   return (
-    <div className="overlayIn" style={{ position: "fixed", inset: 0, zIndex: 50, background: "#05060A" }}>
+    <div
+      className="overlayIn"
+      // Swipe lives on the whole overlay rather than the canvas alone: the HUD
+      // and transport rows sit on top of it, so anchoring the gesture to the
+      // canvas made the strips they occupy dead to swiping.
+      onTouchStart={(e) => {
+        const el = e.target as HTMLElement;
+        // a swipe that begins on a control belongs to that control
+        if (el.closest("button, input, select, textarea, a, .dropin")) { touchStart.current = null; return; }
+        touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      }}
+      onTouchEnd={(e) => {
+        const s0 = touchStart.current;
+        touchStart.current = null;
+        if (!s0) return;
+        const dx = e.changedTouches[0].clientX - s0.x;
+        const dy = e.changedTouches[0].clientY - s0.y;
+        // horizontal swipe switches theme (swipe left → next)
+        if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 2) stepTheme(dx < 0 ? 1 : -1);
+      }}
+      style={{ position: "fixed", inset: 0, zIndex: 50, background: "#05060A", touchAction: "pan-y" }}
+    >
       <canvas
         ref={visRef}
         onClick={() => { set({ visPanel: false }); setThemeMenu(false); }}
-        onTouchStart={(e) => { touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }}
-        onTouchEnd={(e) => {
-          const s0 = touchStart.current;
-          touchStart.current = null;
-          if (!s0) return;
-          const dx = e.changedTouches[0].clientX - s0.x;
-          const dy = e.changedTouches[0].clientY - s0.y;
-          // horizontal swipe switches theme (swipe left → next)
-          if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 2) stepTheme(dx < 0 ? 1 : -1);
-        }}
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "pan-y" }}
       />
       {/* crisp lyric layer above the trail-faded vis canvas */}
@@ -82,9 +93,24 @@ export function VisualizerOverlay() {
         <button className="visarrow" onClick={() => stepTheme(1)} aria-label="Next theme">›</button>
       </div>
 
-      <div style={{ position: "absolute", top: 14, left: 16, right: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+      {/* Always-reachable exit. It used to be the last chip in the row below,
+          which overflows the screen on a phone — so once you opened the
+          visualizer there was no way back out. */}
+      <button
+        onClick={() => set({ visOpen: false })}
+        aria-label="Close visualizer"
+        style={{
+          position: "absolute", top: 12, right: 12, zIndex: 8,
+          width: 42, height: 42, borderRadius: 999, cursor: "pointer", fontSize: 17, lineHeight: 1,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: "rgba(10,12,18,0.82)", border: BORDER, color: "#fff",
+          backdropFilter: "blur(14px)", pointerEvents: "auto",
+        }}
+      >✕</button>
+
+      <div style={{ position: "absolute", top: 14, left: 16, right: 64, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap", pointerEvents: "none" }}>
         {/* compact theme picker: one chip + fluid dropdown, no chip clutter */}
-        <div style={{ position: "relative" }}>
+        <div style={{ position: "relative", pointerEvents: "auto" }}>
           <button
             onClick={() => setThemeMenu((x) => !x)}
             style={{ ...chip(themeMenu), display: "flex", alignItems: "center", gap: 9 }}
@@ -135,7 +161,7 @@ export function VisualizerOverlay() {
             </div>
           )}
         </div>
-        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end", pointerEvents: "auto" }}>
           <button onClick={() => set({ lyricsOn: !lyricsOn })} style={chip(lyricsOn)} title="Lyrics on/off">♪</button>
           <button
             onClick={() => set({ lyricAuto: !lyricAuto })}
@@ -153,7 +179,6 @@ export function VisualizerOverlay() {
           )}
           <button onClick={visChaos} style={chip(false, MAG)}>🎲</button>
           <button onClick={() => set({ visPanel: !visPanel })} style={chip(visPanel, MAG)}>⚙ TUNE</button>
-          <button onClick={() => set({ visOpen: false })} style={{ ...chip(false), fontSize: 14 }}>✕</button>
         </div>
       </div>
 

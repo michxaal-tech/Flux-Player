@@ -96,6 +96,8 @@ export interface StoreState {
   analyzeStatus: string;
   /** a Spotify session exists in this browser (import is metadata-only) */
   spotifyReady: boolean;
+  /** float a mini player when the app is backgrounded */
+  miniPlayer: boolean;
   /** spoken transitions between tracks */
   radioMode: "off" | "host" | "hype";
   // ui
@@ -192,6 +194,7 @@ export const useStore = create<StoreState>()(
         trackBpm: {},
         coverRev: 0,
         radioMode: "off",
+        miniPlayer: true,
         analyzedMode: false,
         analyzeStatus: "",
         spotifyReady: false,
@@ -395,6 +398,7 @@ export const useStore = create<StoreState>()(
           lyricAuto: s.lyricAuto,
           trackBpm: s.trackBpm,
           radioMode: s.radioMode,
+          miniPlayer: s.miniPlayer,
           analyzedMode: s.analyzedMode,
           aiProvider: s.aiProvider,
           aiModel: s.aiModel,

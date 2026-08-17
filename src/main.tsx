@@ -13,6 +13,7 @@ wireAudio();
 startRenderLoop();
 // unlock AI surfaces if this browser already holds a key (BYOK, local only)
 refreshReady();
+import("./miniPlayer").then((m) => m.wireMiniPlayer());
 // finish a Spotify redirect if we came back from one, and reflect any session
 import("./spotify").then(async (m) => {
   await m.completeSpotifyAuth();

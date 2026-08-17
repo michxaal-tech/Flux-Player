@@ -8,6 +8,7 @@ import { mix } from "../theme";
 import type { Take } from "../types";
 import { fmt } from "../utils";
 import { bigBtn, chip, Module, Toggle } from "./ui";
+import { miniPlayerSupported, openMiniPlayer } from "../miniPlayer";
 import { AiSettings } from "./ai/AiSettings";
 import { AiStudio } from "./ai/AiStudio";
 
@@ -53,6 +54,8 @@ export function MeTab() {
   const favCount = useStore(getFavCount);
   const set = useStore((s) => s.set);
   const aiReady = useStore((s) => s.aiReady);
+  const miniPlayer = useStore((s) => s.miniPlayer);
+  const [miniSupported] = useState(miniPlayerSupported);
 
   const minutes = Math.floor(stats.seconds / 60);
   let lvlIdx = 0;
@@ -149,6 +152,17 @@ export function MeTab() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <Toggle label="SMOOTH SWITCH" on={smooth} onChange={(v) => set({ smooth: v })} />
           <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.4)" }}>fade between tracks</span>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 12 }}>
+          <Toggle label="MINI PLAYER" on={miniPlayer} onChange={(v) => set({ miniPlayer: v })} color={MAG} />
+          {miniSupported && (
+            <button onClick={() => openMiniPlayer()} style={chip(false, MAG)}>⧉ OPEN NOW</button>
+          )}
+        </div>
+        <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.4)", lineHeight: 1.55, marginTop: 6 }}>
+          {miniSupported
+            ? "Floats a small always-on-top player when you leave FLUX. Browsers only allow that window to open from a tap, so if it doesn't appear automatically, use OPEN NOW before switching away."
+            : "This browser can't float a window. Audio keeps playing in the background either way, with controls on your lock screen and in Control Center."}
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 12 }}>
           <span style={{ fontSize: 11, letterSpacing: "0.1em", color: "rgba(255,255,255,0.55)" }}>SLEEP TIMER</span>
