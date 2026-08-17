@@ -83,6 +83,11 @@ export interface LiveState {
   impScan: number;
   /** total A/V compensation currently applied, ms (measured + user offset) */
   syncMs: number;
+  /** Smoothed frame time in ms, and the adaptive resolution scale currently in
+   * use. Surfaced in the TUNE panel so the cost of a theme and impact stack can
+   * be read on the actual device rather than inferred. */
+  frameMs: number;
+  resScale: number;
   /** Musical time, in beats. Advances with the detected tempo rather than with
    * frames, so anything driven by it stays in phase at any BPM or refresh rate. */
   flow: number;
@@ -112,7 +117,7 @@ export const live: LiveState = {
   flies: [], vort: [], cityH: [], shakeVal: 0,
   beatAvg: 0, prevBass: 0, fluxAvg: 0, fluxDev: 0, lastBeatAt: 0, beats: [], bpm: 0, flashVal: 0, cycleT: 0,
   beatE: 0, energy: 0.35, anal: null, analOn: false, analBeat: 0, dropE: 0, prevBassSlow: 0, hitE: 0, section: 0, analHit: 0, impRings: [], impScan: -1, impShock: [], syncMs: 0, playerTheme: "AURORA", playerBgOn: true, scratch: {},
-  flow: 0, lastDropAt: -9999, dropIdx: 0, dropNew: false, dropTier: 0, dropBang: 0, dropRings: [], dropTiles: [],
+  frameMs: 16.7, resScale: 1, flow: 0, lastDropAt: -9999, dropIdx: 0, dropNew: false, dropTier: 0, dropBang: 0, dropRings: [], dropTiles: [],
 };
 
 // Debug handle: inspect the render-loop state from the console (window.__flux).

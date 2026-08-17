@@ -63,6 +63,13 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
   in a Web Worker, custom 6144-point STFT): vocals removed, nothing
   uploaded. The ~64MB model downloads once and is cached; each track's
   instrumental is stored beside the original with a live A/B toggle.
+- **Revoice (audio → MIDI → synth)** — reads the melody off a track and plays it
+  back through a synth, so a sung line becomes an EDM lead. Monophonic YIN pitch
+  tracking in a Web Worker, so the accurate source is a separated vocal (derived
+  by subtracting the instrumental from the original); the full mix works but
+  follows whatever is loudest. Notes snap to the analyser's own beat grid and can
+  be locked to a scale, then play through one of 7 synth patches — or export as a
+  **.mid** file for your own sounds in a DAW.
 - **Persistence** — audio files live in IndexedDB (OPFS fallback); playlists,
   favorites, tags, notes, pinned FX, presets, stats, takes and visualizer
   settings persist via Zustand + localStorage. Everything survives restarts.

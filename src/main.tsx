@@ -33,6 +33,10 @@ import("./visualizer/live").then((m) => {
 import("./visualPresets").then((m) => {
   (window as unknown as { __fluxLook: unknown }).__fluxLook = m;
 });
+// melody transcription + MIDI writer, for scripts/revoice-check.mjs
+import("./audio/revoice").then((m) => {
+  (window as unknown as { __fluxRevoice: unknown }).__fluxRevoice = m;
+});
 import("./audio/transport").then((m) => {
   (window as unknown as { __fluxPlayAt: unknown }).__fluxPlayAt = m.playAt;
 });

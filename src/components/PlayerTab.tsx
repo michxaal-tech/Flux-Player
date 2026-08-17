@@ -7,6 +7,7 @@ import { canvasRefs } from "../visualizer/live";
 import { mix } from "../theme";
 import { fmt } from "../utils";
 import { PresetRow } from "./PresetRow";
+import { Revoice } from "./Revoice";
 import { chip, Module, NextIcon, PauseIcon, playBtn, PlayIcon, PrevIcon, skipBtn, Toggle } from "./ui";
 import { Cover } from "./ai/Cover";
 
@@ -287,6 +288,8 @@ export function PlayerTab() {
 
       {/* side panel: playlists + up next + session pulse */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <Revoice />
+
         <Module title="📚 PLAYLISTS">
           <div className="hscroll" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
             {playlists.map((p) => (

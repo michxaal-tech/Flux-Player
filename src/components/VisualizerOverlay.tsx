@@ -16,6 +16,36 @@ import { chip, NewTag, NextIcon, PauseIcon, playBtn, PlayIcon, PrevIcon, skipBtn
 import { vibeToVisuals } from "../ai/features";
 import { AiPrompt } from "./ai/AiBits";
 
+/**
+ * Live cost readout. Frame time and the adaptive resolution scale come straight
+ * off the render loop, so the price of a theme plus its impact stack can be read
+ * on the actual device instead of inferred from a developer machine.
+ *
+ * Polled rather than subscribed: these change every frame, and re-rendering the
+ * panel at 60fps to display a number would itself cost more than it measures.
+ */
+function PerfReadout() {
+  const [s, setS] = useState({ ms: 16.7, res: 1 });
+  useEffect(() => {
+    const id = window.setInterval(() => setS({ ms: live.frameMs, res: live.resScale }), 400);
+    return () => window.clearInterval(id);
+  }, []);
+  const fps = s.ms > 0 ? Math.min(60, Math.round(1000 / s.ms)) : 60;
+  const good = fps >= 50, ok = fps >= 34;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, paddingTop: 10, borderTop: BORDER, fontSize: 9.5 }}>
+      <span style={{ letterSpacing: "0.18em", color: "rgba(255,255,255,0.4)" }}>COST</span>
+      <span style={{ fontWeight: 700, color: good ? CYAN : ok ? "#FFD166" : "#FF6B6B" }}>
+        {fps} fps
+      </span>
+      <span style={{ color: "rgba(255,255,255,0.4)" }}>{s.ms.toFixed(1)}ms</span>
+      <span style={{ color: "rgba(255,255,255,0.4)" }}>
+        {s.res >= 0.999 ? "full res" : `res ${Math.round(s.res * 100)}%`}
+      </span>
+    </div>
+  );
+}
+
 /** TUNE panel groups, in nav order. */
 const PANEL_TABS = ["LOOK", "MOTION", "3D", "BEAT", "LYRICS"];
 
@@ -782,6 +812,7 @@ export function VisualizerOverlay() {
               e.target.value = "";
             }}
           />
+          <PerfReadout />
           <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", marginTop: 8, lineHeight: 1.5 }}>
             🎲 randomizes the whole look. Theme auto-cycle/shuffle lives in the theme menu (top left).
             MARQUEE and NEONSIGN themes are built around lyrics.

@@ -293,6 +293,9 @@ export function startRenderLoop(): void {
 
     // ignore giant deltas (tab was hidden — rAF stops, that isn't slowness)
     if (delta < 250) frameEma += (delta - frameEma) * 0.05;
+    // `live` directly: L is the local alias and is not bound until later
+    live.frameMs = frameEma;
+    live.resScale = resScale;
     if (live.cfg.hiRes) {
       // user asked for maximum sharpness — never trade resolution away
       if (resScale !== 1) { resScale = 1; lastResChange = nowMs; }
