@@ -162,7 +162,16 @@ async function api<T>(path: string): Promise<T> {
     await saveToken(null);
     throw new Error("Spotify rejected the session — connect again");
   }
-  if (r.status === 404) throw new Error("Not found — is the playlist private or the link wrong?");
+  if (r.status === 403) {
+    // Two real causes, and the raw 403 tells the user neither of them.
+    throw new Error(
+      "Spotify refused that (403). Two usual causes: your app is in Development mode, " +
+      "so the Spotify account you logged in with must be listed under the app's User Management; " +
+      "and Spotify blocks its own editorial/algorithmic playlists (Discover Weekly, Daily Mix, " +
+      "Today's Top Hits) from third-party apps. Try one of your own playlists."
+    );
+  }
+  if (r.status === 404) throw new Error("Not found — private, or a Spotify-owned playlist that third-party apps can't read");
   if (r.status === 429) throw new Error("Spotify rate limit — wait a moment");
   if (!r.ok) throw new Error(`Spotify error ${r.status}`);
   return (await r.json()) as T;
@@ -198,14 +207,47 @@ const toItem = (t: ApiTrack): SpotifyItem => ({
   duration: Math.round((t.duration_ms ?? 0) / 1000),
 });
 
+/**
+ * Public oEmbed lookup. Needs no app, no login and no key — it only returns a
+ * title, which is all a single song import needs. Playlists give just their
+ * name, so those still require the API.
+ */
+async function fetchOEmbed(ref: SpotifyRef): Promise<string> {
+  const link = `https://open.spotify.com/${ref.kind}/${ref.id}`;
+  const r = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(link)}`);
+  if (!r.ok) throw new Error("Spotify couldn't resolve that link — is it public?");
+  const d = (await r.json()) as { title?: string };
+  const title = (d.title ?? "").trim();
+  if (!title) throw new Error("Spotify returned no title for that link");
+  return title;
+}
+
 export async function fetchSpotifyItems(ref: SpotifyRef): Promise<{ title: string; items: SpotifyItem[] }> {
   if (ref.kind === "track") {
-    const t = await api<ApiTrack>(`/tracks/${ref.id}`);
-    return { title: t.name ?? "SPOTIFY TRACK", items: [toItem(t)] };
+    // A single song works without connecting at all: the public oEmbed
+    // endpoint gives the title, which is enough to match against the library.
+    // When a session exists the API is better (artist + exact duration), so
+    // prefer it and fall back if it refuses.
+    if (await spotifyConnected()) {
+      try {
+        const t = await api<ApiTrack>(`/tracks/${ref.id}`);
+        return { title: t.name ?? "SPOTIFY TRACK", items: [toItem(t)] };
+      } catch { /* fall through to the public lookup */ }
+    }
+    const title = await fetchOEmbed(ref);
+    return { title, items: [{ name: title, artists: "", album: "", duration: 0 }] };
+  }
+  if (ref.kind === "album" && !(await spotifyConnected())) {
+    const title = await fetchOEmbed(ref);
+    throw new Error(`“${title}” needs a connected Spotify app to read its track list — single song links work without one`);
   }
   if (ref.kind === "album") {
     const al = await api<{ name?: string; tracks?: { items?: ApiTrack[] } }>(`/albums/${ref.id}`);
     return { title: al.name ?? "SPOTIFY ALBUM", items: (al.tracks?.items ?? []).map(toItem) };
+  }
+  if (!(await spotifyConnected())) {
+    const title = await fetchOEmbed(ref); // proves the link is valid before asking them to connect
+    throw new Error(`“${title}” needs a connected Spotify app to read its track list — single song links work without one`);
   }
   const pl = await api<{ name?: string }>(`/playlists/${ref.id}?fields=name`);
   const items: SpotifyItem[] = [];

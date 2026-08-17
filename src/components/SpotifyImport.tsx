@@ -58,9 +58,26 @@ export function SpotifyImport() {
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
         <div style={{ fontSize: 10.5, lineHeight: 1.6, color: "rgba(255,255,255,0.5)" }}>
-          Paste a playlist link and FLUX rebuilds it here from the audio files you already have,
-          in Spotify's order, and lists anything you're missing. It reads names and artists only —
-          Spotify's audio is DRM-protected and stays on Spotify.
+          Paste a Spotify link and FLUX matches it against the audio you already have.
+          <strong style={{ color: "rgba(255,255,255,0.75)" }}> Single song links work right away</strong> — no setup.
+          Playlists and albums need a free one-time connection to read their track list.
+          It reads names and artists only; Spotify's audio is DRM-protected and stays on Spotify.
+        </div>
+
+        <div style={{ display: "flex", gap: 6 }}>
+          <input
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") doImport(); }}
+            placeholder="paste a song, playlist or album link…"
+            spellCheck={false}
+            style={{ flex: 1, minWidth: 0, background: "rgba(255,255,255,0.06)", border: BORDER, borderRadius: 10, padding: "10px 12px", fontSize: 11, color: "#fff", outline: "none" }}
+          />
+          <button
+            onClick={doImport}
+            disabled={busy || !link.trim()}
+            style={{ flexShrink: 0, padding: "0 15px", borderRadius: 10, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", cursor: busy ? "wait" : "pointer", background: mix(CYAN, 16), border: `1px solid ${mix(CYAN, 45)}`, color: CYAN, opacity: busy || !link.trim() ? 0.45 : 1 }}
+          >IMPORT</button>
         </div>
 
         {!ready ? (
@@ -71,12 +88,20 @@ export function SpotifyImport() {
             >{showSetup ? "▾" : "▸"} ONE-TIME SETUP</button>
             {showSetup && (
               <div style={{ fontSize: 10, lineHeight: 1.65, color: "rgba(255,255,255,0.5)", display: "flex", flexDirection: "column", gap: 6 }}>
-                <div>1. Open <span style={{ color: CYAN }}>developer.spotify.com/dashboard</span> and create an app (free).</div>
+                <div style={{ color: "rgba(255,255,255,0.6)" }}>Only needed for playlists and albums.</div>
+            <div>1. Open <span style={{ color: CYAN }}>developer.spotify.com/dashboard</span> and create an app (free).</div>
                 <div>2. In its settings, add this exact Redirect URI:</div>
                 <code style={{ fontFamily: MONO, fontSize: 9.5, padding: "7px 9px", borderRadius: 8, background: "rgba(255,255,255,0.06)", border: BORDER, color: CYAN, wordBreak: "break-all" }}>
                   {redirectUri()}
                 </code>
                 <div>3. Copy the app's Client ID and paste it below. It isn't a secret and never leaves this browser.</div>
+                <div>4. Still in the dashboard, open <span style={{ color: CYAN }}>User Management</span> and add your own
+                  Spotify account (name + the email on the account). New apps start in Development mode, and
+                  anyone not on that list gets a 403.</div>
+                <div style={{ color: "rgba(255,200,120,0.75)" }}>
+                  Note: Spotify blocks its own editorial and algorithmic playlists — Discover Weekly, Daily Mix,
+                  Release Radar, Today's Top Hits — from all third-party apps. Your own playlists work.
+                </div>
               </div>
             )}
             <div style={{ display: "flex", gap: 6 }}>
@@ -100,21 +125,6 @@ export function SpotifyImport() {
           </>
         ) : (
           <>
-            <div style={{ display: "flex", gap: 6 }}>
-              <input
-                value={link}
-                onChange={(e) => setLink(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") doImport(); }}
-                placeholder="https://open.spotify.com/playlist/…"
-                spellCheck={false}
-                style={{ flex: 1, minWidth: 0, background: "rgba(255,255,255,0.06)", border: BORDER, borderRadius: 10, padding: "10px 12px", fontSize: 11, color: "#fff", outline: "none" }}
-              />
-              <button
-                onClick={doImport}
-                disabled={busy || !link.trim()}
-                style={{ flexShrink: 0, padding: "0 15px", borderRadius: 10, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", cursor: busy ? "wait" : "pointer", background: mix(CYAN, 16), border: `1px solid ${mix(CYAN, 45)}`, color: CYAN, opacity: busy || !link.trim() ? 0.45 : 1 }}
-              >IMPORT</button>
-            </div>
             <button
               onClick={async () => { await disconnectSpotify(); setRows(null); setStatus("Disconnected."); }}
               style={{ padding: "8px", borderRadius: 9, fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", background: "rgba(255,255,255,0.05)", border: BORDER, color: "rgba(255,255,255,0.6)" }}
