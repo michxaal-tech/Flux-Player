@@ -185,6 +185,7 @@ for (const t of THEMES) {
   // software-rasterised and slow. What matters is what a 3D mode COSTS on top
   // of drawing the same theme flat, which is device-independent.
   let baseFt = null;
+  let baseCore = null;
   for (const m of MODES) {
     await setMode(m);
     await page.waitForTimeout(900); // let trails and staged layers settle
@@ -194,7 +195,11 @@ for (const t of THEMES) {
     if (!s) bad.push("no canvas");
     else {
       if (s.white > 0.06) bad.push(`WHITE-OUT ${(s.white * 100).toFixed(1)}%`);
-      if (s.core > 0.3) bad.push(`CORE BLOWN ${(s.core * 100).toFixed(0)}%`);
+      // judged against the same theme drawn flat: some themes are intrinsically
+      // hot in the middle, and that is the theme's business, not the projection's
+      if (m === "OFF") baseCore = s.core;
+      const coreLimit = Math.min(0.55, (baseCore ?? 0) * 1.7 + 0.12);
+      if (s.core > coreLimit) bad.push(`CORE BLOWN ${(s.core * 100).toFixed(0)}% (flat ${((baseCore ?? 0) * 100).toFixed(0)}%)`);
       if (s.black > 0.94) bad.push(`BLANK ${(s.black * 100).toFixed(1)}% black`);
       if (s.mean < 0.006) bad.push(`DARK mean=${s.mean.toFixed(4)}`);
     }

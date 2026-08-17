@@ -290,7 +290,12 @@ function drawCurved(o: Project3DOpts, axis: "x" | "y"): void {
     const p1 = (Math.sin(t1) / norm) * 0.5 + 0.5;
     const depth = Math.cos((t0 + t1) * 0.5);
     if (depth <= 0.04) continue; // curved away past the rim
-    c.globalAlpha = Math.min(1, 0.4 + depth * 0.75);
+    // The middle of the arc is magnified — it faces the camera squarely while
+    // the rim compresses away. Magnifying a bright region spreads it over more
+    // pixels, so an already-hot theme centre clips. Dimming by the local
+    // stretch keeps the light per unit area constant and stops the blow-out.
+    const stretch = Math.max(1, (p1 - p0) * N);
+    c.globalAlpha = Math.min(1, 0.4 + depth * 0.75) / stretch;
 
     if (axis === "x") {
       const dx = p0 * w, dw = Math.max(0.8, (p1 - p0) * w);
