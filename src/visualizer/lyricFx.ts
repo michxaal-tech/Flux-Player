@@ -92,7 +92,15 @@ export function makeRamp(
     // Blend toward the palette's saturation rather than taking it outright, so
     // a deliberately muted effect stays muted and a vivid one stays vivid.
     const s = Math.round(Math.min(100, sat * 0.3 + palSat * 0.7));
-    return `hsla(${h1 + d * t}, ${s}%, ${l}%, ${alpha})`;
+    // Matched colours are built like the WAVE style: hue and lightness travel
+    // the ramp *together*, which is what makes it read as a gradient rather
+    // than as flat letters in a different colour. Lightness tops out at 80 so
+    // the bright end glows instead of clipping.
+    const lRamp = 52 + t * 28;
+    const lm = l * 0.42 + lRamp * 0.58;
+    // …and left translucent, so the words sit over the visuals like glass
+    // rather than covering them like paint.
+    return `hsla(${h1 + d * t}, ${s}%, ${lm}%, ${alpha * 0.84})`;
   };
 }
 

@@ -69,21 +69,26 @@ await page.evaluate(() => {
 // LFX=RAINBOW,FIRE,... captures one frame per letter effect, with lyrics loaded
 const LFX = (process.env.LFX || "").split(",").filter(Boolean);
 if (LFX.length) {
-  // inject synced lyrics directly — no network in the sandbox
-  await page.evaluate(() => {
-    const st = window.__fluxStore.getState();
-    const words = "NEON LIGHTS BURN THROUGH THE NIGHT";
-    const lyrics = [];
-    for (let i = 0; i < 14; i++) lyrics.push({ t: i * 2.2, text: words });
-    for (const pl of st.playlists) {
-      for (const tr of pl.tracks) tr.lyrics = lyrics;
-    }
-    st.set({ playlists: [...st.playlists], lyricsOn: true, lyricStyle: "FOCUS" });
-  });
-  await page.waitForTimeout(1500);
   for (const f of LFX) {
-    await page.evaluate((fx) => window.__fluxStore.getState().set({ lyricFx: fx }), f);
-    await page.waitForTimeout(900);
+    // Re-inject the lyric relative to the *current* playhead before each shot.
+    // Fixed timestamps meant the screenshot regularly landed between lines, or
+    // after a style had faded its line out, and caught an empty overlay.
+    await page.evaluate((fx) => {
+      const st = window.__fluxStore.getState();
+      const now = window.__fluxEngine.audio.currentTime;
+      const lyrics = [
+        { t: Math.max(0, now - 0.5), text: "NEON LIGHTS BURN BRIGHT" },
+        { t: now + 8, text: "AND THE NIGHT GOES ON" },
+      ];
+      // Replace the track objects rather than mutating them: the engine
+      // subscribes to getCurrentTrack, so an in-place edit keeps the same
+      // object identity and the subscription never fires.
+      st.set({
+        playlists: st.playlists.map((pl) => ({ ...pl, tracks: pl.tracks.map((tr) => ({ ...tr, lyrics })) })),
+        lyricsOn: true, lyricStyle: "DRIFT", lyricFx: fx,
+      });
+    }, f);
+    await page.waitForTimeout(700);
     const p = join(OUT, `lfx-${f.toLowerCase().replace(/ /g, "-")}.png`);
     await page.screenshot({ path: p });
     console.log(`saved ${p}`);

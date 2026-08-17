@@ -209,6 +209,9 @@ function blockMetrics(
 let letterCtx: {
   fx: string;
   base: Omit<LetterFxCtx, "i" | "n" | "row">;
+  /** MATCH THEME is on — matched letters get a soft palette bloom by default */
+  match: boolean;
+  glowColor: string;
 } | null = null;
 
 function drawBlock(c: CanvasRenderingContext2D, text: string, o: BlockOpts, w: number): void {
@@ -225,7 +228,7 @@ function drawBlock(c: CanvasRenderingContext2D, text: string, o: BlockOpts, w: n
   c.textBaseline = "middle";
 
   if (letterCtx && letterCtx.fx !== "NONE") {
-    drawBlockLetters(c, m, o, letterCtx.fx, letterCtx.base);
+    drawBlockLetters(c, m, o, letterCtx.fx, letterCtx.base, letterCtx);
     c.restore();
     return;
   }
@@ -251,6 +254,7 @@ function drawBlockLetters(
   o: BlockOpts,
   fx: string,
   base: Omit<LetterFxCtx, "i" | "n" | "row">,
+  lc: { match: boolean; glowColor: string },
 ): void {
   const em = m.sizePx;                    // offsets are in em so they scale
   const total = m.rows.reduce((s, r) => s + r.length, 0);
@@ -275,8 +279,13 @@ function drawBlockLetters(
           c.translate(x + adv / 2 + (st.dx ?? 0) * em, y + (st.dy ?? 0) * em);
           if (st.rot) c.rotate(st.rot);
           if (st.scale !== undefined || st.scaleY !== undefined) c.scale(st.scale ?? 1, (st.scale ?? 1) * (st.scaleY ?? 1));
+          // A matched effect that sets no glow of its own still gets a soft
+          // palette bloom, which is what stops translucent letters reading as
+          // washed out and gives them the WAVE style's halo.
           if (st.glow !== undefined) c.shadowBlur = st.glow;
+          else if (lc.match) c.shadowBlur = Math.max(o.glowAmt, 13 + base.beatE * 16);
           if (st.glowColor) c.shadowColor = st.glowColor;
+          else if (lc.match) c.shadowColor = lc.glowColor;
           c.textBaseline = "middle";
 
           // depth copies first, so the glyph itself lands on top
@@ -339,8 +348,11 @@ export function drawLyricOverlay(x: LyricCtx): void {
   // threaded through every style branch: the styles all funnel into drawBlock,
   // so this is the one place that needs to know.
   const fx = L.lyricFx && LYRIC_FX.includes(L.lyricFx) ? L.lyricFx : "NONE";
+  const fxMatch = !!L.lyricFxMatch;
   letterCtx = fx === "NONE" ? null : {
     fx,
+    match: fxMatch,
+    glowColor: C1(0.85, 62),
     base: {
       t: time, flow: L.flow, beatE, hitE: L.hitE,
       bass: Math.min(1, L.energy), frac: raw.frac,
