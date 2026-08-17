@@ -6,7 +6,25 @@
 // for, and costs nothing to ship.
 import { makeImpulse } from "./engine";
 
+/** How a voice is generated. Plain subtractive synthesis makes every patch a
+ * variation on "filtered saw", which is what made the first set sound same-y
+ * and thin; FM and a plucked-string model are genuinely different mechanisms
+ * and give the palette actual range. */
+export type Engine = "subtractive" | "fm" | "string";
+
 export interface Voice {
+  engine?: Engine;
+  /** FM: modulator ratio and index */
+  fmRatio?: number;
+  fmIndex?: number;
+  fmDecay?: number;
+  /** vibrato depth in cents and rate in Hz — a little movement stops a held
+   * note sounding like a test tone */
+  vibrato?: number;
+  vibratoHz?: number;
+  /** filter LFO depth (0..1 of cutoff) and rate, for wobbles */
+  wobble?: number;
+  wobbleHz?: number;
   /** oscillator offsets in cents; one oscillator per entry */
   detune: number[];
   type: OscillatorType;
@@ -40,7 +58,31 @@ export const VOICES: Record<string, Voice> = {
   PAD: { detune: [-8, -3, 3, 8], type: "sawtooth", attack: 0.35, decay: 0.6, sustain: 0.7, release: 0.7, cutoffMul: 4, q: 1.4, envAmt: 3, gain: 0.055, send: 0.6 },
   STAB: { detune: [-7, 0, 7], type: "sawtooth", attack: 0.004, decay: 0.22, sustain: 0.1, release: 0.18, cutoffMul: 8, q: 5, envAmt: 7, gain: 0.09, send: 0.4 },
   KEYS: { detune: [0, 1200], type: "triangle", attack: 0.005, decay: 0.5, sustain: 0.25, release: 0.3, cutoffMul: 12, q: 1, envAmt: 2, gain: 0.11, send: 0.35 },
+
+  // ── other synthesis engines ──────────────────────────────────────────
+  // FM: a modulator at a fixed ratio driving the carrier's frequency. Metallic
+  // and bell-like in a way no amount of filtering a saw will reach.
+  "FM BELL": { engine: "fm", fmRatio: 3.5, fmIndex: 620, fmDecay: 0.5, detune: [0], type: "sine", attack: 0.002, decay: 1.1, sustain: 0.04, release: 0.7, cutoffMul: 30, q: 0.6, envAmt: 1, gain: 0.24, send: 0.5 },
+  "FM KEYS": { engine: "fm", fmRatio: 2, fmIndex: 260, fmDecay: 0.3, detune: [0], type: "sine", attack: 0.003, decay: 0.7, sustain: 0.16, release: 0.4, cutoffMul: 30, q: 0.6, envAmt: 1, gain: 0.26, send: 0.35 },
+  "FM BASS": { engine: "fm", fmRatio: 1, fmIndex: 180, fmDecay: 0.14, detune: [0], type: "sine", attack: 0.004, decay: 0.3, sustain: 0.6, release: 0.16, cutoffMul: 30, q: 0.6, envAmt: 1, gain: 0.34 },
+
+  // Karplus-Strong: a noise burst circulating in a delay tuned to the pitch.
+  // This is how a plucked string actually behaves, and it sounds like one.
+  "STRING PLUCK": { engine: "string", detune: [0], type: "sine", attack: 0.001, decay: 0.2, sustain: 0.4, release: 0.4, cutoffMul: 30, q: 0.5, envAmt: 1, gain: 0.5, send: 0.4 },
+  HARP: { engine: "string", detune: [0], type: "sine", attack: 0.001, decay: 0.3, sustain: 0.5, release: 0.9, cutoffMul: 30, q: 0.5, envAmt: 1, gain: 0.42, send: 0.6 },
+
+  // subtractive, but with movement so they are not static
+  WOBBLE: { detune: [-12, 0, 12], type: "sawtooth", attack: 0.01, decay: 0.2, sustain: 0.9, release: 0.12, cutoffMul: 2.4, q: 7, envAmt: 3, gain: 0.19, wobble: 0.8, wobbleHz: 3 },
+  CHOIR: { detune: [-9, -4, 4, 9], type: "sawtooth", attack: 0.28, decay: 0.5, sustain: 0.8, release: 0.6, cutoffMul: 3.4, q: 1.2, envAmt: 2.4, gain: 0.06, vibrato: 18, vibratoHz: 5, send: 0.6 },
+  BRASS: { detune: [-5, 0, 5], type: "sawtooth", attack: 0.06, decay: 0.3, sustain: 0.75, release: 0.2, cutoffMul: 3, q: 2.5, envAmt: 6, gain: 0.11, vibrato: 10, vibratoHz: 5.5, send: 0.3 },
 };
+
+/** Which voices suit which slot, for the per-part pickers. */
+export const VOICE_GROUPS = {
+  lead: ["SUPERSAW", "PLUCK", "SQUARE LEAD", "BELL", "FM BELL", "FM KEYS", "STRING PLUCK", "HARP", "CHIP", "BRASS", "CHOIR", "ORGAN", "KEYS"],
+  bass: ["SUB", "REESE", "FM BASS", "WOBBLE", "SQUARE LEAD", "ORGAN"],
+  chords: ["STAB", "PAD", "CHOIR", "KEYS", "FM KEYS", "ORGAN", "HARP", "BRASS"],
+} as const;
 
 export const midiToHz = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -111,11 +153,11 @@ export function makeBus(ctx: AudioContext, dest: AudioNode, bpm: number): SynthB
 /** Schedules one synth note. Returns the oscillators so they can be killed. */
 export function playVoice(
   bus: SynthBus, voice: Voice, midi: number, at: number, until: number, vel: number, gainMul = 1,
-): OscillatorNode[] {
+): AudioScheduledSourceNode[] {
   const { ctx } = bus;
   const hz = midiToHz(midi);
   const t0 = Math.max(at, ctx.currentTime);
-  const nodes: OscillatorNode[] = [];
+  const nodes: AudioScheduledSourceNode[] = [];
 
   const vca = ctx.createGain();
   const filt = ctx.createBiquadFilter();
@@ -141,12 +183,118 @@ export function playVoice(
   }
 
   const stopAt = until + voice.release + 0.06;
+
+  // ── plucked string (Karplus-Strong) ──────────────────────────────────
+  // A short noise burst fed into a delay line one period long, with damping in
+  // the feedback path. The delay length *is* the pitch.
+  if (voice.engine === "string") {
+    const src = ctx.createBufferSource();
+    src.buffer = noise(ctx);
+    const burst = ctx.createGain();
+    burst.gain.setValueAtTime(1, t0);
+    burst.gain.setValueAtTime(0, t0 + 0.012);   // 12ms excitation
+    const dl = ctx.createDelay(0.05);
+    dl.delayTime.value = 1 / hz;
+    const fbg = ctx.createGain();
+    // Loop gain must stay below 1 or this grows without bound. Measured by
+    // bisection: 0.86 still creeps upward, 0.84 decays cleanly, so the loop
+    // carries about 18% more gain than the nominal feedback value — delay
+    // interpolation and filter phase conspiring around the loop frequency.
+    // 0.82 leaves margin at every pitch while still ringing for about a second.
+    fbg.gain.value = 0.82;
+    const damp = ctx.createBiquadFilter();
+    damp.type = "lowpass";
+    damp.frequency.value = Math.min(9000, hz * 14);
+    damp.Q.value = 0.5;                      // no peak; passband gain <= 1
+    // and the loop is closed off after the note, so a held string cannot ring
+    // on forever once the voice is done
+    fbg.gain.setValueAtTime(0.96, t0);
+    fbg.gain.setTargetAtTime(0, Math.max(t0, until), Math.max(0.05, voice.release / 2));
+    // Hard safety inside the loop: a tanh-shaped clipper cannot pass more than
+    // it receives, so even if some pitch lands on a marginal loop gain the
+    // string saturates instead of exploding. Numbers like the 39,000 peak this
+    // started at must be impossible, not merely unlikely.
+    const clamp = ctx.createWaveShaper();
+    clamp.curve = softClip();
+    clamp.oversample = "2x";
+
+    src.connect(burst);
+    burst.connect(dl);
+    dl.connect(damp);
+    damp.connect(clamp);
+    clamp.connect(fbg);
+    fbg.connect(dl);
+    damp.connect(vca);
+    src.start(t0);
+    src.stop(t0 + 0.06);
+    // the burst source is the only stoppable node here, so it has to be
+    // returned or the caller has no way to kill this voice
+    nodes.push(src);
+    // the string's own decay does the work; the VCA just holds and releases
+    vca.gain.cancelScheduledValues(t0);
+    vca.gain.setValueAtTime(peak, t0);
+    vca.gain.setTargetAtTime(0.0001, Math.max(t0, until), voice.release / 2.5);
+    return nodes;
+  }
+
+  // ── FM ───────────────────────────────────────────────────────────────
+  if (voice.engine === "fm") {
+    const carrier = ctx.createOscillator();
+    carrier.type = "sine";
+    carrier.frequency.value = hz;
+    const mod = ctx.createOscillator();
+    mod.type = "sine";
+    mod.frequency.value = hz * (voice.fmRatio ?? 2);
+    const modGain = ctx.createGain();
+    // the index falling over time is what gives FM its struck-then-settle
+    // character; a constant index just sounds buzzy
+    const idx = (voice.fmIndex ?? 300) * vel;
+    modGain.gain.setValueAtTime(idx, t0);
+    modGain.gain.exponentialRampToValueAtTime(Math.max(1, idx * 0.04), t0 + (voice.fmDecay ?? 0.3));
+    mod.connect(modGain);
+    modGain.connect(carrier.frequency);
+    carrier.connect(vca);
+    mod.start(t0);
+    mod.stop(stopAt);
+    carrier.start(t0);
+    carrier.stop(stopAt);
+    nodes.push(carrier, mod);
+    return nodes;
+  }
+
+  // ── subtractive ──────────────────────────────────────────────────────
+  // optional vibrato and filter wobble, shared by every oscillator below
+  let vibNode: OscillatorNode | null = null;
+  let vibAmt: GainNode | null = null;
+  if (voice.vibrato) {
+    vibNode = ctx.createOscillator();
+    vibNode.frequency.value = voice.vibratoHz ?? 5;
+    vibAmt = ctx.createGain();
+    vibAmt.gain.value = voice.vibrato;
+    vibNode.connect(vibAmt);
+    vibNode.start(t0);
+    vibNode.stop(stopAt);
+    nodes.push(vibNode);
+  }
+  if (voice.wobble) {
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = voice.wobbleHz ?? 3;
+    const amt = ctx.createGain();
+    amt.gain.value = base * voice.wobble;
+    lfo.connect(amt);
+    amt.connect(filt.frequency);
+    lfo.start(t0);
+    lfo.stop(stopAt);
+    nodes.push(lfo);
+  }
+
   for (const cents of voice.detune) {
     const o = ctx.createOscillator();
     o.type = voice.type;
     o.frequency.value = hz;
     o.detune.value = cents;
     o.connect(filt);
+    if (vibAmt) vibAmt.connect(o.detune);
     o.start(t0);
     o.stop(stopAt);
     nodes.push(o);
@@ -170,6 +318,20 @@ export function playVoice(
 // Classic synthesised drum voices: a kick is a sine whose pitch drops fast, a
 // snare is noise plus a body tone, a hat is high-passed noise. Cheap, and they
 // sit correctly in a mix without any samples.
+
+/** tanh transfer curve, shared by every string voice */
+let clipCurve: Float32Array | null = null;
+function softClip(): Float32Array {
+  if (clipCurve) return clipCurve;
+  const n = 1024;
+  const c = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    c[i] = Math.tanh(x * 1.6) / Math.tanh(1.6);
+  }
+  clipCurve = c;
+  return c;
+}
 
 let noiseBuf: AudioBuffer | null = null;
 function noise(ctx: AudioContext): AudioBuffer {

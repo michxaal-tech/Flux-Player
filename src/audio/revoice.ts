@@ -61,6 +61,13 @@ export interface PartMix {
   drums: number;
 }
 
+/** Per-part voice overrides. Empty falls back to the style's own choices. */
+export interface PartVoices {
+  lead?: string;
+  bass?: string;
+  chords?: string;
+}
+
 /**
  * Schedules an arrangement from `fromSec` in the track, starting at `startAt`
  * on the audio clock.
@@ -71,7 +78,7 @@ export interface PartMix {
  */
 export function playArrangement(
   arr: Arrangement, style: Style, mix: PartMix, startAt: number, fromSec: number,
-  bpm = 120, windowSec = 30,
+  bpm = 120, voices: PartVoices = {}, windowSec = 30,
 ): void {
   stopNotes();
   const ac = ctx();
@@ -80,7 +87,7 @@ export function playArrangement(
   // the send delay is tempo-locked, so the bus is built for this track's tempo
   const b = getBus(bpm);
   if (!b) return;
-  const nodes: OscillatorNode[] = [];
+  const nodes: AudioScheduledSourceNode[] = [];
 
   const schedule = (notes: Note[], voiceName: string, gain: number) => {
     if (gain <= 0.001) return;
@@ -95,9 +102,9 @@ export function playArrangement(
     }
   };
 
-  schedule(arr.lead, S.lead, mix.lead);
-  schedule(arr.bass, S.bass, mix.bass);
-  schedule(arr.chords, S.chord, mix.chords);
+  schedule(arr.lead, voices.lead || S.lead, mix.lead);
+  schedule(arr.bass, voices.bass || S.bass, mix.bass);
+  schedule(arr.chords, voices.chords || S.chord, mix.chords);
 
   if (mix.drums > 0.001) {
     for (const d of arr.drums) {

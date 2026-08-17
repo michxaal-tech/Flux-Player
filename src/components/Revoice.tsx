@@ -7,6 +7,21 @@ import {
   type Melody, type PartMix,
 } from "../audio/revoice";
 import { arrange, KEY_NAMES, STYLES, type Arrangement, type Style } from "../audio/arrange";
+import { VOICE_GROUPS } from "../audio/instruments";
+
+/**
+ * How the re-voiced arrangement sits against the original.
+ *
+ * REPLACE is the default and the point of the feature: leaving the original
+ * playing means its melody and the synth's are two versions of the same line at
+ * once, one of them imperfectly transcribed, which sounds bad no matter how
+ * good the patches are.
+ */
+const MIX_MODES = [
+  { id: "replace", label: "REIMAGINE", duck: 0, hint: "Original silenced — you hear only the new arrangement. This is the one you want." },
+  { id: "over", label: "OVER TRACK", duck: 0.35, hint: "Original ducked underneath, so the new parts lead but the record is still there." },
+  { id: "layer", label: "LAYER", duck: 1, hint: "Both at full level. Expect the two melodies to fight." },
+] as const;
 
 /** Common scales, as pitch-class sets. Locking to one pulls the handful of
  * mis-tracked notes back in tune instead of leaving them sour. */
@@ -35,6 +50,8 @@ export function Revoice() {
   const [style, setStyle] = useState<Style>("EDM");
   const [level, setLevel] = useState(0.8);
   const [mix, setMix] = useState<PartMix>({ lead: 1, bass: 1, chords: 0.8, drums: 1 });
+  const [mixMode, setMixMode] = useState<string>("replace");
+  const [voices, setVoices] = useState<{ lead?: string; bass?: string; chords?: string }>({});
   const [snap, setSnap] = useState(true);
   const [scaleIdx, setScaleIdx] = useState(2);
   const [root, setRoot] = useState(0);
@@ -52,7 +69,16 @@ export function Revoice() {
   }, [track?.fileId, source]);
 
   useEffect(() => setRevoiceLevel(melody && !mute ? level : 0), [level, melody, mute]);
-  useEffect(() => () => stopNotes(), []);
+
+  // Duck the original only while the arrangement is actually running, and
+  // always restore it on unmount — leaving a muted track behind would look like
+  // the player had broken.
+  const on = !!melody && !mute && open;
+  useEffect(() => {
+    const m = MIX_MODES.find((x) => x.id === mixMode) ?? MIX_MODES[0];
+    useStore.setState({ revoiceDuck: on ? m.duck : 1 });
+  }, [on, mixMode]);
+  useEffect(() => () => { stopNotes(); useStore.setState({ revoiceDuck: 1 }); }, []);
 
   // The arrangement is rebuilt only when its inputs change, not per frame —
   // key detection and chord picking walk the whole melody.
@@ -68,12 +94,12 @@ export function Revoice() {
   // does not create tens of thousands of oscillators up front.
   useEffect(() => {
     if (!arrangement || !playing || mute) { stopNotes(); return; }
-    const key = `${style}-${Math.floor(progress / 20)}-${JSON.stringify(mix)}`;
+    const key = `${style}-${Math.floor(progress / 20)}-${JSON.stringify(mix)}-${JSON.stringify(voices)}`;
     if (key === lastKey.current) return;
     lastKey.current = key;
     const ac = (window as unknown as { __fluxEngine?: { nodes?: { ctx?: AudioContext } } }).__fluxEngine?.nodes?.ctx;
-    playArrangement(arrangement, style, mix, (ac?.currentTime ?? 0) + 0.08, progress, melody?.bpm ?? 120);
-  }, [arrangement, playing, style, mute, mix, Math.floor(progress / 20)]);
+    playArrangement(arrangement, style, mix, (ac?.currentTime ?? 0) + 0.08, progress, melody?.bpm ?? 120, voices);
+  }, [arrangement, playing, style, mute, mix, voices, Math.floor(progress / 20)]);
 
   if (!track) return null;
 
@@ -185,7 +211,37 @@ export function Revoice() {
                 {arrangement && <> {arrangement.drums.length} drum hits, {arrangement.chords.length} chord notes.</>}
               </div>
 
-              <div style={{ fontSize: 9.5, letterSpacing: "0.16em", color: "rgba(255,255,255,0.35)", marginBottom: 4 }}>PARTS</div>
+              <div style={{ fontSize: 9.5, letterSpacing: "0.16em", color: "rgba(255,255,255,0.35)", marginBottom: 4 }}>
+                THE ORIGINAL <NewTag />
+              </div>
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 4 }}>
+                {MIX_MODES.map((m) => (
+                  <button key={m.id} data-mixmode={m.id} onClick={() => setMixMode(m.id)} style={{ ...chip(mixMode === m.id, MAG), padding: "7px 11px", fontSize: 9.5 }}>{m.label}</button>
+                ))}
+              </div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, marginBottom: 10 }}>
+                {(MIX_MODES.find((m) => m.id === mixMode) ?? MIX_MODES[0]).hint}
+              </div>
+
+              <div style={{ fontSize: 9.5, letterSpacing: "0.16em", color: "rgba(255,255,255,0.35)", marginBottom: 4 }}>
+                INSTRUMENTS <NewTag />
+              </div>
+              {(["lead", "bass", "chords"] as const).map((slot) => (
+                <div key={slot} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+                  <span style={{ fontSize: 9.5, color: "rgba(255,255,255,0.45)", width: 48, flexShrink: 0 }}>{slot.toUpperCase()}</span>
+                  <select
+                    data-voice={slot}
+                    value={voices[slot] ?? ""}
+                    onChange={(e) => setVoices((v) => ({ ...v, [slot]: e.target.value || undefined }))}
+                    style={{ flex: 1, minWidth: 0, background: "rgba(255,255,255,0.06)", border: BORDER, borderRadius: 8, color: "#fff", padding: "6px 8px", fontSize: 11 }}
+                  >
+                    <option value="">{STYLES[style][slot === "chords" ? "chord" : slot]} (from style)</option>
+                    {VOICE_GROUPS[slot].map((v) => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </div>
+              ))}
+
+              <div style={{ fontSize: 9.5, letterSpacing: "0.16em", color: "rgba(255,255,255,0.35)", margin: "10px 0 4px" }}>PARTS</div>
               {([["lead", "LEAD"], ["bass", "BASS"], ["chords", "CHORDS"], ["drums", "DRUMS"]] as const).map(([k, label]) => (
                 <Slider
                   key={k} label={label} value={mix[k]} min={0} max={1.4} step={0.05}
@@ -205,8 +261,9 @@ export function Revoice() {
                 <button data-savemidi onClick={saveMidi} style={{ ...chip(false, CYAN), padding: "7px 11px", fontSize: 9.5 }}>⬇ EXPORT .MID</button>
               </div>
               <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, marginTop: 8 }}>
-                To fully replace the original, pair this with the FX rack's VOCAL CUT or load the
-                instrumental — the synth is mixed in alongside, not over the top.
+                Transcription follows one voice at a time, so a wrong note here and there is the
+                tracker mishearing the source — a scale lock above usually fixes it. Closing this
+                panel restores the original track.
               </div>
             </div>
           )}

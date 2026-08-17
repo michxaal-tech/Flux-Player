@@ -202,6 +202,73 @@ if (arrCheck.error) {
   else console.log("✔ drums land on the analysed beat grid");
 }
 
+// ── REIMAGINE must actually silence the original ─────────────────────────
+// The whole complaint that drove this was the original still playing under the
+// synth, so it is asserted rather than assumed.
+const duckCheck = await page.evaluate(async () => {
+  const st = window.__fluxStore.getState();
+  const el = window.__fluxEngine.audio;
+  st.set({ volume: 0.8, revoiceDuck: 1 });
+  await new Promise((r) => setTimeout(r, 120));
+  const layered = el.volume;
+  st.set({ revoiceDuck: 0 });
+  await new Promise((r) => setTimeout(r, 120));
+  const replaced = el.volume;
+  st.set({ revoiceDuck: 1 });
+  return { layered, replaced };
+});
+console.log(`\noriginal level — layer: ${duckCheck.layered.toFixed(2)}, reimagine: ${duckCheck.replaced.toFixed(2)}`);
+if (duckCheck.layered < 0.5) { console.log("✘ layering does not pass the original through"); bad++; }
+else if (duckCheck.replaced > 0.001) { console.log("✘ REIMAGINE leaves the original audible"); bad++; }
+else console.log("✔ REIMAGINE silences the original, LAYER passes it through");
+
+// ── every voice must actually produce sound ──────────────────────────────
+// FM and the string model are different synthesis paths; a wrong connection in
+// either would leave a patch silent while everything still looked fine.
+const voiceCheck = await page.evaluate(async () => {
+  const eng = window.__fluxEngine;
+  const ctx = eng?.nodes?.ctx;
+  if (!ctx) return { error: "no ctx" };
+  if (ctx.state === "suspended") await ctx.resume();
+  const names = Object.keys(window.__fluxInstruments.VOICES);
+  const out = {};
+  for (const name of names) {
+    const tap = ctx.createAnalyser();
+    tap.fftSize = 2048;
+    const sink = ctx.createGain();
+    sink.gain.value = 0;             // measured, not heard
+    const bus = window.__fluxInstruments.makeBus(ctx, sink, 120);
+    sink.connect(ctx.destination);
+    bus.out.connect(tap);
+    const buf = new Float32Array(tap.fftSize);
+    window.__fluxInstruments.playVoice(bus, window.__fluxInstruments.VOICES[name], 64, ctx.currentTime + 0.02, ctx.currentTime + 0.5, 1, 1);
+    let peak = 0;
+    const t0 = performance.now();
+    while (performance.now() - t0 < 420) {
+      tap.getFloatTimeDomainData(buf);
+      for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    out[name] = +peak.toFixed(4);
+  }
+  return out;
+});
+if (voiceCheck.error) { console.log(`✘ voices: ${voiceCheck.error}`); bad++; }
+else {
+  const silent = Object.entries(voiceCheck).filter(([, p]) => p < 0.005).map(([n]) => n);
+  const names = Object.keys(voiceCheck);
+  console.log(`\n${names.length} voices tested:`);
+  for (const [n, p] of Object.entries(voiceCheck).sort((a, b) => b[1] - a[1])) {
+    console.log(`   ${n.padEnd(14)} ${p}`);
+  }
+  if (silent.length) { console.log(`✘ silent voices: ${silent.join(", ")}`); bad++; }
+  else console.log("✔ every voice produces sound");
+  // a voice far above the others is a runaway, not a loud patch
+  const hot = Object.entries(voiceCheck).filter(([, p]) => p > 2).map(([n, p]) => `${n} (${p})`);
+  if (hot.length) { console.log(`✘ runaway gain: ${hot.join(", ")}`); bad++; }
+  else console.log("✔ no voice runs away");
+}
+
 if (errors.length) {
   console.log(`✘ page errors: ${[...new Set(errors)].slice(0, 3).join(" | ")}`);
   bad++;

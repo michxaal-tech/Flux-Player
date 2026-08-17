@@ -104,6 +104,9 @@ export interface StoreState {
   miniStatus: string;
   /** progress/result text for melody transcription (see audio/revoice.ts) */
   melodyStatus: string;
+  /** 0..1 attenuation applied to the original track only, so Revoice can
+   * replace it rather than play on top of it. The synth joins after this. */
+  revoiceDuck: number;
   /** a Spotify session exists in this browser (import is metadata-only) */
   spotifyReady: boolean;
   /** float a mini player when the app is backgrounded */
@@ -221,6 +224,7 @@ export const useStore = create<StoreState>()(
         analyzeStatus: "",
         miniStatus: "",
         melodyStatus: "",
+        revoiceDuck: 1,
         spotifyReady: false,
         tab: "player",
         shortcutsOpen: false,

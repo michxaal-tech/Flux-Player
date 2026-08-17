@@ -27,7 +27,17 @@ export function wireAudio(): void {
     if (fx.size !== prev.size) engine.buildImpulse(fx.size);
   });
   useStore.subscribe((s) => s.amb, (amb) => engine.applyAmb(amb));
-  useStore.subscribe((s) => s.volume, (v) => { el.volume = v; });
+  // The original track's level is the user's volume times Revoice's duck. The
+  // synth arrangement joins the graph after this element, so ducking here
+  // silences the original without touching the re-voiced parts — which is what
+  // makes "reimagine" actually replace the song instead of doubling it.
+  const applyVol = () => {
+    const s = useStore.getState();
+    el.volume = Math.max(0, Math.min(1, s.volume * (s.revoiceDuck ?? 1)));
+  };
+  useStore.subscribe((s) => s.volume, applyVol);
+  useStore.subscribe((s) => s.revoiceDuck, applyVol);
+  applyVol();
 
   // listening-time ticker (coarse 15s steps — each write re-persists state,
   // and persistence during playback is exactly what we're trying to avoid)
