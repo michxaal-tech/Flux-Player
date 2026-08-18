@@ -34,10 +34,24 @@ streams its progress back into the Discord channel as it works.
 5. Your Discord user ID (right-click your name → Copy User ID, with Developer
    Mode on in Discord settings) → `ALLOWED_USER_IDS`.
 
-### 2. Get an Anthropic API key
+### 2. Authenticate Claude — subscription (no metered billing) or API key
 
-https://platform.claude.com/ → API keys. This is billed separately from a
-Claude.ai subscription.
+If you have a Claude Pro, Max, or Team subscription, use it instead of paying
+for API tokens separately:
+
+```bash
+npm install -g @anthropic-ai/claude-code   # if you don't already have the `claude` CLI
+claude setup-token                          # opens a browser login, prints a long-lived token
+```
+
+Copy the printed token into `CLAUDE_CODE_OAUTH_TOKEN` in `.env`. It's valid
+for a year, works for unattended/bot use (this is the documented headless-auth
+path, not a workaround), and usage counts against your subscription's
+included quota — no separate per-token bill.
+
+No subscription? Get a pay-per-token key instead at https://platform.claude.com/
+→ API keys, and put it in `ANTHROPIC_API_KEY`. There's no free tier of the
+API itself — one of these two is required.
 
 ### 3. Point it at a repo
 
@@ -48,8 +62,8 @@ on the host, and set `WORKSPACE_DIR` to that path.
 
 ```bash
 cp .env.example .env
-# fill in DISCORD_TOKEN, DISCORD_CLIENT_ID, ANTHROPIC_API_KEY,
-# WORKSPACE_DIR, ALLOWED_USER_IDS
+# fill in DISCORD_TOKEN, DISCORD_CLIENT_ID, WORKSPACE_DIR, ALLOWED_USER_IDS,
+# and either CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY
 ```
 
 Set `DISCORD_GUILD_ID` too while testing — guild-scoped commands register
