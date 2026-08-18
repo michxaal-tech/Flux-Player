@@ -15,6 +15,7 @@
 // visual instead of pasted over it.
 import type { ThemeCtx } from "./themeTypes";
 import type { LiveState } from "./live";
+import { light } from "./light";
 
 export interface LayerCtx extends ThemeCtx {
   /** 0..1 — how present this layer is right now, from musical energy */
@@ -30,44 +31,6 @@ const hash01 = (n: number): number => {
   const s = Math.sin(n * 12.9898 + 78.233) * 43758.5453;
   return s - Math.floor(s);
 };
-
-/**
- * Cached soft-light sprite.
- *
- * A luminous mote is a radial gradient, and building one per particle per frame
- * is what turned an earlier theme into a 170ms slideshow. These are rasterised
- * once per colour and blitted, which is what makes it affordable to draw a few
- * hundred glowing points instead of a few hundred flat dots — and flat dots are
- * most of the difference between "ornament" and "light".
- */
-const spriteCache = new Map<string, HTMLCanvasElement>();
-function glowSprite(color: string): HTMLCanvasElement {
-  const hit = spriteCache.get(color);
-  if (hit) return hit;
-  const R = 32;
-  const cv = document.createElement("canvas");
-  cv.width = cv.height = R * 2;
-  const c = cv.getContext("2d")!;
-  const g = c.createRadialGradient(R, R, 0, R, R, R);
-  g.addColorStop(0, color);
-  g.addColorStop(0.35, color);
-  g.addColorStop(1, "transparent");
-  c.fillStyle = g;
-  c.fillRect(0, 0, R * 2, R * 2);
-  // bounded, so a drifting palette cannot grow this without limit
-  if (spriteCache.size > 24) spriteCache.clear();
-  spriteCache.set(color, cv);
-  return cv;
-}
-
-/** blit a soft light at (x, y) with radius r */
-function light(c: CanvasRenderingContext2D, color: string, x: number, y: number, r: number, a: number): void {
-  if (a <= 0.004 || r <= 0.2) return;
-  const sp = glowSprite(color);
-  c.globalAlpha = a > 1 ? 1 : a;
-  c.drawImage(sp, x - r, y - r, r * 2, r * 2);
-  c.globalAlpha = 1;
-}
 
 // ── the layer library ────────────────────────────────────────────────────
 // Each is a self-contained ornament that composes with any theme underneath.
@@ -436,6 +399,294 @@ export const LAYERS: Record<string, LayerDraw> = {
     c.fillStyle = g;
     c.fillRect(0, 0, w, h);
   },
+
+  /** billowing plumes rising and spreading */
+  PLUMES: (x) => {
+    const { c, w, h, R, vt, amt, slot, bassV, CMix, C2, L } = x;
+    const S = (L.scratch.lyPlume ??= [] as { x: number; y: number; sp: number; ph: number; sz: number }[]) as { x: number; y: number; sp: number; ph: number; sz: number }[];
+    const want = Math.round((7 + slot * 4) * amt);
+    while (S.length < want) S.push({ x: Math.random(), y: Math.random(), sp: 0.0006 + Math.random() * 0.0014, ph: Math.random() * TAU, sz: 0.6 + Math.random() * 1.2 });
+    if (S.length > want) S.length = want;
+    for (const p of S) {
+      p.y -= p.sp * (1 + amt + bassV);
+      if (p.y < -0.15) { p.y = 1.15; p.x = Math.random(); }
+      // a plume spreads as it rises, so height drives size
+      const rise = 1 - p.y;
+      const px = (p.x + Math.sin(vt * 0.004 + p.ph) * 0.05) * w;
+      light(c, CMix(rise, 1, 60), px, p.y * h, R * 0.07 * p.sz * (0.4 + rise) * (0.5 + amt), amt * 0.16 * (1 - rise * 0.5));
+    }
+    void C2;
+  },
+
+  /** a swarm that wheels as one body */
+  FLOCK: (x) => {
+    const { c, w, h, vt, amt, slot, beatE, C1, TK, L } = x;
+    const S = (L.scratch.lyFlock ??= [] as { ph: number; r: number; sp: number }[]) as { ph: number; r: number; sp: number }[];
+    const want = Math.round((22 + slot * 16) * amt);
+    while (S.length < want) S.push({ ph: Math.random() * TAU, r: 0.1 + Math.random() * 0.28, sp: 0.6 + Math.random() * 0.8 });
+    if (S.length > want) S.length = want;
+    // the whole flock follows one slow wandering centre, which is what makes it
+    // read as a single organism rather than as scattered dots
+    const hx = 0.5 + Math.sin(vt * 0.0032) * 0.26, hy = 0.5 + Math.cos(vt * 0.0025) * 0.2;
+    c.strokeStyle = C1(amt * 0.5, 74);
+    c.lineWidth = (0.7 + amt) * TK;
+    c.beginPath();
+    for (const p of S) {
+      const a = p.ph + vt * 0.01 * p.sp;
+      const px = (hx + Math.cos(a) * p.r) * w;
+      const py = (hy + Math.sin(a * 1.3) * p.r * 0.8) * h;
+      const tail = 5 + beatE * 6;
+      c.moveTo(px, py);
+      c.lineTo(px - Math.cos(a) * tail, py - Math.sin(a * 1.3) * tail);
+    }
+    c.stroke();
+  },
+
+  /** rippling caustics, like light through water */
+  CAUSTICS: (x) => {
+    const { c, w, h, vt, amt, slot, midV, C1, TK } = x;
+    const rows = 5 + slot;
+    c.lineWidth = (0.8 + amt * 1.2) * TK;
+    for (let r = 0; r < rows; r++) {
+      const f = r / rows;
+      c.strokeStyle = C1(amt * 0.22 * (1 - f * 0.4), 70);
+      c.beginPath();
+      for (let i = 0; i <= 48; i++) {
+        const u = i / 48;
+        const px = u * w;
+        const py = (f + 0.06) * h * 1.4
+          + Math.sin(u * 9 + vt * 0.02 + r) * h * 0.03 * (1 + midV)
+          + Math.sin(u * 21 - vt * 0.014 + r * 2.1) * h * 0.014;
+        if (i === 0) c.moveTo(px, py); else c.lineTo(px, py);
+      }
+      c.stroke();
+    }
+  },
+
+  /** columns of light standing up from the base */
+  PILLARS: (x) => {
+    const { c, w, h, amt, slot, bassV, beatE, C1, C2 } = x;
+    const n = 3 + slot;
+    for (let i = 0; i < n; i++) {
+      const f = (i + 0.5) / n;
+      const px = f * w;
+      const wd = w * 0.02 * (1 + hash01(i) + bassV * 0.6);
+      const hh = h * (0.4 + hash01(i + 9) * 0.45) * (1 + beatE * 0.08);
+      const g = c.createLinearGradient(0, h, 0, h - hh);
+      g.addColorStop(0, C1(amt * 0.3, 68));
+      g.addColorStop(1, "transparent");
+      c.fillStyle = g;
+      c.fillRect(px - wd, h - hh, wd * 2, hh);
+      c.fillStyle = C2(amt * 0.16, 60);
+      c.fillRect(px - wd * 0.3, h - hh, wd * 0.6, hh);
+    }
+  },
+
+  /** electric arcs cracking between points */
+  SPARKS: (x) => {
+    const { c, cx, cy, R, amt, slot, beat, hitE, C1, CMix, TK, L } = x;
+    const S = (L.scratch.lySpark ??= [] as { a: number; life: number; seed: number }[]) as { a: number; life: number; seed: number }[];
+    if ((beat || hitE > 0.6) && S.length < 3 + slot) S.push({ a: Math.random() * TAU, life: 1, seed: Math.random() * 999 });
+    for (let i = S.length - 1; i >= 0; i--) {
+      const p = S[i];
+      p.life -= 0.06;
+      if (p.life <= 0) { S.splice(i, 1); continue; }
+      const len = R * (0.35 + slot * 0.05);
+      c.strokeStyle = C1(amt * p.life * 0.9, 82);
+      c.lineWidth = (0.8 + p.life * 1.8) * TK;
+      c.beginPath();
+      c.moveTo(cx, cy);
+      // a jagged walk outward — each segment kicked sideways by a stable hash,
+      // so an arc flickers in place instead of writhing randomly
+      let px = cx, py = cy;
+      for (let k = 1; k <= 7; k++) {
+        const t = k / 7;
+        const off = (hash01(p.seed + k) - 0.5) * R * 0.16 * (1 - t);
+        px = cx + Math.cos(p.a) * len * t - Math.sin(p.a) * off;
+        py = cy + Math.sin(p.a) * len * t + Math.cos(p.a) * off;
+        c.lineTo(px, py);
+      }
+      c.stroke();
+      light(c, CMix(0.4, 1, 80), px, py, R * 0.03 * p.life, amt * p.life * 0.6);
+    }
+  },
+
+  /** petals turning as they fall */
+  PETALS: (x) => {
+    const { c, w, h, R, vt, amt, slot, CMix, L } = x;
+    const S = (L.scratch.lyPetal ??= [] as { x: number; y: number; sp: number; ph: number; sz: number }[]) as { x: number; y: number; sp: number; ph: number; sz: number }[];
+    const want = Math.round((16 + slot * 12) * amt);
+    while (S.length < want) S.push({ x: Math.random(), y: Math.random(), sp: 0.0016 + Math.random() * 0.003, ph: Math.random() * TAU, sz: 0.6 + Math.random() * 0.9 });
+    if (S.length > want) S.length = want;
+    for (const p of S) {
+      p.y += p.sp * (1 + amt);
+      if (p.y > 1.08) { p.y = -0.08; p.x = Math.random(); }
+      const sway = Math.sin(vt * 0.014 + p.ph) ;
+      const px = (p.x + sway * 0.05) * w;
+      const py = p.y * h;
+      const sz = R * 0.016 * p.sz * (0.6 + amt);
+      c.save();
+      c.translate(px, py);
+      c.rotate(sway * 1.2 + p.ph);
+      c.fillStyle = CMix((p.ph % TAU) / TAU, amt * 0.5, 72);
+      c.beginPath();
+      // squashed by the sway, so each petal reads as turning edge-on and back
+      c.ellipse(0, 0, sz * (0.35 + Math.abs(sway) * 0.65), sz, 0, 0, TAU);
+      c.fill();
+      c.restore();
+    }
+  },
+
+  /** slow curtains of light drifting across */
+  VEIL: (x) => {
+    const { c, w, h, vt, amt, slot, midV, C1, C2 } = x;
+    const n = 2 + slot;
+    for (let i = 0; i < n; i++) {
+      const f = i / n;
+      const cxx = (0.5 + Math.sin(vt * 0.0026 + i * 2.1) * 0.36) * w;
+      const wd = w * (0.1 + f * 0.08) * (1 + midV * 0.4);
+      const g = c.createLinearGradient(cxx - wd, 0, cxx + wd, 0);
+      g.addColorStop(0, "transparent");
+      g.addColorStop(0.5, (i % 2 ? C2 : C1)(amt * 0.14, 66));
+      g.addColorStop(1, "transparent");
+      c.fillStyle = g;
+      // sheared, so the curtain hangs rather than standing as a bar
+      c.save();
+      c.transform(1, 0, Math.sin(vt * 0.004 + i) * 0.22, 1, 0, 0);
+      c.fillRect(cxx - wd, -h * 0.2, wd * 2, h * 1.4);
+      c.restore();
+    }
+  },
+
+  /** spiral arms winding out from the centre */
+  SPIRALARM: (x) => {
+    const { c, cx, cy, R, vt, amt, slot, beatE, CMix, TK } = x;
+    const arms = 2 + slot;
+    c.lineWidth = (1 + amt * 2) * TK;
+    for (let a = 0; a < arms; a++) {
+      const base = (a / arms) * TAU + vt * 0.0022;
+      c.strokeStyle = CMix(a / arms, amt * 0.35, 68);
+      c.beginPath();
+      for (let k = 0; k <= 40; k++) {
+        const t = k / 40;
+        const ang = base + t * 2.6;
+        const rr = R * t * 0.85 * (1 + beatE * 0.03);
+        const px = cx + Math.cos(ang) * rr;
+        const py = cy + Math.sin(ang) * rr * 0.62;
+        if (k === 0) c.moveTo(px, py); else c.lineTo(px, py);
+      }
+      c.stroke();
+    }
+  },
+
+  /** glyphs surfacing and fading */
+  GLYPHS: (x) => {
+    const { c, w, h, amt, slot, vt, CMix, L } = x;
+    const S = (L.scratch.lyGlyph ??= [] as { x: number; y: number; ch: number; t: number }[]) as { x: number; y: number; ch: number; t: number }[];
+    const want = Math.round((6 + slot * 4) * amt);
+    while (S.length < want) S.push({ x: Math.random(), y: Math.random(), ch: Math.floor(Math.random() * 26), t: Math.random() });
+    if (S.length > want) S.length = want;
+    c.save();
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    for (const p of S) {
+      p.t += 0.005;
+      if (p.t > 1) { p.t = 0; p.x = Math.random(); p.y = Math.random(); p.ch = Math.floor(Math.random() * 26); }
+      // fades in and out again over its life, so nothing pops
+      const a = Math.sin(p.t * Math.PI) * amt * 0.55;
+      const sz = Math.min(w, h) * 0.05 * (0.7 + p.t * 0.5);
+      c.font = `700 ${sz.toFixed(0)}px 'JetBrains Mono', monospace`;
+      c.fillStyle = CMix(p.t, a, 74);
+      c.fillText(String.fromCharCode(65 + p.ch), p.x * w, p.y * h);
+    }
+    c.restore();
+    void vt;
+  },
+
+  /** hard vertical bars of light */
+  STROBEBAR: (x) => {
+    const { c, w, h, amt, slot, beatE, freq, C1, CMix } = x;
+    const n = 6 + slot * 3;
+    const bins = freq.length;
+    for (let i = 0; i < n; i++) {
+      const f = i / (n - 1);
+      const bin = Math.min(bins - 1, 3 + Math.floor(f * 40));
+      const v = ((freq[bin] ?? 0) / 255) ** 1.5;
+      if (v < 0.12) continue;
+      const px = f * w;
+      const wd = w * 0.006 * (1 + v * 2 + beatE);
+      const g = c.createLinearGradient(px - wd, 0, px + wd, 0);
+      g.addColorStop(0, "transparent");
+      g.addColorStop(0.5, C1(amt * v * 0.6, 78));
+      g.addColorStop(1, "transparent");
+      c.fillStyle = g;
+      c.fillRect(px - wd, 0, wd * 2, h);
+      c.fillStyle = CMix(f, amt * v * 0.2, 62);
+      c.fillRect(px - wd * 3, h * (0.5 - v * 0.5), wd * 6, h * v);
+    }
+  },
+
+  /** bursts of confetti thrown on the beat */
+  CONFETTI: (x) => {
+    const { c, w, h, R, amt, slot, beat, CMix, L } = x;
+    const S = (L.scratch.lyConf ??= [] as { x: number; y: number; vx: number; vy: number; rot: number; a: number; hue: number }[]) as { x: number; y: number; vx: number; vy: number; rot: number; a: number; hue: number }[];
+    if (beat && S.length < 40 + slot * 20) {
+      const bx = 0.2 + Math.random() * 0.6, by = 0.25 + Math.random() * 0.4;
+      for (let i = 0; i < 10 + slot * 3; i++) {
+        const ang = Math.random() * TAU;
+        const sp = 0.004 + Math.random() * 0.012;
+        S.push({ x: bx, y: by, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, rot: Math.random() * TAU, a: 1, hue: Math.random() });
+      }
+    }
+    for (let i = S.length - 1; i >= 0; i--) {
+      const p = S[i];
+      p.x += p.vx; p.y += p.vy;
+      p.vy += 0.0004;          // gravity, so it falls rather than floating away
+      p.vx *= 0.985; p.vy *= 0.985;
+      p.rot += 0.09;
+      p.a -= 0.012;
+      if (p.a <= 0) { S.splice(i, 1); continue; }
+      const sz = R * 0.011 * (0.5 + amt);
+      c.save();
+      c.translate(p.x * w, p.y * h);
+      c.rotate(p.rot);
+      c.fillStyle = CMix(p.hue, p.a * amt * 0.85, 72);
+      c.fillRect(-sz, -sz * 0.4, sz * 2, sz * 0.8);
+      c.restore();
+    }
+  },
+
+  /** a jagged rift of light torn across the frame */
+  RIFT: (x) => {
+    const { c, w, h, R, amt, slot, vt, beatE, C1, CMix, TK } = x;
+    const n = 1 + Math.floor(slot / 2);
+    for (let k = 0; k < n; k++) {
+      const seed = k * 31.7;
+      const ang = hash01(seed) * TAU + vt * 0.0008;
+      const len = R * (1.1 + hash01(seed + 3) * 0.5);
+      const mx = w * 0.5, my = h * 0.5;
+      const dx = Math.cos(ang), dy = Math.sin(ang);
+      c.strokeStyle = C1(amt * (0.35 + beatE * 0.4), 82);
+      c.lineWidth = (0.9 + amt * 1.8) * TK;
+      c.beginPath();
+      for (let i = 0; i <= 14; i++) {
+        const t = i / 14 - 0.5;
+        const jag = (hash01(seed + i * 7.3) - 0.5) * R * 0.09;
+        const px = mx + dx * len * t - dy * jag;
+        const py = my + dy * len * t + dx * jag;
+        if (i === 0) c.moveTo(px, py); else c.lineTo(px, py);
+      }
+      c.stroke();
+      // a soft bleed along the tear
+      const g = c.createLinearGradient(mx - dy * R * 0.1, my + dx * R * 0.1, mx + dy * R * 0.1, my - dx * R * 0.1);
+      g.addColorStop(0, "transparent");
+      g.addColorStop(0.5, CMix(0.5, amt * 0.12, 66));
+      g.addColorStop(1, "transparent");
+      c.strokeStyle = g;
+      c.lineWidth = R * 0.06;
+      c.stroke();
+    }
+  },
 };
 
 export const LAYER_NAMES = Object.keys(LAYERS);
@@ -449,76 +700,104 @@ const FALLBACK = ["PULSE", "DUST", "ORBITS", "SHAFTS", "WEB", "HALO", "SHARDS"];
 
 export const THEME_LAYERS: Record<string, string[]> = {
   // radial / geometric
-  RING: ["PULSE", "ORBITS", "SHAFTS", "ECHOES", "HALO", "SHARDS", "FRAME"],
-  KALEIDO: ["ORBITS", "SHARDS", "WEB", "SHAFTS", "ECHOES", "HALO", "LATTICE"],
-  HELIX: ["ORBITS", "DUST", "BEAM", "ECHOES", "SHAFTS", "WEB", "HALO"],
-  SPIRAL: ["ORBITS", "PULSE", "SHARDS", "SHAFTS", "HALO", "DUST", "ECHOES"],
-  ORB: ["HALO", "PULSE", "ORBITS", "EMBERS", "SHAFTS", "SHARDS", "TIDEWASH"],
-  RIPPLES: ["PULSE", "TIDEWASH", "DUST", "HORIZON", "ECHOES", "WEB", "HALO"],
-  VORTEX: ["ORBITS", "SHARDS", "SHAFTS", "DUST", "ECHOES", "HALO", "PULSE"],
-  TUNNEL: ["SCANS", "FRAME", "LATTICE", "BEAM", "SHAFTS", "PULSE", "ECHOES"],
-  HALO: ["HALO", "SHAFTS", "PULSE", "ORBITS", "DUST", "TIDEWASH", "ECHOES"],
-  NOVA: ["SHAFTS", "PULSE", "EMBERS", "HALO", "SHARDS", "ORBITS", "TIDEWASH"],
-  ECLIPSE: ["HALO", "SHAFTS", "ORBITS", "TIDEWASH", "DUST", "PULSE", "ECHOES"],
+  RING: ["PULSE", "ECHOES", "ORBITS", "HALO", "SHAFTS", "SHARDS", "FRAME"],
+  KALEIDO: ["SHARDS", "ECHOES", "ORBITS", "PETALS", "SPIRALARM", "HALO", "LATTICE"],
+  HELIX: ["SPIRALARM", "ORBITS", "DUST", "BEAM", "WEB", "ECHOES", "HALO"],
+  SPIRAL: ["SPIRALARM", "PULSE", "SHARDS", "ORBITS", "HALO", "DUST", "ECHOES"],
+  ORB: ["HALO", "PULSE", "ORBITS", "EMBERS", "VEIL", "SHAFTS", "TIDEWASH"],
+  RIPPLES: ["PULSE", "CAUSTICS", "TIDEWASH", "HORIZON", "ECHOES", "DUST", "WEB"],
+  VORTEX: ["SPIRALARM", "SHARDS", "ORBITS", "DUST", "SHAFTS", "HALO", "RIFT"],
+  TUNNEL: ["SCANS", "RIFT", "FRAME", "LATTICE", "BEAM", "PULSE", "ECHOES"],
+  HALO: ["HALO", "SHAFTS", "ORBITS", "PULSE", "VEIL", "DUST", "TIDEWASH"],
+  NOVA: ["SHAFTS", "PULSE", "EMBERS", "HALO", "SHARDS", "SPARKS", "ORBITS"],
+  ECLIPSE: ["HALO", "SHAFTS", "ORBITS", "TIDEWASH", "DUST", "VEIL", "PULSE"],
+  GRAVITY: ["ORBITS", "SPIRALARM", "DUST", "HALO", "WEB", "SHARDS", "PULSE"],
 
   // atmospheric / organic
-  AURORA: ["TIDEWASH", "DUST", "HORIZON", "WEB", "EMBERS", "HALO", "SCANS"],
-  NEBULA: ["DUST", "TIDEWASH", "WEB", "HALO", "EMBERS", "ORBITS", "SHAFTS"],
-  GALAXY: ["ORBITS", "DUST", "WEB", "HALO", "SHAFTS", "TIDEWASH", "SHARDS"],
-  TIDE: ["HORIZON", "TIDEWASH", "DUST", "PULSE", "WEB", "HALO", "EMBERS"],
-  SILK: ["TIDEWASH", "DUST", "HORIZON", "HALO", "WEB", "ORBITS", "ECHOES"],
-  LIQUID: ["TIDEWASH", "PULSE", "DUST", "HORIZON", "HALO", "ECHOES", "WEB"],
-  BLOOM: ["HALO", "EMBERS", "PULSE", "TIDEWASH", "DUST", "ORBITS", "SHAFTS"],
-  FIREFLIES: ["EMBERS", "WEB", "DUST", "HALO", "TIDEWASH", "PULSE", "ORBITS"],
-  LANTERNS: ["EMBERS", "DUST", "HALO", "HORIZON", "WEB", "TIDEWASH", "PULSE"],
-  JELLY: ["TIDEWASH", "DUST", "HALO", "PULSE", "EMBERS", "WEB", "ECHOES"],
-  BIOLUME: ["EMBERS", "WEB", "DUST", "TIDEWASH", "HALO", "PULSE", "ORBITS"],
-  INKFLOW: ["TIDEWASH", "DUST", "ECHOES", "HORIZON", "WEB", "HALO", "PULSE"],
-  AURORAFALL: ["RAINFALL", "TIDEWASH", "HORIZON", "DUST", "WEB", "HALO", "EMBERS"],
-  LAVALAMP: ["TIDEWASH", "HALO", "DUST", "PULSE", "EMBERS", "ECHOES", "ORBITS"],
+  AURORA: ["VEIL", "TIDEWASH", "DUST", "HORIZON", "WEB", "EMBERS", "CAUSTICS"],
+  NEBULA: ["DUST", "TIDEWASH", "PLUMES", "WEB", "HALO", "EMBERS", "VEIL"],
+  GALAXY: ["SPIRALARM", "DUST", "ORBITS", "WEB", "HALO", "SHAFTS", "TIDEWASH"],
+  TIDE: ["HORIZON", "CAUSTICS", "TIDEWASH", "DUST", "PULSE", "VEIL", "WEB"],
+  SILK: ["VEIL", "TIDEWASH", "DUST", "CAUSTICS", "HALO", "PETALS", "ECHOES"],
+  LIQUID: ["CAUSTICS", "TIDEWASH", "PULSE", "PLUMES", "HORIZON", "HALO", "DUST"],
+  BLOOM: ["PETALS", "HALO", "EMBERS", "PULSE", "TIDEWASH", "DUST", "VEIL"],
+  FIREFLIES: ["EMBERS", "WEB", "DUST", "FLOCK", "HALO", "PETALS", "TIDEWASH"],
+  LANTERNS: ["EMBERS", "DUST", "HALO", "PETALS", "HORIZON", "VEIL", "WEB"],
+  JELLY: ["TIDEWASH", "CAUSTICS", "HALO", "PULSE", "VEIL", "DUST", "EMBERS"],
+  BIOLUME: ["EMBERS", "WEB", "CAUSTICS", "DUST", "TIDEWASH", "HALO", "PULSE"],
+  INKFLOW: ["PLUMES", "TIDEWASH", "VEIL", "DUST", "ECHOES", "HORIZON", "CAUSTICS"],
+  AURORAFALL: ["RAINFALL", "VEIL", "TIDEWASH", "HORIZON", "DUST", "WEB", "CAUSTICS"],
+  LAVALAMP: ["PLUMES", "TIDEWASH", "HALO", "PULSE", "DUST", "VEIL", "EMBERS"],
+  MURMUR: ["FLOCK", "DUST", "WEB", "VEIL", "HORIZON", "EMBERS", "TIDEWASH"],
+  SERPENT: ["FLOCK", "SPIRALARM", "DUST", "VEIL", "ECHOES", "HALO", "CAUSTICS"],
+  KOI: ["CAUSTICS", "FLOCK", "PETALS", "TIDEWASH", "DUST", "VEIL", "HALO"],
+  SANDSTORM: ["PLUMES", "DUST", "VEIL", "HORIZON", "RAINFALL", "TIDEWASH", "EMBERS"],
+  BLOOMRAIL: ["PETALS", "RAINFALL", "BEAM", "EMBERS", "HALO", "DUST", "VEIL"],
+  WAVES: ["CAUSTICS", "HORIZON", "SCANS", "DUST", "VEIL", "RAINFALL", "BEAM"],
 
   // tech / graphic
-  GRID: ["LATTICE", "SCANS", "FRAME", "BEAM", "WEB", "PULSE", "SHAFTS"],
-  DOTGRID: ["LATTICE", "WEB", "SCANS", "PULSE", "FRAME", "DUST", "SHAFTS"],
-  TERMINAL: ["SCANS", "LATTICE", "FRAME", "WEB", "BEAM", "PULSE", "DUST"],
-  GLITCH: ["SCANS", "FRAME", "LATTICE", "SHARDS", "BEAM", "WEB", "ECHOES"],
-  PIXEL: ["LATTICE", "SCANS", "FRAME", "WEB", "SHARDS", "PULSE", "BEAM"],
-  CIRCUITRY: ["WEB", "LATTICE", "SCANS", "BEAM", "FRAME", "PULSE", "SHARDS"],
-  VHS: ["SCANS", "FRAME", "LATTICE", "BEAM", "ECHOES", "DUST", "WEB"],
-  MECHANISM: ["ORBITS", "LATTICE", "FRAME", "SHARDS", "WEB", "SCANS", "BEAM"],
-  QUANTUM: ["WEB", "ORBITS", "DUST", "PULSE", "SHAFTS", "HALO", "SHARDS"],
-  TOPOGRAPH: ["LATTICE", "HORIZON", "SCANS", "WEB", "DUST", "TIDEWASH", "FRAME"],
+  GRID: ["LATTICE", "SCANS", "FRAME", "BEAM", "WEB", "PULSE", "GLYPHS"],
+  DOTGRID: ["LATTICE", "WEB", "PULSE", "SCANS", "DUST", "FRAME", "SPARKS"],
+  TERMINAL: ["GLYPHS", "SCANS", "LATTICE", "FRAME", "WEB", "BEAM", "STROBEBAR"],
+  GLITCH: ["RIFT", "SCANS", "GLYPHS", "SHARDS", "FRAME", "STROBEBAR", "LATTICE"],
+  PIXEL: ["LATTICE", "SCANS", "CONFETTI", "FRAME", "WEB", "GLYPHS", "PULSE"],
+  CIRCUITRY: ["WEB", "SPARKS", "LATTICE", "SCANS", "BEAM", "GLYPHS", "FRAME"],
+  VHS: ["SCANS", "GLYPHS", "FRAME", "RIFT", "STROBEBAR", "ECHOES", "DUST"],
+  MECHANISM: ["ORBITS", "LATTICE", "FRAME", "SHARDS", "SPARKS", "WEB", "SCANS"],
+  QUANTUM: ["WEB", "SPARKS", "ORBITS", "DUST", "PULSE", "SHAFTS", "RIFT"],
+  TOPOGRAPH: ["LATTICE", "HORIZON", "CAUSTICS", "SCANS", "WEB", "DUST", "FRAME"],
+  SCOPE: ["SCANS", "LATTICE", "GLYPHS", "FRAME", "PULSE", "WEB", "STROBEBAR"],
+  CASSETTE: ["SCANS", "ORBITS", "FRAME", "GLYPHS", "LATTICE", "DUST", "BEAM"],
+  VINYL: ["ORBITS", "DUST", "HALO", "SCANS", "ECHOES", "PULSE", "VEIL"],
+  BRUTAL: ["PILLARS", "FRAME", "STROBEBAR", "RIFT", "SCANS", "BEAM", "LATTICE"],
+  BARS: ["STROBEBAR", "PILLARS", "SCANS", "FRAME", "LATTICE", "BEAM", "CONFETTI"],
+  LASERS: ["STROBEBAR", "SPARKS", "BEAM", "SCANS", "FRAME", "RIFT", "SHAFTS"],
+  MAGNETIC: ["SPARKS", "WEB", "ORBITS", "RIFT", "SHARDS", "PULSE", "LATTICE"],
+  REACTOR: ["SPARKS", "PULSE", "ORBITS", "HALO", "RIFT", "BEAM", "SHARDS"],
 
-  // scenic
-  CITY: ["HORIZON", "BEAM", "SCANS", "RAINFALL", "LATTICE", "DUST", "FRAME"],
-  STARFIELD: ["DUST", "WEB", "SHAFTS", "HALO", "ORBITS", "EMBERS", "TIDEWASH"],
-  CONSTELLATION: ["WEB", "DUST", "ORBITS", "HALO", "SHAFTS", "PULSE", "EMBERS"],
-  COMETS: ["DUST", "SHAFTS", "ORBITS", "EMBERS", "HALO", "WEB", "PULSE"],
-  CATHEDRAL: ["SHAFTS", "BEAM", "HALO", "DUST", "FRAME", "HORIZON", "EMBERS"],
-  WORMHOLE: ["SCANS", "ORBITS", "SHAFTS", "BEAM", "PULSE", "ECHOES", "HALO"],
-  THUNDER: ["RAINFALL", "BEAM", "SHAFTS", "HORIZON", "SCANS", "PULSE", "DUST"],
+  // scenic / narrative
+  CITY: ["PILLARS", "HORIZON", "RAINFALL", "SCANS", "BEAM", "LATTICE", "GLYPHS"],
+  STARFIELD: ["DUST", "WEB", "SHAFTS", "HALO", "ORBITS", "EMBERS", "SPIRALARM"],
+  CONSTELLATION: ["WEB", "DUST", "ORBITS", "HALO", "SHAFTS", "PULSE", "GLYPHS"],
+  COMETS: ["DUST", "SHAFTS", "ORBITS", "EMBERS", "WEB", "HALO", "RIFT"],
+  CATHEDRAL: ["PILLARS", "SHAFTS", "HALO", "DUST", "GLYPHS", "FRAME", "EMBERS"],
+  WORMHOLE: ["SCANS", "SPIRALARM", "RIFT", "BEAM", "ORBITS", "PULSE", "ECHOES"],
+  THUNDER: ["SPARKS", "RAINFALL", "RIFT", "BEAM", "HORIZON", "SCANS", "PLUMES"],
+  FIREWORKS: ["CONFETTI", "SPARKS", "EMBERS", "PULSE", "HALO", "DUST", "SHARDS"],
+  CRYSTAL: ["SHARDS", "RIFT", "FRAME", "ECHOES", "HALO", "LATTICE", "SPARKS"],
+  SHATTER: ["RIFT", "SHARDS", "FRAME", "ECHOES", "SPARKS", "LATTICE", "CONFETTI"],
+  PRISM: ["RIFT", "SHAFTS", "SHARDS", "HALO", "SPARKS", "ECHOES", "DUST"],
+  ORIGAMI: ["PETALS", "SHARDS", "FRAME", "LATTICE", "ECHOES", "DUST", "VEIL"],
+  GRAFFITI: ["CONFETTI", "GLYPHS", "RIFT", "STROBEBAR", "FRAME", "SHARDS", "SCANS"],
+  SAMURAI: ["RIFT", "PETALS", "GLYPHS", "VEIL", "SHARDS", "HORIZON", "DUST"],
+  ORACLE: ["GLYPHS", "HALO", "VEIL", "ORBITS", "DUST", "SHAFTS", "ECHOES"],
 
-  // staged + 3D — these already stage themselves, so their layers stay subtle
-  ASCENSION: ["DUST", "SHAFTS", "HALO", "ORBITS", "WEB", "EMBERS", "TIDEWASH"],
-  LEVIATHAN: ["TIDEWASH", "HORIZON", "DUST", "RAINFALL", "HALO", "WEB", "PULSE"],
-  CATHODE: ["SCANS", "LATTICE", "FRAME", "BEAM", "WEB", "SHARDS", "DUST"],
-  CITADEL: ["HORIZON", "BEAM", "LATTICE", "SHAFTS", "DUST", "FRAME", "SCANS"],
-  SYNAPSE: ["WEB", "DUST", "PULSE", "EMBERS", "ORBITS", "HALO", "SHAFTS"],
-  MONOLITH: ["HORIZON", "BEAM", "SHAFTS", "DUST", "LATTICE", "HALO", "ORBITS"],
-  ORRERY: ["ORBITS", "WEB", "DUST", "HALO", "SHAFTS", "PULSE", "SHARDS"],
-  CANYON: ["HORIZON", "SCANS", "LATTICE", "DUST", "BEAM", "RAINFALL", "SHAFTS"],
-  GYROSCOPE: ["ORBITS", "WEB", "SHARDS", "HALO", "PULSE", "SHAFTS", "LATTICE"],
-  SINGULARITY: ["ORBITS", "SHAFTS", "HALO", "DUST", "PULSE", "TIDEWASH", "WEB"],
-  VOXEL: ["LATTICE", "HORIZON", "SCANS", "BEAM", "WEB", "DUST", "FRAME"],
-  TESSERACT: ["WEB", "ORBITS", "LATTICE", "SHARDS", "HALO", "SHAFTS", "PULSE"],
+  // type-led
+  MARQUEE: ["GLYPHS", "STROBEBAR", "FRAME", "SCANS", "CONFETTI", "BEAM", "LATTICE"],
+  NEONSIGN: ["STROBEBAR", "GLYPHS", "FRAME", "SPARKS", "SCANS", "BEAM", "HALO"],
+  CLOCK: ["ORBITS", "GLYPHS", "PULSE", "FRAME", "ECHOES", "DUST", "HALO"],
 
-  // escalation themes — their own structure already grows a tier per drop, so
-  // these sets are chosen to sit around that rather than compete with it
+  // staged + natively 3D — these already stage themselves, so their sets sit
+  // around that structure rather than competing with it
+  ASCENSION: ["SHAFTS", "DUST", "HALO", "PILLARS", "ORBITS", "EMBERS", "VEIL"],
+  LEVIATHAN: ["CAUSTICS", "TIDEWASH", "PLUMES", "HORIZON", "RAINFALL", "DUST", "VEIL"],
+  CATHODE: ["SCANS", "GLYPHS", "LATTICE", "FRAME", "STROBEBAR", "SPARKS", "RIFT"],
+  CITADEL: ["PILLARS", "HORIZON", "BEAM", "LATTICE", "SHAFTS", "DUST", "FRAME"],
+  SYNAPSE: ["WEB", "SPARKS", "EMBERS", "PULSE", "DUST", "ORBITS", "HALO"],
+  VOXEL: ["LATTICE", "PILLARS", "HORIZON", "SCANS", "BEAM", "WEB", "FRAME"],
+  TESSERACT: ["WEB", "ORBITS", "LATTICE", "SHARDS", "RIFT", "HALO", "SHAFTS"],
+  MONOLITH: ["PILLARS", "HORIZON", "BEAM", "SHAFTS", "DUST", "LATTICE", "HALO"],
+  ORRERY: ["ORBITS", "WEB", "DUST", "HALO", "SHAFTS", "PULSE", "SPIRALARM"],
+  CANYON: ["HORIZON", "PILLARS", "SCANS", "DUST", "RAINFALL", "BEAM", "LATTICE"],
+  GYROSCOPE: ["ORBITS", "SPIRALARM", "SHARDS", "WEB", "HALO", "PULSE", "LATTICE"],
+  SINGULARITY: ["SPIRALARM", "ORBITS", "SHAFTS", "HALO", "RIFT", "DUST", "TIDEWASH"],
+
+  // escalation themes — their own structure already grows a tier per drop
   STRATA: ["HORIZON", "DUST", "SCANS", "RAINFALL", "LATTICE", "BEAM", "HALO"],
   CROWN: ["ORBITS", "SHAFTS", "HALO", "PULSE", "EMBERS", "SHARDS", "FRAME"],
-  CASCADE: ["RAINFALL", "TIDEWASH", "HORIZON", "DUST", "EMBERS", "HALO", "WEB"],
-  FISSION: ["ORBITS", "WEB", "SHARDS", "HALO", "PULSE", "SHAFTS", "DUST"],
-  PARALLAX: ["DUST", "HORIZON", "SCANS", "BEAM", "WEB", "HALO", "EMBERS"],
+  CASCADE: ["RAINFALL", "CAUSTICS", "TIDEWASH", "PLUMES", "DUST", "EMBERS", "HALO"],
+  FISSION: ["ORBITS", "SPARKS", "WEB", "SHARDS", "HALO", "PULSE", "RIFT"],
+  PARALLAX: ["DUST", "HORIZON", "SCANS", "BEAM", "WEB", "HALO", "VEIL"],
 };
 
 /** The layer list for a theme, falling back to a sensible general set. */

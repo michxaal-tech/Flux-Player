@@ -29,6 +29,10 @@ const sceneCv = document.createElement("canvas");
 // tiny buffer for the PIXELATE impact (downscale, then blit back unsmoothed)
 const pixCv = document.createElement("canvas");
 
+// Quarter-scale buffer for the highlight rolloff (see the pass near the end of
+// the visual block).
+const softCv = document.createElement("canvas");
+
 // Pre-rasterised vignette, rebuilt only when the canvas size changes.
 const vigCv = document.createElement("canvas");
 
@@ -1257,6 +1261,54 @@ export function startRenderLoop(): void {
         }
       }
       lyricWasActive = lyricActive;
+
+      // ── highlight rolloff ──
+      //
+      // Stationary bright things go blinding, and it is the trail buffer that
+      // does it. Each frame keeps (1 - fade) of the last one and adds the new
+      // one on top, so anything that does not move converges to roughly 1/fade
+      // times its per-frame brightness — about 4.7x at the default TRAILS. That
+      // is why it is always the *centre* that blows out: the centre is where
+      // themes put the thing that sits still. Every theme with a core glow hits
+      // it, so this is fixed once here rather than by retuning eighty themes.
+      //
+      // The pass builds a mask that is dark exactly where the frame is near
+      // white — threshold with contrast, then invert — and multiplies it back
+      // over the frame. Under `multiply` the result is a lerp between the frame
+      // and frame x mask by the source alpha, so this pulls the hottest areas
+      // down towards the palette colour while leaving everything else untouched.
+      // Blurred, so a core rolls off smoothly instead of gaining a hard edge.
+      {
+        const sw2 = Math.max(2, vc.width >> 2), sh2 = Math.max(2, vc.height >> 2);
+        if (softCv.width !== sw2 || softCv.height !== sh2) {
+          softCv.width = sw2;
+          softCv.height = sh2;
+        }
+        const sc = softCv.getContext("2d")!;
+        sc.setTransform(1, 0, 0, 1, 0, 0);
+        sc.globalCompositeOperation = "copy";
+        // grayscale first, or the mask carries hue: inverting a cyan highlight
+        // gives a red mask, and multiplying by it turns the core brown instead
+        // of dimmer. Grey multiplies R, G and B equally, so only luminance moves.
+        //
+        // brightness then contrast sets where the rolloff starts. The pair puts
+        // the midpoint at 0.5 / 0.6 ≈ 0.83, so nothing below about 83% luminance
+        // is touched at all and the knee spans roughly 0.77 to 0.90 — it catches
+        // the blown-out core and leaves the picture alone.
+        sc.filter = `blur(${Math.max(1, w / 260)}px) grayscale(1) brightness(0.6) contrast(8) invert(1)`;
+        sc.drawImage(vc, 0, 0, sw2, sh2);
+        sc.filter = "none";
+        c.save();
+        c.globalCompositeOperation = "multiply";
+        // Under multiply the result is Cb x (alpha x Cs + 1 - alpha), so the
+        // alpha *is* the strength: at 1.0 a fully-masked pixel goes to black,
+        // which punched dark holes where the core had been brightest. At 0.45
+        // the hottest areas are pulled down to just over half — a compression
+        // rather than an erasure, which is what a highlight rolloff should be.
+        c.globalAlpha = 0.45;
+        c.drawImage(softCv, 0, 0, sw2, sh2, 0, 0, w, h);
+        c.restore();
+      }
 
       // Vignette. Identical every frame for a given size, and a full-screen
       // radial gradient is one of the more expensive fills there is when the

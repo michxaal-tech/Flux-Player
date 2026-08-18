@@ -43,8 +43,10 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
   rays, rising embers, luminous constellations, falling light, tumbling shards
   and more — and it *stays*, swelling in over a couple of beats as it arrives. When the track calms the
   newest layers thin out; when it lifts they come back, so a song builds through
-  its length instead of flashing at each drop. Each theme has its own curated
-  set of 7, drawn in the theme's own space (so a 3D projection carries them onto
+  its length instead of flashing at each drop. All 85 themes have their own set of 7 from a
+  library of 28 — every set unique, 25 different opening layers, checked by
+  `node scripts/layers-check.mjs` since a missing or misspelt entry fails
+  silently rather than visibly. Drawn in the theme's own space (so a 3D projection carries them onto
   the surface with everything else), and a PREVIEW DEPTH stepper auditions any
   depth without waiting for a drop. Five themes — STRATA, CROWN, CASCADE,
   FISSION, PARALLAX — are built around this: each drop adds another stratum,
@@ -56,6 +58,12 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
   of the theme picker, saveable looks with self-contained share codes, 34 stackable beat impacts (including a signature set with a frame
   history behind it — ghosting, datamosh, melt, fracture), 20 particle drifts × 12
   silhouettes × 3 size spreads × a size multiplier, edge spectrum meters on every tab.
+  A **highlight rolloff** keeps bright centres from blinding you. The trail
+  buffer keeps (1 - fade) of each frame and adds the next, so anything that
+  doesn't move converges to about 4.7x its per-frame brightness at the default
+  TRAILS — which is why it was always the centre, where themes put the thing
+  that sits still. One masked pass compresses only what is above ~83% luminance,
+  so it fixes every theme at once instead of retuning eighty of them.
   Adaptive **quality** keeps full-screen rendering at 60fps on any device: one
   measured signal drives backing resolution, glow radius and particle count
   together. Glow is what actually costs — WAVES renders 6× faster with it off

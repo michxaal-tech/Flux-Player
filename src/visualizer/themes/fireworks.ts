@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { light } from "../light";
 
 interface Rocket { x: number; y: number; vy: number; targetY: number; hue: number; }
 interface Spark {
@@ -57,6 +58,10 @@ export const FIREWORKS: ThemeDraw = ({ c, w, h, t, vt, beat, beatE, bassV, trebV
       S.rockets.splice(i, 1);
     }
   }
+  // The rockets are the only thing that wants a shadow, and there are one or
+  // two of them. Leaving it on here left every spark, the haze and the glitter
+  // being drawn blurred as well — hundreds of blurred fills a frame.
+  noGlow();
 
   // sparks: drag + gravity + twinkle
   for (let i = S.sparks.length - 1; i >= 0; i--) {
@@ -68,15 +73,28 @@ export const FIREWORKS: ThemeDraw = ({ c, w, h, t, vt, beat, beatE, bassV, trebV
     s2.a *= s2.sz > 6 ? 0.82 : 0.972; // core flashes die fast
     if (s2.a < 0.03 || s2.y > h * 1.05) { S.sparks.splice(i, 1); continue; }
     const twinkle = 0.55 + 0.45 * Math.sin(vt * 0.3 + s2.tw);
-    c.fillStyle = s2.white
-      ? CMix(s2.hue, s2.a * twinkle, 90)
-      : CMix(s2.hue, s2.a * twinkle, 68 + beatE * 8);
-    glow(s2.sz > 6 ? 40 : 10, CMix(s2.hue));
-    c.beginPath();
-    c.arc(s2.x, s2.y, s2.sz * (s2.sz > 6 ? s2.a : 1) * TK, 0, Math.PI * 2);
-    c.fill();
+    const rr = s2.sz * (s2.sz > 6 ? s2.a : 1) * TK;
+    if (s2.sz > 6) {
+      // The core flash — one per burst, so a soft sprite is worth it here.
+      light(c, CMix(s2.hue, 1, 90), s2.x, s2.y, rr * 3.4, s2.a * twinkle);
+    } else {
+      // Everything else is a plain dot. Each spark has its own random hue, so
+      // neither of the glowing options works at this count: shadowBlur is priced
+      // per draw call (500ms a frame), and a cached sprite rebuilds its canvas
+      // whenever the colour changes, which with a per-spark hue is every spark
+      // of every frame — measurably worse again. The bursts read as light from
+      // their density and the ground haze, not from a halo on each spark.
+      c.fillStyle = s2.white
+        ? CMix(s2.hue, s2.a * twinkle, 90)
+        : CMix(s2.hue, s2.a * twinkle, 68 + beatE * 8);
+      c.beginPath();
+      c.arc(s2.x, s2.y, rr, 0, Math.PI * 2);
+      c.fill();
+    }
   }
-  noGlow();
+  // hard cap: bursts overlap, and an unbounded list is how a long loud passage
+  // turns into a slideshow
+  if (S.sparks.length > 520) S.sparks.splice(0, S.sparks.length - 520);
 
   // faint ground haze that catches the light of the show
   const glowAmt = Math.min(0.5, S.sparks.length / 200) + beatE * 0.1;
