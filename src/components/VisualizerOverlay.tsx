@@ -62,7 +62,7 @@ export function VisualizerOverlay() {
   const lyricsOn = useStore((s) => s.lyricsOn);
   const lyricAuto = useStore((s) => s.lyricAuto);
   const lyricStyle = useStore((s) => s.lyricStyle);
-  const lyricFx = useStore((s) => s.lyricFx);
+  const lyricFxs = useStore((s) => s.lyricFxs);
   const lyricFxMatch = useStore((s) => s.lyricFxMatch);
   const lyricPicks = useStore((s) => s.lyricPicks);
   const lyricStatus = useStore((s) => s.lyricStatus);
@@ -719,8 +719,9 @@ export function VisualizerOverlay() {
             LETTER FX — {LYRIC_FX.length - 1}
           </div>
           <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, marginBottom: 7 }}>
-            Applies on top of whichever animation you picked above — colour ramps, per-letter
-            motion, karaoke fills and text treatments.
+            Applies on top of whichever animation you picked above. One from each group at a
+            time, and the groups stack — a colour ramp, a motion, a reveal and a texture all run
+            together on the same letters.
           </div>
           {LYRIC_FX_GROUPS.map((g) => (
             <div key={g.name} style={{ marginBottom: 8 }}>
@@ -749,15 +750,21 @@ export function VisualizerOverlay() {
                     means scrolling back to a single switch somewhere else */}
                 <button
                   data-lfx={`NONE-${g.name}`}
-                  onClick={() => set({ lyricFx: "NONE" })}
-                  style={{ ...chip(lyricFx === "NONE"), padding: "6px 9px", fontSize: 9 }}
+                  onClick={() => set({ lyricFxs: lyricFxs.filter((f) => !g.items.includes(f)) })}
+                  style={{ ...chip(!g.items.some((i) => lyricFxs.includes(i))), padding: "6px 9px", fontSize: 9 }}
                 >✕ NONE</button>
                 {g.items.map((f) => (
                   <button
                     key={f}
                     data-lfx={f}
-                    onClick={() => set({ lyricFx: f })}
-                    style={{ ...chip(lyricFx === f, MAG), padding: "6px 9px", fontSize: 9 }}
+                    onClick={() => set({
+                      // one per group, but groups stack: picking a colour keeps
+                      // whatever motion and reveal are already running
+                      lyricFxs: lyricFxs.includes(f)
+                        ? lyricFxs.filter((v) => v !== f)
+                        : [...lyricFxs.filter((v) => !g.items.includes(v)), f],
+                    })}
+                    style={{ ...chip(lyricFxs.includes(f), MAG), padding: "6px 9px", fontSize: 9 }}
                   >{f}{NEW_ITEMS.has(f) && <NewTag />}</button>
                 ))}
               </div>

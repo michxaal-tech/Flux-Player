@@ -191,7 +191,13 @@ function syncLive(): void {
   sub((s) => getCurrentTrack(s)?.fileId, wantAnalysis, { fireImmediately: true });
   sub((s) => s.lyricsOn, (v) => { live.lyricsOn = v; }, { fireImmediately: true });
   sub((s) => s.lyricStyle, (v) => { live.lyricStyle = v; }, { fireImmediately: true });
-  sub((s) => s.lyricFx, (v) => { live.lyricFx = v; }, { fireImmediately: true });
+  // a look saved before effects could stack carries a single `lyricFx`; fold it
+  // in so it still applies
+  sub(
+    (s) => [s.lyricFxs, s.lyricFx] as const,
+    ([list, one]) => { live.lyricFxs = list?.length ? list : one && one !== "NONE" ? [one] : []; },
+    { fireImmediately: true, equalityFn: shallow }
+  );
   sub((s) => s.lyricFxMatch, (v) => { live.lyricFxMatch = v; }, { fireImmediately: true });
 }
 

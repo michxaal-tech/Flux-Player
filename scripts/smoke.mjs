@@ -172,7 +172,7 @@ await step("visual presets save, share and round-trip", async () => {
   // build a distinctive look, save it, then change everything and restore it
   await page.evaluate(() => {
     const st = window.__fluxStore.getState();
-    st.set({ visTheme: "PRISM", lyricStyle: "PULSE", lyricFx: "FIRE" });
+    st.set({ visTheme: "PRISM", lyricStyle: "PULSE", lyricFxs: ["FIRE", "WAVE"] });
     st.setVisKey("palette", "LAVA");
     st.setVisKey("vis3d", "TUNNEL");
     st.setVisKey("impacts", ["GHOST", "SHARDS"]);
@@ -189,16 +189,16 @@ await step("visual presets save, share and round-trip", async () => {
   const decoded = await page.evaluate((cd) => window.__fluxLook.decodeLook(cd), code);
   if (!decoded) throw new Error("share code failed to decode");
   if (decoded.theme !== "PRISM" || decoded.cfg.palette !== "LAVA" || decoded.cfg.vis3d !== "TUNNEL"
-      || decoded.cfg.pShape !== "STAR" || decoded.lyricFx !== "FIRE"
+      || decoded.cfg.pShape !== "STAR" || decoded.lyricFxs?.join() !== "FIRE,WAVE"
       || (decoded.cfg.impacts || []).join() !== "GHOST,SHARDS") {
-    throw new Error(`share code lost fields: ${JSON.stringify({ t: decoded.theme, p: decoded.cfg.palette, d: decoded.cfg.vis3d, s: decoded.cfg.pShape, f: decoded.lyricFx, i: decoded.cfg.impacts })}`);
+    throw new Error(`share code lost fields: ${JSON.stringify({ t: decoded.theme, p: decoded.cfg.palette, d: decoded.cfg.vis3d, s: decoded.cfg.pShape, f: decoded.lyricFxs, i: decoded.cfg.impacts })}`);
   }
   // and garbage must be rejected rather than half-applied
   if (await page.evaluate(() => window.__fluxLook.decodeLook("not a code"))) throw new Error("garbage code was accepted");
 
   await page.evaluate(() => {
     const st = window.__fluxStore.getState();
-    st.set({ visTheme: "RING", lyricStyle: "DRIFT", lyricFx: "NONE" });
+    st.set({ visTheme: "RING", lyricStyle: "DRIFT", lyricFxs: [] });
     st.setVisKey("palette", "NEON");
     st.setVisKey("vis3d", "OFF");
     st.setVisKey("impacts", []);
@@ -207,13 +207,13 @@ await step("visual presets save, share and round-trip", async () => {
   await page.click('button[data-look="LOOK 1"]');
   const restored = await page.evaluate(() => {
     const s = window.__fluxStore.getState();
-    return { t: s.visTheme, p: s.visCfg.palette, d: s.visCfg.vis3d, im: s.visCfg.impacts, sh: s.visCfg.pShape, lf: s.lyricFx };
+    return { t: s.visTheme, p: s.visCfg.palette, d: s.visCfg.vis3d, im: s.visCfg.impacts, sh: s.visCfg.pShape, lf: s.lyricFxs };
   });
   if (restored.t !== "PRISM") throw new Error(`theme not restored: ${restored.t}`);
   if (restored.p !== "LAVA") throw new Error(`palette not restored: ${restored.p}`);
   if (restored.d !== "TUNNEL") throw new Error(`3D mode not restored: ${restored.d}`);
   if (restored.sh !== "STAR") throw new Error(`particle shape not restored: ${restored.sh}`);
-  if (restored.lf !== "FIRE") throw new Error(`letter fx not restored: ${restored.lf}`);
+  if ((restored.lf || []).join() !== "FIRE,WAVE") throw new Error(`letter fx not restored: ${restored.lf}`);
   if ((restored.im || []).join() !== "GHOST,SHARDS") throw new Error(`impacts not restored: ${restored.im}`);
 
   await page.keyboard.press("Escape");

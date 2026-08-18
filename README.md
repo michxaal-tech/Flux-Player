@@ -55,7 +55,9 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
   FISSION, PARALLAX — are built around this: each drop adds another stratum,
   tier, terrace, shell or depth plane to their own structure.
   44 per-letter lyric effects — colour ramps, per-letter motion, karaoke
-  fills and text treatments — compose with the 20 line animations. 15 tune
+  fills and text treatments. One from each group applies at a time and the
+  groups stack, so a colour ramp, a motion, a reveal and a texture all run on
+  the same letters, on top of any of the 20 line animations. 15 tune
   controls (glow, trails, particles w/ 4 styles, reactivity, zoom, scene spin,
   mirror, beat flash/shake, auto-cycle), starrable favourites pinned to the top
   of the theme picker, saveable looks with self-contained share codes, 34 stackable beat impacts (including a signature set with a frame

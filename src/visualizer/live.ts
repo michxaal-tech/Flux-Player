@@ -19,8 +19,8 @@ export interface LiveState {
   lyricLines: { t: number; text: string }[] | null;
   lyricsOn: boolean;
   lyricStyle: string;
-  /** per-letter lyric effect (see lyricFx.ts), independent of lyricStyle */
-  lyricFx: string;
+  /** per-letter lyric effects, applied together (see lyricFx.ts) */
+  lyricFxs: string[];
   /** re-hue the fixed-colour letter effects onto the active palette */
   lyricFxMatch: boolean;
   prog: number; // 0..1
@@ -112,7 +112,7 @@ export interface LiveState {
 
 export const live: LiveState = {
   playing: false, speed: 1, spin: false, spinRate: 0.55, visOpen: false, visTheme: "RING",
-  cfg: { ...DEFAULT_VIS_CFG }, trackName: "", peaks: null, lyricLines: null, lyricsOn: true, lyricStyle: "FADE", lyricFx: "NONE", lyricFxMatch: true,
+  cfg: { ...DEFAULT_VIS_CFG }, trackName: "", peaks: null, lyricLines: null, lyricsOn: true, lyricStyle: "FADE", lyricFxs: [], lyricFxMatch: true,
   prog: 0, dur: 0, loopA: null, loopB: null,
   rot: 0, vt: 0, tunnel: [], stars: [], vparts: [], specHist: [], ripples: [],
   flies: [], vort: [], cityH: [], shakeVal: 0,

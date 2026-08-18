@@ -68,7 +68,11 @@ export interface StoreState {
   lyricsOn: boolean;
   lyricStyle: string;
   /** per-letter lyric effect, independent of the entry/exit style */
+  /** legacy single per-letter effect; superseded by `lyricFxs` and kept so a
+   * saved look from before stacking still loads */
   lyricFx: string;
+  /** per-letter effects applied together, at most one per group (see lyricFx.ts) */
+  lyricFxs: string[];
   /** re-hue fixed-colour letter effects onto the active palette */
   lyricFxMatch: boolean;
   /** manual-search candidates awaiting a choice (see lyrics.ts) */
@@ -205,6 +209,7 @@ export const useStore = create<StoreState>()(
         lyricsOn: true,
         lyricStyle: "DRIFT",
         lyricFx: "NONE",
+        lyricFxs: [],
         lyricFxMatch: true,
         lyricPicks: [],
         lyricStatus: "",
@@ -440,6 +445,7 @@ export const useStore = create<StoreState>()(
           lyricsOn: s.lyricsOn,
           lyricStyle: s.lyricStyle,
           lyricFx: s.lyricFx,
+          lyricFxs: s.lyricFxs,
           lyricFxMatch: s.lyricFxMatch,
           favThemes: s.favThemes,
           visPresets: s.visPresets,

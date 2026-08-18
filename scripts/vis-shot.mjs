@@ -85,7 +85,7 @@ if (LFX.length) {
       // object identity and the subscription never fires.
       st.set({
         playlists: st.playlists.map((pl) => ({ ...pl, tracks: pl.tracks.map((tr) => ({ ...tr, lyrics })) })),
-        lyricsOn: true, lyricStyle: "DRIFT", lyricFx: fx,
+        lyricsOn: true, lyricStyle: "DRIFT", lyricFxs: [fx],
       });
     }, f);
     await page.waitForTimeout(700);

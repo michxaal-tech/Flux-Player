@@ -23,7 +23,9 @@ export interface Look {
   theme: string;
   cfg: VisCfg;
   lyricStyle: string;
+  /** legacy single effect, still read from older codes */
   lyricFx: string;
+  lyricFxs: string[];
   lyricFxMatch: boolean;
 }
 
@@ -40,6 +42,7 @@ export function captureLook(): Look {
     cfg: { ...s.visCfg },
     lyricStyle: s.lyricStyle,
     lyricFx: s.lyricFx,
+    lyricFxs: s.lyricFxs,
     lyricFxMatch: s.lyricFxMatch,
   };
 }
@@ -53,6 +56,10 @@ export function applyLook(look: Look): void {
     visCfg: cfg,
     lyricStyle: LYRIC_STYLES.includes(look.lyricStyle) ? look.lyricStyle : "DRIFT",
     lyricFx: LYRIC_FX.includes(look.lyricFx) ? look.lyricFx : "NONE",
+    // a code saved before stacking carries one effect; promote it to the list
+    lyricFxs: (look.lyricFxs ?? []).filter((f) => LYRIC_FX.includes(f)).length
+      ? look.lyricFxs.filter((f) => LYRIC_FX.includes(f))
+      : LYRIC_FX.includes(look.lyricFx) && look.lyricFx !== "NONE" ? [look.lyricFx] : [],
     lyricFxMatch: !!look.lyricFxMatch,
   });
 }
@@ -90,6 +97,7 @@ export function encodeLook(look: Look): string {
     c,
     ls: look.lyricStyle,
     lf: look.lyricFx,
+    lfs: look.lyricFxs,
     lm: look.lyricFxMatch ? 1 : 0,
   };
   return `FLUX1-${b64url.enc(JSON.stringify(payload))}`;
@@ -141,6 +149,9 @@ export function decodeLook(code: string): Look | null {
     cfg: { ...DEFAULT_VIS_CFG, ...cfg, ...passthrough },
     lyricStyle: typeof payload.ls === "string" && LYRIC_STYLES.includes(payload.ls) ? payload.ls : "DRIFT",
     lyricFx: typeof payload.lf === "string" && LYRIC_FX.includes(payload.lf) ? payload.lf : "NONE",
+    lyricFxs: Array.isArray(payload.lfs)
+      ? (payload.lfs as unknown[]).filter((f): f is string => typeof f === "string" && LYRIC_FX.includes(f)).slice(0, 8)
+      : [],
     lyricFxMatch: payload.lm !== 0,
   };
 }

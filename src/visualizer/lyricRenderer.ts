@@ -3,7 +3,7 @@
 // what's on screen is short and large; long halves still wrap to ≤3 rows and
 // are never shrunk into a tiny strip.
 import type { LiveState } from "./live";
-import { LYRIC_FX, letterFx, makeRamp, type LetterFxCtx } from "./lyricFx";
+import { LYRIC_FX, letterFx, makeRamp, type LetterFxCtx, type LetterStyle } from "./lyricFx";
 
 export interface LyricCtx {
   c: CanvasRenderingContext2D;
@@ -215,7 +215,7 @@ function blockMetrics(
 /** Set by drawLyricOverlay for the duration of a frame. When non-null, blocks
  * are drawn a character at a time so per-letter effects can be applied. */
 let letterCtx: {
-  fx: string;
+  fxs: string[];
   base: Omit<LetterFxCtx, "i" | "n" | "row">;
   /** MATCH THEME is on — matched letters get a soft palette bloom by default */
   match: boolean;
@@ -235,8 +235,8 @@ function drawBlock(c: CanvasRenderingContext2D, text: string, o: BlockOpts, w: n
   c.textAlign = "center";
   c.textBaseline = "middle";
 
-  if (letterCtx && letterCtx.fx !== "NONE") {
-    drawBlockLetters(c, m, o, letterCtx.fx, letterCtx.base, letterCtx);
+  if (letterCtx && letterCtx.fxs.length) {
+    drawBlockLetters(c, m, o, letterCtx.base, letterCtx);
     c.restore();
     return;
   }
@@ -260,9 +260,8 @@ function drawBlockLetters(
   c: CanvasRenderingContext2D,
   m: BlockMetrics,
   o: BlockOpts,
-  fx: string,
   base: Omit<LetterFxCtx, "i" | "n" | "row">,
-  lc: { match: boolean; glowColor: string },
+  lc: { fxs: string[]; match: boolean; glowColor: string },
 ): void {
   const em = m.sizePx;                    // offsets are in em so they scale
   const total = m.rows.reduce((s, r) => s + r.length, 0);
@@ -278,11 +277,34 @@ function drawBlockLetters(
       const ch = row[ci];
       const adv = c.measureText(ch).width;
       if (ch !== " ") {
-        const st = letterFx(fx, {
+        const arg = {
           ...base,
           frac: o.fxFrac ?? base.frac,
           i: seen, n: Math.max(1, total), row: ri,
-        });
+        };
+        // Effects stack. Offsets add, scales and alphas multiply, glow takes
+        // the strongest, and anything that names a colour or a treatment lets
+        // the later one win — so a colour ramp, a motion and a reveal compose
+        // into one letter instead of the last pick silently replacing the rest.
+        const st: LetterStyle = lc.fxs.length === 1
+          ? letterFx(lc.fxs[0], arg)
+          : lc.fxs.reduce<LetterStyle>((acc, f) => {
+            const s2 = letterFx(f, arg);
+            if (s2.color !== undefined) acc.color = s2.color;
+            if (s2.glowColor !== undefined) acc.glowColor = s2.glowColor;
+            if (s2.stroke !== undefined) { acc.stroke = s2.stroke; acc.strokeW = s2.strokeW; }
+            if (s2.hollow !== undefined) acc.hollow = s2.hollow;
+            if (s2.extrude !== undefined) { acc.extrude = s2.extrude; acc.extrudeColor = s2.extrudeColor; }
+            if (s2.ghosts) acc.ghosts = [...(acc.ghosts ?? []), ...s2.ghosts];
+            acc.dx = (acc.dx ?? 0) + (s2.dx ?? 0);
+            acc.dy = (acc.dy ?? 0) + (s2.dy ?? 0);
+            acc.rot = (acc.rot ?? 0) + (s2.rot ?? 0);
+            acc.scale = (acc.scale ?? 1) * (s2.scale ?? 1);
+            acc.scaleY = (acc.scaleY ?? 1) * (s2.scaleY ?? 1);
+            acc.alpha = (acc.alpha ?? 1) * (s2.alpha ?? 1);
+            if (s2.glow !== undefined) acc.glow = Math.max(acc.glow ?? 0, s2.glow);
+            return acc;
+          }, {});
         const a = (st.alpha ?? 1) * o.alpha;
         if (a > 0.01) {
           c.save();
@@ -344,8 +366,8 @@ interface Ghost { text: string; unit: number; t0: number }
 interface GhostState { last: number; items: Ghost[] }
 
 /** how long an outgoing line takes to fade, and how bright it starts */
-const GHOST_SECS = 1.15;
-const GHOST_ALPHA = 0.35;
+const GHOST_SECS = 1.0;
+const GHOST_ALPHA = 0.85;
 
 /** deterministic 0..1 hash — stable jitter without per-frame allocation */
 const hash01 = (n: number): number => {
@@ -367,10 +389,10 @@ export function drawLyricOverlay(x: LyricCtx): void {
   // Arm the per-letter path for this frame. Kept as module state rather than
   // threaded through every style branch: the styles all funnel into drawBlock,
   // so this is the one place that needs to know.
-  const fx = L.lyricFx && LYRIC_FX.includes(L.lyricFx) ? L.lyricFx : "NONE";
+  const fxs = (L.lyricFxs ?? []).filter((f) => f !== "NONE" && LYRIC_FX.includes(f));
   const fxMatch = !!L.lyricFxMatch;
-  letterCtx = fx === "NONE" ? null : {
-    fx,
+  letterCtx = fxs.length === 0 ? null : {
+    fxs,
     match: fxMatch,
     glowColor: C1(0.85, 62),
     base: {
@@ -544,19 +566,26 @@ export function drawLyricOverlay(x: LyricCtx): void {
     return;
   }
 
-  // ghosts of the lines that have already gone, each on its own fade
+  // Lines that have gone, fading out *where they were*.
+  //
+  // They used to be swapped instantly for a small dim ghost at 72% of the size
+  // — measured across a transition, the ink on the lyric canvas fell from 68 to
+  // 32 in a single step. That is why it read as vanishing rather than fading:
+  // the full-size line disappeared and something much smaller appeared in its
+  // place. Now a line keeps its own size and position and simply fades, easing
+  // down to the small-ghost look as it goes, so the handover is continuous.
   for (const g of G.items) {
     const age = time - g.t0;
     const gone = smooth(age / GHOST_SECS);
-    const ga = GHOST_ALPHA * (1 - gone);
+    const ga = GHOST_ALPHA * (1 - gone) ** 1.4;
     if (ga < 0.02) continue;
     const [px, py] = posFor(g.unit, w, h);
     drawBlock(c, g.text, {
-      x: px, y: py - 22 - age * 12,
+      x: px, y: py - gone * 26,
       alpha: ga,
-      scale: 0.8 - gone * 0.08,
-      maxW: w * 0.42, size: size * 0.72,
-      glowAmt: 6, glowColor: C2(), fxFrac: 1,
+      scale: 1 - gone * 0.18,
+      maxW: w * 0.52, size: size * (1 - gone * 0.24),
+      glowAmt: 10 * (1 - gone), glowColor: C2(), fxFrac: 1,
     }, w);
   }
 
@@ -567,10 +596,10 @@ export function drawLyricOverlay(x: LyricCtx): void {
   const [lx, ly] = posFor(Math.max(0, cur.index), w, h);
   const appear = smooth(cur.age * 2.2);
   const leave = cur.frac > 0.84 ? smooth((cur.frac - 0.84) / 0.16) : 0;
-  // A line used to fade to a tenth of its alpha and then be replaced by a ghost
-  // at a third of full — a dip followed by a blink back up. Handing over at
-  // about the ghost's own brightness makes the two stages one continuous fade.
-  const alpha = appear * (1 - leave * (1 - GHOST_ALPHA / 0.95));
+  // The whole fade-out now belongs to the ghost stage, which runs on its own
+  // clock and is not cut short by the next line arriving. So the live line only
+  // dips slightly at the end and hands over near full brightness.
+  const alpha = appear * (1 - leave * 0.12);
 
   if (style === "DRIFT") {
     drawBlock(c, cur.text, {
