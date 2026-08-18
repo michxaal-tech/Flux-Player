@@ -126,8 +126,19 @@ npm run catalogue        # every Discover source, against the live services
   descriptions, so "radiohead" returns jam bands who merely mention them —
   scoping the query to creator and title turns that into real Radiohead
   recordings, or an honest nothing. Browse chips point at the corners worth
-  arriving at (the Live Music Archive, the Great 78 Project, netlabels) rather
-  than throwing genre words at all 12 million items.
+  arriving at (the Live Music Archive, the Great 78 Project, netlabels, and a
+  Hyperpop chip that leads with the handful of releases actually tagged as such
+  before filling out with the sounds either side of it) rather than throwing
+  genre words at all 12 million items. Every chip names a collection, which is
+  also what keeps the results honest: the Archive takes uploads from anyone, so
+  a bare subject search for a modern genre surfaces bootlegged commercial albums
+  first, and the item's own licence tag can't sort that out — whoever uploads
+  picks it, and the bootlegs claim Creative Commons too.
+
+  **FULL TRACKS ONLY** is on by default, so a tap can't put a 30-second excerpt
+  in the library by mistake. Switch it off and excerpts come back labelled
+  EXCERPT; a source that serves nothing else says so and offers the toggle
+  rather than showing an empty page.
 
   The bar a source has to clear is unusual and rules out almost everything: FLUX
   needs the *samples*, since the visualizer, FX rack, stem separation and Revoice
