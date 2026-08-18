@@ -339,6 +339,14 @@ function drawBlockLetters(
 /** reusable colour ramp for the per-character WAVE style (filled each frame) */
 const WAVE_PAL: string[] = new Array<string>(9).fill("");
 
+/** A line that has already gone, still fading out on its own clock. */
+interface Ghost { text: string; unit: number; t0: number }
+interface GhostState { last: number; items: Ghost[] }
+
+/** how long an outgoing line takes to fade, and how bright it starts */
+const GHOST_SECS = 1.15;
+const GHOST_ALPHA = 0.35;
+
 /** deterministic 0..1 hash — stable jitter without per-frame allocation */
 const hash01 = (n: number): number => {
   const s = Math.sin(n * 12.9898 + 78.233) * 43758.5453;
@@ -450,6 +458,27 @@ export function drawLyricOverlay(x: LyricCtx): void {
 
   const cur = halved(raw);
 
+  // Outgoing lines carry their own fade clock.
+  //
+  // The ghost used to be re-derived from the live line every frame, which meant
+  // it was destroyed the instant the *next* line arrived — on densely timed
+  // lyrics that is well before its fade has finished, so the line vanished
+  // rather than faded. Each outgoing unit now records when it left and finishes
+  // its own fade regardless of what arrives after it, and several can overlap
+  // while fast lines stack up.
+  const G = (L.scratch.lyrGhosts ??= { last: -1, items: [] as Ghost[] }) as GhostState;
+  if (cur.index !== G.last) {
+    if (G.last >= 0 && cur.prev) G.items.push({ text: cur.prev, unit: G.last, t0: time });
+    G.last = cur.index;
+    if (G.items.length > 3) G.items.splice(0, G.items.length - 3);
+  }
+  for (let i = G.items.length - 1; i >= 0; i--) {
+    const a = time - G.items[i].t0;
+    // the second test catches a seek backwards, which would otherwise strand a
+    // ghost with a start time in the future
+    if (a > GHOST_SECS || a < 0) G.items.splice(i, 1);
+  }
+
   if (style === "SCATTER") {
     // halves pop in one at a time at scattered spots with gentle tilts and
     // stay up as a small fading collage — newest brightest
@@ -515,13 +544,16 @@ export function drawLyricOverlay(x: LyricCtx): void {
     return;
   }
 
-  // ghost of the previous half for the single-block styles
-  if (cur.prev && cur.index >= 1) {
-    const [px, py] = posFor(cur.index - 1, w, h);
-    const gone = smooth(cur.age * 0.9);
-    drawBlock(c, cur.prev, {
-      x: px, y: py - 22 - cur.age * 12,
-      alpha: 0.35 * (1 - gone),
+  // ghosts of the lines that have already gone, each on its own fade
+  for (const g of G.items) {
+    const age = time - g.t0;
+    const gone = smooth(age / GHOST_SECS);
+    const ga = GHOST_ALPHA * (1 - gone);
+    if (ga < 0.02) continue;
+    const [px, py] = posFor(g.unit, w, h);
+    drawBlock(c, g.text, {
+      x: px, y: py - 22 - age * 12,
+      alpha: ga,
       scale: 0.8 - gone * 0.08,
       maxW: w * 0.42, size: size * 0.72,
       glowAmt: 6, glowColor: C2(), fxFrac: 1,
@@ -535,7 +567,10 @@ export function drawLyricOverlay(x: LyricCtx): void {
   const [lx, ly] = posFor(Math.max(0, cur.index), w, h);
   const appear = smooth(cur.age * 2.2);
   const leave = cur.frac > 0.84 ? smooth((cur.frac - 0.84) / 0.16) : 0;
-  const alpha = appear * (1 - leave * 0.9);
+  // A line used to fade to a tenth of its alpha and then be replaced by a ghost
+  // at a third of full — a dip followed by a blink back up. Handing over at
+  // about the ghost's own brightness makes the two stages one continuous fade.
+  const alpha = appear * (1 - leave * (1 - GHOST_ALPHA / 0.95));
 
   if (style === "DRIFT") {
     drawBlock(c, cur.text, {

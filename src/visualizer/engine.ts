@@ -29,6 +29,9 @@ const sceneCv = document.createElement("canvas");
 // tiny buffer for the PIXELATE impact (downscale, then blit back unsmoothed)
 const pixCv = document.createElement("canvas");
 
+// Pre-rasterised vignette, rebuilt only when the canvas size changes.
+const vigCv = document.createElement("canvas");
+
 // Half-scale copy of the finished scene, blurred and added back for the WAVE
 // light treatment. Half scale because the result is blurred anyway, so the
 // missing detail is invisible and the blur costs a quarter as much.
@@ -284,7 +287,7 @@ export function startRenderLoop(): void {
   // The frame gate below quantizes draw deltas to multiples of the display's
   // refresh interval (16.7ms, or 25ms on a 120Hz panel), so judging single
   // frames misreads one dropped tick as jank — hence the smoothed frame time.
-  const MIN_RES = 0.4;
+  const MIN_RES = 0.32;
   let quality = 1;
   let resScale = 1;
   let frameEma = 16.7;
@@ -556,8 +559,12 @@ export function startRenderLoop(): void {
     if (canvasRefs.level) canvasRefs.level.style.width = `${Math.min(100, rms * 240)}%`;
 
     // ── ambient background + edge spectrum meters ──
+    // Skipped entirely while the fullscreen visualizer is up: its root is
+    // `position: fixed; inset: 0` over an opaque backdrop, so this layer is
+    // provably invisible, and it was still clearing and repainting a
+    // full-screen canvas every frame underneath it.
     const bg = canvasRefs.bg;
-    if (bg) {
+    if (bg && !L.visOpen) {
       const [w, h] = sizeCanvas(bg, 1100 * resScale); // soft ambient layer — low res is invisible
       const c = bg.getContext("2d")!;
       // Cleared, not painted over with a dark wash: this layer sits above the
@@ -606,7 +613,7 @@ export function startRenderLoop(): void {
 
     // ── decoded waveform seekbar ──
     const wv = canvasRefs.wave;
-    if (wv) {
+    if (wv && !L.visOpen) {
       const [w, h] = sizeCanvas(wv);
       const c = wv.getContext("2d")!;
       c.clearRect(0, 0, w, h);
@@ -1251,12 +1258,24 @@ export function startRenderLoop(): void {
       }
       lyricWasActive = lyricActive;
 
-      // vignette
-      const vg = c.createRadialGradient(cx, cy, R * 0.35, cx, cy, Math.max(w, h) * 0.75);
-      vg.addColorStop(0, "transparent");
-      vg.addColorStop(1, "rgba(0,0,0,0.5)");
-      c.fillStyle = vg;
-      c.fillRect(0, 0, w, h);
+      // Vignette. Identical every frame for a given size, and a full-screen
+      // radial gradient is one of the more expensive fills there is when the
+      // canvas is not GPU-accelerated — so rasterise it once at quarter size
+      // and blit it, which is both cheaper and indistinguishable after the
+      // upscale (it has no detail to lose).
+      const vw = Math.max(2, Math.round(w / 4)), vh = Math.max(2, Math.round(h / 4));
+      if (vigCv.width !== vw || vigCv.height !== vh) {
+        vigCv.width = vw;
+        vigCv.height = vh;
+        const vgc = vigCv.getContext("2d")!;
+        const g2 = vgc.createRadialGradient(vw / 2, vh / 2, (Math.min(vw, vh)) * 0.35, vw / 2, vh / 2, Math.max(vw, vh) * 0.75);
+        g2.addColorStop(0, "transparent");
+        g2.addColorStop(1, "rgba(0,0,0,0.5)");
+        vgc.clearRect(0, 0, vw, vh);
+        vgc.fillStyle = g2;
+        vgc.fillRect(0, 0, vw, vh);
+      }
+      c.drawImage(vigCv, 0, 0, vw, vh, 0, 0, w, h);
     }
 
     requestAnimationFrame(draw);

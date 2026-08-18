@@ -95,7 +95,11 @@ export async function startVideoExport(fromStart = true): Promise<void> {
   const composite = () => {
     cx.fillStyle = "#05060A"; // matches the visualizer's own backdrop
     cx.fillRect(0, 0, cw, ch);
-    for (const layer of [canvasRefs.bg, canvasRefs.vis, canvasRefs.lyr]) {
+    // The app's ambient background layer is deliberately not composited: the
+    // visualizer overlay is opaque and covers it on screen, so including it
+    // would put something in the recording that the viewer never saw — and the
+    // render loop now skips drawing it while the visualizer is open anyway.
+    for (const layer of [canvasRefs.vis, canvasRefs.lyr]) {
       if (layer && layer.width > 0 && layer.height > 0) {
         try { cx.drawImage(layer, 0, 0, cw, ch); } catch { /* mid-resize */ }
       }
