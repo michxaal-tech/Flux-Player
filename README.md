@@ -93,14 +93,25 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
   melody's duration-weighted pitch content, a chord per bar from what the melody
   is actually doing, and everything bigger at the drops. All synthesised, no
   sample library to download. Exports **.mid** too, if you'd rather finish in a DAW.
-- **Discover (free online catalogue)** — search and browse Audius from inside
-  FLUX and add tracks straight to the library. No account, no subscription, no
-  API key. Chosen over Spotify/SoundCloud on a hard technical constraint:
-  Spotify's Web Playback SDK gives a page *no access to the audio samples*, so
-  the visualizer, FX rack, stem separation and Revoice would all be dead on
-  streamed tracks, and SoundCloud stopped issuing API keys years ago. Audius
-  serves a plain MP3 with open CORS, so a streamed track decodes and runs
-  through the entire DSP chain exactly like a local import.
+- **Discover (online catalogues)** — search real catalogues from inside FLUX and
+  add tracks straight to the library. No account, no subscription, no API key.
+  Two sources, because neither covers the whole problem: **Apple** (the iTunes
+  Search API) has essentially every song ever released by name but serves a
+  30-second preview of each, and **Audius** has full-length tracks but only
+  independent artists. Which matters depends on what you came for, so the
+  trade-off is stated on the picker and on every row rather than decided for you.
+
+  The bar a source has to clear is unusual and rules out almost everything: FLUX
+  needs the *samples*, since the visualizer, FX rack, stem separation and Revoice
+  all work from a decoded AudioBuffer. So a source must serve audio a page can
+  `fetch()` — open CORS on the audio itself, not just on its JSON. Spotify's Web
+  Playback SDK gives a page no access to samples at all; SoundCloud stopped
+  issuing API keys years ago; Deezer's API answers a browser but sends no
+  `access-control-allow-origin`; Apple's own charts feed sends no CORS headers
+  either, which is why browsing here is built out of searches. Apple previews are
+  AAC, which a browser built without proprietary codecs cannot decode, so
+  playability is checked before import and explained rather than failing silently.
+
 - **Artists** — the library groups by artist, taken from streamed metadata or
   parsed out of "Artist - Title" filenames, with search covering both.
 - **Persistence** — audio files live in IndexedDB (OPFS fallback); playlists,

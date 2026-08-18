@@ -105,7 +105,8 @@ export interface StoreState {
   /** progress/result text for melody transcription (see audio/revoice.ts) */
   melodyStatus: string;
   /** progress/result text for the online catalogue (see audius.ts) */
-  audiusStatus: string;
+  /** transient progress/error line for the DISCOVER panel */
+  catStatus: string;
   /** 0..1 attenuation applied to the original track only, so Revoice can
    * replace it rather than play on top of it. The synth joins after this. */
   revoiceDuck: number;
@@ -226,7 +227,7 @@ export const useStore = create<StoreState>()(
         analyzeStatus: "",
         miniStatus: "",
         melodyStatus: "",
-        audiusStatus: "",
+        catStatus: "",
         revoiceDuck: 1,
         spotifyReady: false,
         tab: "player",

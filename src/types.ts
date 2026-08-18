@@ -33,8 +33,9 @@ export interface Track {
   name: string;
   /** performer, from the source's metadata or parsed out of the filename */
   artist?: string;
-  /** where the track came from; absent means a local file */
-  source?: "audius";
+  /** which online catalogue it came from (see catalogue.ts); absent means a
+   * local file */
+  source?: string;
   sourceId?: string;
   plays: number;
   fav: boolean;
