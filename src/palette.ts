@@ -122,9 +122,20 @@ export function lighting(ramp: HueRamp, pos: (f: number) => number, sat: number,
     // between its two colours and reads as muddy — the theme has to stay in
     // charge of where on the ramp it is.
     const p = f * 0.7 + t * 0.3;
-    // toward white as it brightens, but never past the point where a stack of
-    // additive copies has nowhere left to go
-    const lm = Math.min(88, l * 0.55 + (52 + t * 34) * 0.45);
+    // Toward white as it brightens — scaled by how light the element already
+    // is, which is the part that took three attempts to get right.
+    //
+    // Blending toward a constant puts a floor under everything. Adding a flat
+    // `t * t * 28` instead looks safe, because it vanishes as alpha goes to
+    // zero — but a theme's background is usually a large fill drawn at *full*
+    // alpha and low lightness, so it took the full lift and a dark backdrop
+    // became a bright one. Over a whole screen that is a colour fog with the
+    // visualizer somewhere behind it.
+    //
+    // Scaling by l/100 ties the lift to what the theme was already treating as
+    // light: a stroke at 62 goes to 84 and reads white-hot, a backdrop at 20
+    // moves by one and stays a backdrop.
+    const lm = Math.min(92, l + t * t * (l / 100) * 35);
     return `hsla(${hueAt(p)}, ${sat}%, ${lm}%, ${Math.min(0.93, Math.pow(t, 1.06))})`;
   };
   return {

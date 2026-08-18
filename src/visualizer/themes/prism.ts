@@ -182,7 +182,7 @@ export const PRISM: ThemeDraw = ({
   // additive paint over a slow trail buffer clips to white if it is not kept
   // well under the per-frame trail fade.
   const baseL = Math.round((52 + E * 12 + beatE * 8) / 6) * 6;   // <= 72
-  const baseA = Math.round((0.11 + E * 0.07) * 20) / 20;
+  const baseA = Math.round((0.07 + E * 0.045) * 40) / 40;
   const key = baseL + ":" + baseA + ":" + C1(1, 50) + C2(1, 50);
   for (let k = 0; k < BANDS; k++) {
     getRay(k, CMix(k / (BANDS - 1), baseA, baseL), key + k);
@@ -204,7 +204,7 @@ export const PRISM: ThemeDraw = ({
       const strobe = 1 - shatter * 0.55 * (0.5 + 0.5 * Math.sin(vt * 0.55 + k * 1.7));
       const len = rayLen * (0.55 + f * 0.3) * (1 + beatE * 0.25 + B * 0.7);
       const halfW = R * (0.035 + E * 0.05) * (1 + beatE * 0.5 + B * 0.8);
-      c.globalAlpha = Math.min(0.3, b.a * (0.16 + trebV * 0.1 + beatE * 0.14 + B * 0.2) * strobe);
+      c.globalAlpha = Math.min(0.19, b.a * (0.1 + trebV * 0.06 + beatE * 0.09 + B * 0.13) * strobe);
       c.save();
       // originate *inside* the crystal: the triangle's flat edges sit at
       // 0.5·pr while its corners reach pr, so any origin outside that leaves a
@@ -230,8 +230,8 @@ export const PRISM: ThemeDraw = ({
     // moves, and a stationary element is multiplied by the trail — about 4.7x
     // at the default TRAILS. What reads as reasonable in a single frame is a
     // blinding white core a second later.
-    cg2.addColorStop(0, C1(0.085 + S.flash * 0.07 + B * 0.08, 62));
-    cg2.addColorStop(0.35, CMix(0.5, 0.05 + B * 0.07, 54));
+    cg2.addColorStop(0, C1(0.055 + S.flash * 0.05 + B * 0.05, 60));
+    cg2.addColorStop(0.35, CMix(0.5, 0.03 + B * 0.045, 52));
     cg2.addColorStop(1, "transparent");
     c.fillStyle = cg2;
     c.beginPath();

@@ -997,24 +997,35 @@ export function startRenderLoop(): void {
         }
         const bc = bloomCv.getContext("2d")!;
         bc.setTransform(1, 0, 0, 1, 0, 0);
+        // The copy has to be thresholded, or adding a whole frame back just
+        // lifts the mid-tones and washes the picture out. But the threshold has
+        // to be on *luminance*, and `contrast()` works per channel: a saturated
+        // magenta has two channels at full, so it survives a contrast threshold
+        // exactly as if it were white. That is what turned this into a
+        // full-screen fog — the entire coloured frame was blooming, not its
+        // highlights.
+        //
+        // So: the colour frame first, then multiplied by a greyscale mask of
+        // itself. The mask is near 0 below the knee and near 1 above, so only
+        // genuinely bright pixels keep their colour and everything else goes to
+        // black and contributes nothing.
         bc.globalCompositeOperation = "copy";
-        // Threshold the copy first. Adding back an unfiltered frame lifts the
-        // mid-tones along with the highlights, which brightens the whole
-        // picture instead of haloing the bright parts of it — contrast pivots
-        // around mid-grey, so on a dark frame it crushes everything but the
-        // highlights to black and only those bloom.
-        bc.filter = "contrast(2.8) brightness(1.05)";
+        bc.filter = "none";
+        bc.drawImage(vc, 0, 0, bw, bh);
+        bc.globalCompositeOperation = "multiply";
+        bc.filter = "grayscale(1) brightness(0.62) contrast(7)";
         bc.drawImage(vc, 0, 0, bw, bh);
         bc.filter = "none";
+        bc.globalCompositeOperation = "source-over";
         c.save();
         c.globalCompositeOperation = "lighter";
         // the copy is half scale, so the blur radius halves with it
-        c.filter = `blur(${Math.max(1, (lit.bloom * w) / 1800)}px)`;
+        c.filter = `blur(${Math.max(1, (lit.bloom * w) / 2600)}px)`;
         // GLOW drives the strength. A dense bright theme (RING) blooms into a
         // solid disc at full strength while a sparse one (STARFIELD) wants all
         // of it, and no single constant suits both — so it stays on the slider
         // that already means exactly this.
-        c.globalAlpha = 0.62 * (0.25 + GLOW * 0.75);
+        c.globalAlpha = 0.42 * (0.25 + GLOW * 0.75);
         c.drawImage(bloomCv, 0, 0, bw, bh, 0, 0, w, h);
         c.filter = "none";
         c.restore();
