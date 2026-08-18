@@ -1,10 +1,12 @@
-// Spotify playlist import: reads track metadata via the official API and
-// matches it against files already on this device. No audio is downloaded.
+// Spotify import: reads a public link's track list with no account setup, then
+// builds the playlist out of files already on this device plus 30-second
+// preview clips for the rest. See spotify.ts for what is and isn't fetched.
 import { useEffect, useState } from "react";
 import { BORDER, CYAN, MAG, MONO } from "../constants";
 import {
   beginSpotifyAuth, buildPlaylistFromMatches, disconnectSpotify, fetchSpotifyItems,
-  loadClientId, matchLibrary, missingList, parseSpotifyLink, redirectUri, saveClientId,
+  importSpotifyPlaylist, loadClientId, matchLibrary, missingList, parseSpotifyLink,
+  redirectUri, saveClientId,
 } from "../spotify";
 import type { MatchRow } from "../spotify";
 import { useStore } from "../store/useStore";
@@ -28,7 +30,7 @@ export function SpotifyImport({ onLoadClick }: { onLoadClick?: () => void }) {
   const found = (rows ?? []).filter((r) => r.track).length;
   const missing = (rows ?? []).length - found;
 
-  const doImport = async () => {
+  const doRead = async () => {
     const ref = parseSpotifyLink(link);
     if (!ref) { setStatus("⚠ That doesn't look like a Spotify playlist, album or track link"); return; }
     setBusy(true);
@@ -38,10 +40,28 @@ export function SpotifyImport({ onLoadClick }: { onLoadClick?: () => void }) {
       const { title: t, items } = await fetchSpotifyItems(ref);
       if (!items.length) { setStatus("⚠ Nothing in that playlist"); setBusy(false); return; }
       setTitle(t);
-      setStatus(`Matching ${items.length} tracks against your library…`);
       const m = matchLibrary(items);
       setRows(m);
       setStatus("");
+    } catch (e) {
+      setStatus(`⚠ ${(e as Error).message}`);
+    }
+    setBusy(false);
+  };
+
+  const doImport = async () => {
+    if (!rows) return;
+    setBusy(true);
+    setStatus(`Fetching audio… 0/${rows.length}`);
+    try {
+      const r = await importSpotifyPlaylist(title, rows, (d, n) => setStatus(`Fetching audio… ${d}/${n}`));
+      const bits = [`${r.tracks} tracks`];
+      if (r.fromLibrary) bits.push(`${r.fromLibrary} from your own files`);
+      if (r.previews) bits.push(`${r.previews} as 30s previews`);
+      setStatus(r.tracks
+        ? `✓ Created “${title}” — ${bits.join(", ")}${r.missing ? ` · ${r.missing} couldn't be found anywhere` : ""}`
+        : "⚠ Couldn't find audio for any of those tracks");
+      setRows(null);
     } catch (e) {
       setStatus(`⚠ ${(e as Error).message}`);
     }
@@ -53,85 +73,38 @@ export function SpotifyImport({ onLoadClick }: { onLoadClick?: () => void }) {
       title="🟢 SPOTIFY IMPORT"
       extra={
         <span style={{ fontSize: 9.5, letterSpacing: "0.14em", color: ready ? CYAN : "rgba(255,255,255,0.35)", fontFamily: MONO }}>
-          {ready ? "CONNECTED" : "OPTIONAL"}
+          {ready ? "CONNECTED" : "NO SETUP NEEDED"}
         </span>
       }
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
         <div style={{ fontSize: 10.5, lineHeight: 1.6, color: "rgba(255,255,255,0.5)" }}>
-          Paste a Spotify link and FLUX matches it against the audio you already have.
-          <strong style={{ color: "rgba(255,255,255,0.75)" }}> Single song links work right away</strong> — no setup.
-          Playlists and albums need a free one-time connection to read their track list.
-          It reads names and artists only; Spotify's audio is DRM-protected and stays on Spotify.
+          Paste any Spotify link — song, album or playlist — and FLUX rebuilds it here.
+          Tracks you already have are used <strong style={{ color: "rgba(255,255,255,0.75)" }}>at full length</strong>;
+          the rest come in as the same 30-second preview clips Spotify's embed player hands out,
+          which the visualizer and FX rack run on like any other file.
+          Spotify's actual streams are DRM-protected and stay on Spotify.
+        </div>
+        <div style={{ fontSize: 9.5, lineHeight: 1.55, color: "rgba(255,255,255,0.33)" }}>
+          Spotify won't answer this page directly, so a public reader service fetches the link's
+          page for it. Only the link itself is sent, and it's already public.
         </div>
 
         <div style={{ display: "flex", gap: 6 }}>
           <input
             value={link}
             onChange={(e) => setLink(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") doImport(); }}
+            onKeyDown={(e) => { if (e.key === "Enter") doRead(); }}
             placeholder="paste a song, playlist or album link…"
             spellCheck={false}
             style={{ flex: 1, minWidth: 0, background: "rgba(255,255,255,0.06)", border: BORDER, borderRadius: 10, padding: "10px 12px", fontSize: 11, color: "#fff", outline: "none" }}
           />
           <button
-            onClick={doImport}
+            onClick={doRead}
             disabled={busy || !link.trim()}
             style={{ flexShrink: 0, padding: "0 15px", borderRadius: 10, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", cursor: busy ? "wait" : "pointer", background: mix(CYAN, 16), border: `1px solid ${mix(CYAN, 45)}`, color: CYAN, opacity: busy || !link.trim() ? 0.45 : 1 }}
-          >IMPORT</button>
+          >READ</button>
         </div>
-
-        {!ready ? (
-          <>
-            <button
-              onClick={() => setShowSetup((v) => !v)}
-              style={{ background: "none", border: "none", color: "rgba(255,255,255,0.45)", fontSize: 10, letterSpacing: "0.12em", cursor: "pointer", textAlign: "left", padding: 0 }}
-            >{showSetup ? "▾" : "▸"} ONE-TIME SETUP</button>
-            {showSetup && (
-              <div style={{ fontSize: 10, lineHeight: 1.65, color: "rgba(255,255,255,0.5)", display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ color: "rgba(255,255,255,0.6)" }}>Only needed for playlists and albums.</div>
-            <div>1. Open <span style={{ color: CYAN }}>developer.spotify.com/dashboard</span> and create an app (free).</div>
-                <div>2. In its settings, add this exact Redirect URI:</div>
-                <code style={{ fontFamily: MONO, fontSize: 9.5, padding: "7px 9px", borderRadius: 8, background: "rgba(255,255,255,0.06)", border: BORDER, color: CYAN, wordBreak: "break-all" }}>
-                  {redirectUri()}
-                </code>
-                <div>3. Copy the app's Client ID and paste it below. It isn't a secret and never leaves this browser.</div>
-                <div>4. Still in the dashboard, open <span style={{ color: CYAN }}>User Management</span> and add your own
-                  Spotify account (name + the email on the account). New apps start in Development mode, and
-                  anyone not on that list gets a 403.</div>
-                <div style={{ color: "rgba(255,200,120,0.75)" }}>
-                  Note: Spotify blocks its own editorial and algorithmic playlists — Discover Weekly, Daily Mix,
-                  Release Radar, Today's Top Hits — from all third-party apps. Your own playlists work.
-                </div>
-              </div>
-            )}
-            <div style={{ display: "flex", gap: 6 }}>
-              <input
-                value={clientId || savedId}
-                onChange={(e) => setClientId(e.target.value)}
-                placeholder="Spotify Client ID"
-                spellCheck={false}
-                style={{ flex: 1, minWidth: 0, background: "rgba(255,255,255,0.06)", border: BORDER, borderRadius: 10, padding: "10px 12px", fontSize: 11, color: "#fff", outline: "none", fontFamily: MONO }}
-              />
-              <button
-                onClick={async () => {
-                  const id = (clientId || savedId).trim();
-                  if (!id) { setStatus("⚠ Paste your Client ID first"); return; }
-                  await saveClientId(id);
-                  try { await beginSpotifyAuth(); } catch (e) { setStatus(`⚠ ${(e as Error).message}`); }
-                }}
-                style={{ flexShrink: 0, padding: "0 15px", borderRadius: 10, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", background: mix(CYAN, 16), border: `1px solid ${mix(CYAN, 45)}`, color: CYAN }}
-              >CONNECT</button>
-            </div>
-          </>
-        ) : (
-          <>
-            <button
-              onClick={async () => { await disconnectSpotify(); setRows(null); setStatus("Disconnected."); }}
-              style={{ padding: "8px", borderRadius: 9, fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", background: "rgba(255,255,255,0.05)", border: BORDER, color: "rgba(255,255,255,0.6)" }}
-            >DISCONNECT SPOTIFY</button>
-          </>
-        )}
 
         {!!status && (
           <div style={{ fontSize: 10.5, lineHeight: 1.5, color: status.startsWith("⚠") ? "#FF9A9A" : CYAN }}>{status}</div>
@@ -140,25 +113,17 @@ export function SpotifyImport({ onLoadClick }: { onLoadClick?: () => void }) {
         {rows && (
           <>
             <div style={{ fontSize: 11, color: "#fff" }}>
-              <span style={{ color: found ? CYAN : "#FF9A9A", fontWeight: 700 }}>{found}</span> of {rows.length} found in your library
-              {missing > 0 && <span style={{ color: "rgba(255,255,255,0.5)" }}> · {missing} missing</span>}
+              <span style={{ color: CYAN, fontWeight: 700 }}>{rows.length}</span> tracks ·{" "}
+              <span style={{ color: found ? CYAN : "rgba(255,255,255,0.5)" }}>{found} already yours</span>
+              {missing > 0 && <span style={{ color: "rgba(255,255,255,0.5)" }}> · {missing} as previews</span>}
             </div>
-            {found === 0 && (
+            {found === 0 && libraryCount === 0 && onLoadClick && (
               <div style={{ fontSize: 10.5, lineHeight: 1.6, color: "rgba(255,255,255,0.62)", background: "rgba(255,255,255,0.04)", border: BORDER, borderRadius: 10, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
-                <div>
-                  {libraryCount === 0
-                    ? "Your library is empty, so there's nothing to match this against. This tool doesn't download from Spotify — it finds the song among audio files you already have on this device."
-                    : "None of your files matched this one. FLUX matches on filename, so a file named like “Artist - Title” matches best."}
-                </div>
-                {onLoadClick && (
-                  <button
-                    onClick={onLoadClick}
-                    style={{ padding: "10px", borderRadius: 10, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", background: mix(CYAN, 14), border: `1px solid ${mix(CYAN, 42)}`, color: CYAN }}
-                  >＋ ADD MUSIC FILES FROM THIS DEVICE</button>
-                )}
-                <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.4)" }}>
-                  Tap FIND ↗ next to a track to look for a legitimate download or purchase.
-                </div>
+                <div>Your library is empty, so all of these will come in as 30-second previews. Add your own files and FLUX uses those instead, at full length.</div>
+                <button
+                  onClick={onLoadClick}
+                  style={{ padding: "10px", borderRadius: 10, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", background: mix(CYAN, 14), border: `1px solid ${mix(CYAN, 42)}`, color: CYAN }}
+                >＋ ADD MUSIC FILES FROM THIS DEVICE</button>
               </div>
             )}
             <div style={{ maxHeight: 240, overflowY: "auto", display: "flex", flexDirection: "column", gap: 3 }}>
@@ -171,48 +136,96 @@ export function SpotifyImport({ onLoadClick }: { onLoadClick?: () => void }) {
                     border: `1px solid ${r.track ? mix(CYAN, 22) : "rgba(255,255,255,0.06)"}`,
                   }}
                 >
-                  <span style={{ fontSize: 10, color: r.track ? CYAN : "rgba(255,255,255,0.3)", flexShrink: 0 }}>{r.track ? "✓" : "○"}</span>
+                  <span style={{ fontSize: 10, color: r.track ? CYAN : "rgba(255,255,255,0.3)", flexShrink: 0 }}>{r.track ? "✓" : "♪"}</span>
                   <span style={{ flex: 1, minWidth: 0, fontSize: 10.5, color: "rgba(255,255,255,0.8)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {r.item.artists ? `${r.item.artists} — ${r.item.name}` : r.item.name}
                   </span>
-                  {r.track
-                    ? <span style={{ fontSize: 8.5, fontFamily: MONO, color: "rgba(255,255,255,0.35)", flexShrink: 0 }}>{Math.round(r.score * 100)}%</span>
-                    : (
-                      <a
-                        href={`https://duckduckgo.com/?q=${encodeURIComponent(`${r.item.artists} ${r.item.name} buy download`)}`}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        title="Find somewhere to buy or download this track"
-                        style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: MAG, textDecoration: "none", flexShrink: 0, padding: "2px 6px", borderRadius: 6, border: `1px solid ${mix(MAG, 30)}` }}
-                      >FIND ↗</a>
-                    )}
+                  <span style={{ fontSize: 8.5, fontFamily: MONO, color: "rgba(255,255,255,0.35)", flexShrink: 0 }}>
+                    {r.track ? `${Math.round(r.score * 100)}% YOURS` : r.item.preview ? "30s" : "SEARCH"}
+                  </span>
                 </div>
               ))}
             </div>
             <div style={{ display: "flex", gap: 6 }}>
               <button
-                onClick={() => {
-                  const { added } = buildPlaylistFromMatches(title, rows);
-                  setStatus(added ? `✓ Created “${title}” with ${added} tracks` : "⚠ None of those tracks are in your library yet");
-                  setRows(null);
-                }}
-                disabled={!found}
-                style={{ flex: 1, padding: "10px", borderRadius: 10, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", background: mix(CYAN, 14), border: `1px solid ${mix(CYAN, 42)}`, color: CYAN, opacity: found ? 1 : 0.4 }}
-              >CREATE PLAYLIST ({found})</button>
+                onClick={doImport}
+                disabled={busy}
+                style={{ flex: 1, padding: "10px", borderRadius: 10, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", cursor: busy ? "wait" : "pointer", background: mix(CYAN, 14), border: `1px solid ${mix(CYAN, 42)}`, color: CYAN, opacity: busy ? 0.5 : 1 }}
+              >IMPORT PLAYLIST ({rows.length})</button>
+              {found > 0 && (
+                <button
+                  onClick={() => {
+                    const { added } = buildPlaylistFromMatches(title, rows);
+                    setStatus(`✓ Created “${title}” with ${added} of your own files`);
+                    setRows(null);
+                  }}
+                  disabled={busy}
+                  title="Skip the previews — use only files already on this device"
+                  style={{ flexShrink: 0, padding: "10px 12px", borderRadius: 10, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", background: "rgba(255,255,255,0.05)", border: BORDER, color: "rgba(255,255,255,0.6)" }}
+                >MINE ONLY ({found})</button>
+              )}
               {missing > 0 && (
                 <button
                   onClick={() => {
-                    const text = missingList(rows);
-                    navigator.clipboard?.writeText(text).then(
-                      () => setStatus(`✓ Copied ${missing} missing tracks to the clipboard`),
+                    navigator.clipboard?.writeText(missingList(rows)).then(
+                      () => setStatus(`✓ Copied ${missing} track names to the clipboard`),
                       () => setStatus("⚠ Couldn't reach the clipboard")
                     );
                   }}
                   style={{ flexShrink: 0, padding: "10px 12px", borderRadius: 10, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", background: mix(MAG, 12), border: `1px solid ${mix(MAG, 38)}`, color: MAG }}
-                >COPY MISSING</button>
+                >COPY LIST</button>
               )}
             </div>
           </>
+        )}
+
+        {!ready ? (
+          <>
+            <button
+              onClick={() => setShowSetup((v) => !v)}
+              style={{ background: "none", border: "none", color: "rgba(255,255,255,0.45)", fontSize: 10, letterSpacing: "0.12em", cursor: "pointer", textAlign: "left", padding: 0 }}
+            >{showSetup ? "▾" : "▸"} CONNECT AN APP (OPTIONAL)</button>
+            {showSetup && (
+              <div style={{ fontSize: 10, lineHeight: 1.65, color: "rgba(255,255,255,0.5)", display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ color: "rgba(255,255,255,0.6)" }}>
+                  Everything above works without this. Connecting only adds what a public link can't reach:
+                  your private playlists and Liked Songs.
+                </div>
+                <div>1. Open <span style={{ color: CYAN }}>developer.spotify.com/dashboard</span> and create an app (free).</div>
+                <div>2. In its settings, add this exact Redirect URI:</div>
+                <code style={{ fontFamily: MONO, fontSize: 9.5, padding: "7px 9px", borderRadius: 8, background: "rgba(255,255,255,0.06)", border: BORDER, color: CYAN, wordBreak: "break-all" }}>
+                  {redirectUri()}
+                </code>
+                <div>3. Copy the app's Client ID and paste it below. It isn't a secret and never leaves this browser.</div>
+                <div>4. Still in the dashboard, open <span style={{ color: CYAN }}>User Management</span> and add your own
+                  Spotify account (name + the email on the account). New apps start in Development mode, and
+                  anyone not on that list gets a 403.</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    value={clientId || savedId}
+                    onChange={(e) => setClientId(e.target.value)}
+                    placeholder="Spotify Client ID"
+                    spellCheck={false}
+                    style={{ flex: 1, minWidth: 0, background: "rgba(255,255,255,0.06)", border: BORDER, borderRadius: 10, padding: "10px 12px", fontSize: 11, color: "#fff", outline: "none", fontFamily: MONO }}
+                  />
+                  <button
+                    onClick={async () => {
+                      const id = (clientId || savedId).trim();
+                      if (!id) { setStatus("⚠ Paste your Client ID first"); return; }
+                      await saveClientId(id);
+                      try { await beginSpotifyAuth(); } catch (e) { setStatus(`⚠ ${(e as Error).message}`); }
+                    }}
+                    style={{ flexShrink: 0, padding: "0 15px", borderRadius: 10, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", background: mix(CYAN, 16), border: `1px solid ${mix(CYAN, 45)}`, color: CYAN }}
+                  >CONNECT</button>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <button
+            onClick={async () => { await disconnectSpotify(); setRows(null); setStatus("Disconnected."); }}
+            style={{ padding: "8px", borderRadius: 9, fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", background: "rgba(255,255,255,0.05)", border: BORDER, color: "rgba(255,255,255,0.6)" }}
+          >DISCONNECT SPOTIFY</button>
         )}
       </div>
     </Module>

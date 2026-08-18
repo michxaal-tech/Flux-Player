@@ -14,6 +14,8 @@ npm run dev        # dev server
 npm run build      # type-check + production build to dist/
 npm run preview    # serve the production build
 node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
+npm run spotify          # Spotify import, network stubbed (after build)
+npm run spotify:live     # same, against the live service — needs the internet
 ```
 
 ## Features
@@ -124,6 +126,26 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
   either, which is why browsing here is built out of searches. Apple previews are
   AAC, which a browser built without proprietary codecs cannot decode, so
   playability is checked before import and explained rather than failing silently.
+
+- **Spotify import** — paste any Spotify link (song, album or playlist) and FLUX
+  rebuilds it here, with **no account, no app registration and no key**. Tracks
+  already on the device are used at full length; the rest come in as Spotify's
+  own 30-second preview clips, and anything with no clip is looked up on Apple
+  instead — so a playlist arrives playable rather than as a shopping list. The
+  clips are plain unencrypted MP3 on `p.scdn.co` with
+  `access-control-allow-origin: *`, the same excerpts the embed player hands any
+  page on the web; Spotify's actual streams are DRM-protected and are not
+  touched. Reading the track list needs one workaround, because every path under
+  `open.spotify.com` except `/oembed` refuses a cross-origin read: the list lives
+  in the `__NEXT_DATA__` of the public embed page, so a reader service fetches
+  that page and answers with CORS open, with a second reader and then Spotify's
+  own keyless oEmbed behind it. Only the link is ever sent, and it is public by
+  definition. Connecting a Spotify app is still offered but now optional — it
+  adds only what a public link can't reach, private playlists and Liked Songs.
+  Two checks cover it, because everything it leans on lives outside this repo:
+  `npm run spotify` drives the whole import with the network stubbed, and
+  `npm run spotify:live` asserts each leg of the live service separately, so a
+  failure names which one moved.
 
 - **Artists** — the library groups by artist, taken from streamed metadata or
   parsed out of "Artist - Title" filenames, with search covering both.

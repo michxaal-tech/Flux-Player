@@ -9,7 +9,10 @@
 //   Spotify's Web Playback SDK streams full tracks, but inside its own
 //   encrypted player. A page gets no access to the samples at all, so every
 //   feature above would be dead on a streamed track. Premium only, and the
-//   audio-analysis endpoints closed to new applications in late 2024.
+//   audio-analysis endpoints closed to new applications in late 2024. Its
+//   30-second preview clips are a different matter — plain MP3, CORS open —
+//   and spotify.ts imports those, but there is no keyless way to *search*
+//   them, so Spotify is a link importer here rather than a source.
 //
 //   SoundCloud stopped accepting API registrations years ago, and its embed is
 //   a cross-origin iframe — the same wall.
@@ -26,6 +29,7 @@
 import { blobStore } from "./store/blobStore";
 import { useStore } from "./store/useStore";
 import type { Track } from "./types";
+import { uid } from "./utils";
 
 export interface CatTrack {
   /** unique within its source */
@@ -132,7 +136,7 @@ export const audius: Source = {
 const AP = "https://itunes.apple.com/search";
 /** how long an Apple preview runs; the API reports the *full* track's length,
  * which would be a lie about what you actually get */
-const PREVIEW_SECS = 30;
+export const PREVIEW_SECS = 30;
 
 interface ApRaw {
   trackId?: number;
@@ -202,30 +206,28 @@ export const SOURCES: Source[] = [apple, audius];
 export const sourceById = (id: string): Source => SOURCES.find((s) => s.id === id) ?? SOURCES[0];
 
 /**
- * Pulls a track into the library.
- *
- * The audio is fetched and stored like any other import, so it survives a
- * reload and runs through the whole DSP chain from its decoded buffer.
+ * AAC is a licensed codec, so it is absent from some open-source browser
+ * builds — Chromium without proprietary codecs decodes nothing here, while
+ * Safari, Chrome and Edge all handle it. Checking first turns a track that
+ * imports and then silently refuses to play into a sentence that explains
+ * itself. Returns "" when the browser can play it.
  */
-export async function importTrack(t: CatTrack, plId: string): Promise<Track | null> {
-  const set = (catStatus: string) => useStore.setState({ catStatus });
+export function codecProblem(t: CatTrack): string {
+  if (!t.mime || typeof document === "undefined") return "";
+  const probe = document.createElement("audio");
+  if (probe.canPlayType(t.mime)) return "";
+  return "This browser can't play Apple's format (AAC). Safari, Chrome and Edge can — or use the Audius source, which serves MP3.";
+}
 
-  // AAC is a licensed codec, so it is absent from some open-source browser
-  // builds — Chromium without proprietary codecs decodes nothing here, while
-  // Safari, Chrome and Edge all handle it. Checking first turns a track that
-  // imports and then silently refuses to play into a sentence that explains
-  // itself.
-  if (t.mime && typeof document !== "undefined") {
-    const probe = document.createElement("audio");
-    if (!probe.canPlayType(t.mime)) {
-      set("This browser can't play Apple's format (AAC). Safari, Chrome and Edge can — or use the Audius source, which serves MP3.");
-      setTimeout(() => set(""), 9000);
-      return null;
-    }
-  }
-
+/**
+ * Fetches a catalogue track's audio, stores it, and hands back the Track
+ * record without filing it in a playlist. `importTrack` is this plus a
+ * destination and a status line; the Spotify importer builds a whole playlist
+ * out of these, so it needs the record rather than the side effect.
+ */
+export async function fetchAsTrack(t: CatTrack): Promise<Track | null> {
+  if (codecProblem(t)) return null;
   try {
-    set(`fetching ${t.title}…`);
     const resp = await fetch(t.url);
     if (!resp.ok) throw new Error(`stream ${resp.status}`);
     const blob = await resp.blob();
@@ -234,8 +236,8 @@ export async function importTrack(t: CatTrack, plId: string): Promise<Track | nu
     const fileId = `${t.source}-${t.id}`;
     await blobStore.put(fileId, blob);
 
-    const tr: Track = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    return {
+      id: uid(),
       fileId,
       // the name carries the limitation, so a 30-second file in the library is
       // never a mystery later
@@ -250,14 +252,37 @@ export async function importTrack(t: CatTrack, plId: string): Promise<Track | nu
       addedAt: Date.now(),
       lastPlayedAt: 0,
     };
-    useStore.getState().addTracks(plId, [tr]);
-    set(`✓ added ${t.title}`);
-    setTimeout(() => set(""), 3500);
-    return tr;
   } catch (e) {
-    console.warn("catalogue import failed:", e);
+    console.warn("catalogue fetch failed:", e);
+    return null;
+  }
+}
+
+/**
+ * Pulls a track into the library.
+ *
+ * The audio is fetched and stored like any other import, so it survives a
+ * reload and runs through the whole DSP chain from its decoded buffer.
+ */
+export async function importTrack(t: CatTrack, plId: string): Promise<Track | null> {
+  const set = (catStatus: string) => useStore.setState({ catStatus });
+
+  const bad = codecProblem(t);
+  if (bad) {
+    set(bad);
+    setTimeout(() => set(""), 9000);
+    return null;
+  }
+
+  set(`fetching ${t.title}…`);
+  const tr = await fetchAsTrack(t);
+  if (!tr) {
     set("Couldn't fetch that track — try again or pick another.");
     setTimeout(() => set(""), 6000);
     return null;
   }
+  useStore.getState().addTracks(plId, [tr]);
+  set(`✓ added ${t.title}`);
+  setTimeout(() => set(""), 3500);
+  return tr;
 }

@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "icons": "node scripts/gen-icons.mjs",
     "smoke": "node scripts/smoke.mjs",
-    "smoke:ai": "node scripts/ai-smoke.mjs"
+    "smoke:ai": "node scripts/ai-smoke.mjs",
+    "spotify": "node scripts/spotify-e2e.mjs",
+    "spotify:live": "node scripts/spotify-check.mjs"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
