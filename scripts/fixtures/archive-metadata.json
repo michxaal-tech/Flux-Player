@@ -1,0 +1,64 @@
+{
+"oar2006-01-14.mix.flac16": {
+"server": "ia902803.us.archive.org",
+"dir": "/17/items/oar2006-01-14.mix.flac16",
+"files": [
+{
+"name": "oar2006-01-14d1t01.mix.mp3",
+"title": "Introduction",
+"track": "1",
+"length": "01:37",
+"format": "VBR MP3"
+},
+{
+"name": "oar2006-01-14d1t02.mix.mp3",
+"title": "52-50",
+"track": "2",
+"length": "09:01",
+"format": "VBR MP3"
+},
+{
+"name": "oar2006-01-14d1t03.mix.mp3",
+"title": "Right on Time",
+"track": "3",
+"length": "07:12",
+"format": "VBR MP3"
+}
+],
+"metadata": {
+"creator": "Of A Revolution",
+"title": "Of A Revolution Live at Madison Square Garden on 2006-01-14"
+}
+},
+"gd77-05-08.sbd.hicks.4982.sbeok.shnf": {
+"server": "ia600106.us.archive.org",
+"dir": "/1/items/gd77-05-08.sbd.hicks.4982.sbeok.shnf",
+"files": [
+{
+"name": "gd77-05-08eaton-d1t01.mp3",
+"title": "Minglewood Blues",
+"track": "1",
+"length": "06:21",
+"format": "VBR MP3"
+},
+{
+"name": "gd77-05-08eaton-d1t02.mp3",
+"title": "Loser",
+"track": "2",
+"length": "08:52",
+"format": "VBR MP3"
+},
+{
+"name": "gd77-05-08eaton-d1t03.mp3",
+"title": "El Paso",
+"track": "3",
+"length": "05:18",
+"format": "VBR MP3"
+}
+],
+"metadata": {
+"creator": "Grateful Dead",
+"title": "Grateful Dead Live at Barton Hall, Cornell University on 1977-05-08"
+}
+}
+}

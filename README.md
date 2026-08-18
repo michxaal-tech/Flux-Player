@@ -16,6 +16,8 @@ npm run preview    # serve the production build
 node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
 npm run spotify          # Spotify import, network stubbed (after build)
 npm run spotify:live     # same, against the live service — needs the internet
+npm run discover         # Internet Archive source, network stubbed (after build)
+npm run catalogue        # every Discover source, against the live services
 ```
 
 ## Features
@@ -110,11 +112,22 @@ npm run spotify:live     # same, against the live service — needs the internet
   sample library to download. Exports **.mid** too, if you'd rather finish in a DAW.
 - **Discover (online catalogues)** — search real catalogues from inside FLUX and
   add tracks straight to the library. No account, no subscription, no API key.
-  Two sources, because neither covers the whole problem: **Apple** (the iTunes
+  Three sources, because none covers the whole problem: **Apple** (the iTunes
   Search API) has essentially every song ever released by name but serves a
-  30-second preview of each, and **Audius** has full-length tracks but only
+  30-second preview of each; the **Internet Archive** has millions of
+  full-length recordings — taper-approved live sets and pre-1960 masters, free
+  and legal — but not chart pop; and **Audius** has full-length tracks from
   independent artists. Which matters depends on what you came for, so the
   trade-off is stated on the picker and on every row rather than decided for you.
+
+  The Archive needs two calls rather than one, because its search is
+  item-level: a hit is a whole concert or record, so the file list comes from a
+  second request per item and those run together. Free-text search there matches
+  descriptions, so "radiohead" returns jam bands who merely mention them —
+  scoping the query to creator and title turns that into real Radiohead
+  recordings, or an honest nothing. Browse chips point at the corners worth
+  arriving at (the Live Music Archive, the Great 78 Project, netlabels) rather
+  than throwing genre words at all 12 million items.
 
   The bar a source has to clear is unusual and rules out almost everything: FLUX
   needs the *samples*, since the visualizer, FX rack, stem separation and Revoice

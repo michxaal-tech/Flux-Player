@@ -8,11 +8,13 @@ import { fmt } from "../utils";
 /**
  * Browse online catalogues and pull tracks straight into the library.
  *
- * Two sources rather than one, because neither covers the whole problem on its
- * own: Audius has full-length tracks but only independent artists, and Apple has
- * essentially every song ever released but hands out a 30-second preview of
- * each. Which of those matters depends entirely on what you came for, so the
- * trade-off is stated rather than decided on the user's behalf.
+ * Three sources rather than one, because none covers the whole problem on its
+ * own: Apple has essentially every song ever released but hands out a
+ * 30-second preview of each, the Internet Archive has millions of full-length
+ * recordings that are live sets and old records rather than chart pop, and
+ * Audius has full-length tracks from independent artists. Which of those
+ * matters depends entirely on what you came for, so the trade-off is stated
+ * rather than decided on the user's behalf.
  */
 export function Discover() {
   const status = useStore((s) => s.catStatus);
@@ -90,7 +92,7 @@ export function Discover() {
                 data-src={s.id}
                 onClick={() => pickSource(s.id)}
                 style={{ ...chip(srcId === s.id, MAG), flex: 1, padding: "8px 6px", fontSize: 10 }}
-              >{s.label}{s.id === "apple" && <NewTag />}</button>
+              >{s.label}{s.id === "archive" && <NewTag />}</button>
             ))}
           </div>
           <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", lineHeight: 1.5, marginBottom: 8 }}>

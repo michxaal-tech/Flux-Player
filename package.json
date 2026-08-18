@@ -11,7 +11,9 @@
     "smoke": "node scripts/smoke.mjs",
     "smoke:ai": "node scripts/ai-smoke.mjs",
     "spotify": "node scripts/spotify-e2e.mjs",
-    "spotify:live": "node scripts/spotify-check.mjs"
+    "spotify:live": "node scripts/spotify-check.mjs",
+    "discover": "node scripts/discover-e2e.mjs",
+    "catalogue": "node scripts/catalogue-check.mjs"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
