@@ -104,6 +104,8 @@ export interface LiveState {
   /** per-slot presence, 0..1, followed from musical energy so layers thin out
    * in a calm passage and come back when the track lifts */
   dropAmts: number[];
+  /** swell applied to the newest layer just after it unlocks, so a drop lands */
+  dropBloom: number;
   /** Per-theme scratch buckets keyed by theme; new themes park their state here. */
   scratch: Record<string, any>;
 }
@@ -116,7 +118,7 @@ export const live: LiveState = {
   flies: [], vort: [], cityH: [], shakeVal: 0,
   beatAvg: 0, prevBass: 0, fluxAvg: 0, fluxDev: 0, lastBeatAt: 0, beats: [], bpm: 0, flashVal: 0, cycleT: 0,
   beatE: 0, energy: 0.35, anal: null, analOn: false, analBeat: 0, dropE: 0, prevBassSlow: 0, hitE: 0, section: 0, analHit: 0, impRings: [], impScan: -1, impShock: [], syncMs: 0, playerTheme: "AURORA", playerBgOn: true, scratch: {},
-  frameMs: 16.7, resScale: 1, quality: 1, flow: 0, lastDropAt: -9999, dropIdx: 0, dropNew: false, dropSlots: 0, dropAmts: [],
+  frameMs: 16.7, resScale: 1, quality: 1, flow: 0, lastDropAt: -9999, dropIdx: 0, dropNew: false, dropSlots: 0, dropAmts: [], dropBloom: 0,
 };
 
 // Debug handle: inspect the render-loop state from the console (window.__flux).

@@ -31,91 +31,148 @@ const hash01 = (n: number): number => {
   return s - Math.floor(s);
 };
 
+/**
+ * Cached soft-light sprite.
+ *
+ * A luminous mote is a radial gradient, and building one per particle per frame
+ * is what turned an earlier theme into a 170ms slideshow. These are rasterised
+ * once per colour and blitted, which is what makes it affordable to draw a few
+ * hundred glowing points instead of a few hundred flat dots — and flat dots are
+ * most of the difference between "ornament" and "light".
+ */
+const spriteCache = new Map<string, HTMLCanvasElement>();
+function glowSprite(color: string): HTMLCanvasElement {
+  const hit = spriteCache.get(color);
+  if (hit) return hit;
+  const R = 32;
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = R * 2;
+  const c = cv.getContext("2d")!;
+  const g = c.createRadialGradient(R, R, 0, R, R, R);
+  g.addColorStop(0, color);
+  g.addColorStop(0.35, color);
+  g.addColorStop(1, "transparent");
+  c.fillStyle = g;
+  c.fillRect(0, 0, R * 2, R * 2);
+  // bounded, so a drifting palette cannot grow this without limit
+  if (spriteCache.size > 24) spriteCache.clear();
+  spriteCache.set(color, cv);
+  return cv;
+}
+
+/** blit a soft light at (x, y) with radius r */
+function light(c: CanvasRenderingContext2D, color: string, x: number, y: number, r: number, a: number): void {
+  if (a <= 0.004 || r <= 0.2) return;
+  const sp = glowSprite(color);
+  c.globalAlpha = a > 1 ? 1 : a;
+  c.drawImage(sp, x - r, y - r, r * 2, r * 2);
+  c.globalAlpha = 1;
+}
+
 // ── the layer library ────────────────────────────────────────────────────
 // Each is a self-contained ornament that composes with any theme underneath.
 // They never clear or wash the frame — that is what made the old set feel like
 // a filter rather than an addition.
 
 export const LAYERS: Record<string, LayerDraw> = {
-  /** slow orbital rings around the composition */
+  /** luminous orbit rings, each carrying a travelling light */
   ORBITS: (x) => {
-    const { c, cx, cy, R, vt, amt, slot, beatE, TK, CMix } = x;
+    const { c, cx, cy, R, vt, amt, slot, beatE, bassV, TK, CMix, C1 } = x;
     const n = 2 + slot;
     for (let i = 0; i < n; i++) {
       const f = i / Math.max(1, n - 1);
-      const rr = R * (0.3 + f * 0.32) * (1 + beatE * 0.03);
-      const a = vt * 0.004 * (i % 2 ? 1 : -1) + i;
+      const rr = R * (0.3 + f * 0.36) * (1 + beatE * 0.05 + bassV * 0.04);
+      const a = vt * 0.005 * (i % 2 ? 1 : -1) + i;
       c.save();
       c.translate(cx, cy);
       c.rotate(a);
-      c.scale(1, 0.42);
-      c.strokeStyle = CMix(f, amt * 0.4, 62);
-      c.lineWidth = (0.8 + amt * 1.4) * TK;
+      c.scale(1, 0.4);
+      // a gradient stroke, so the ring reads as lit from one side rather than
+      // as a drawn outline
+      const g = c.createLinearGradient(-rr, 0, rr, 0);
+      g.addColorStop(0, CMix(f, amt * 0.12, 58));
+      g.addColorStop(0.5, CMix(f, amt * 0.85, 72));
+      g.addColorStop(1, CMix(f, amt * 0.12, 58));
+      c.strokeStyle = g;
+      c.lineWidth = (1.2 + amt * 2.6) * TK;
       c.beginPath();
       c.arc(0, 0, rr, 0, TAU);
       c.stroke();
       c.restore();
+      // the travelling node
+      const ta = vt * 0.012 * (i % 2 ? 1 : -1) + i * 2.1;
+      const px = cx + Math.cos(ta + a) * rr;
+      const py = cy + Math.sin(ta + a) * rr * 0.4;
+      light(c, C1(1, 78), px, py, R * (0.03 + amt * 0.05) * (1 + beatE * 0.5), amt * 0.85);
     }
   },
 
-  /** motes rising through the frame */
+  /** motes rising through the frame, lit rather than drawn */
   EMBERS: (x) => {
-    const { c, w, h, vt, amt, slot, trebV, C1, L } = x;
-    const S = (L.scratch.lyEmber ??= [] as { x: number; y: number; sp: number; ph: number }[]) as { x: number; y: number; sp: number; ph: number }[];
-    const want = Math.round((28 + slot * 22) * amt);
-    while (S.length < want) S.push({ x: Math.random(), y: Math.random(), sp: 0.0008 + Math.random() * 0.002, ph: Math.random() * TAU });
+    const { c, w, h, R, vt, amt, slot, trebV, beatE, C1, CMix, L } = x;
+    const S = (L.scratch.lyEmber ??= [] as { x: number; y: number; sp: number; ph: number; sz: number }[]) as { x: number; y: number; sp: number; ph: number; sz: number }[];
+    const want = Math.round((30 + slot * 26) * amt);
+    while (S.length < want) S.push({ x: Math.random(), y: Math.random(), sp: 0.0009 + Math.random() * 0.0026, ph: Math.random() * TAU, sz: 0.35 + Math.random() * Math.random() * 2.4 });
     if (S.length > want) S.length = want;
-    c.fillStyle = C1(0.35 * amt + trebV * 0.2, 70);
+    const hot = C1(1, 80), warm = CMix(0.6, 1, 66);
     for (const p of S) {
-      p.y -= p.sp * (1 + amt);
-      if (p.y < -0.02) { p.y = 1.02; p.x = Math.random(); }
-      const px = (p.x + Math.sin(vt * 0.01 + p.ph) * 0.01) * w;
-      c.beginPath();
-      c.arc(px, p.y * h, 1 + amt * 1.6, 0, TAU);
-      c.fill();
+      p.y -= p.sp * (1 + amt * 1.4);
+      if (p.y < -0.03) { p.y = 1.03; p.x = Math.random(); }
+      const px = (p.x + Math.sin(vt * 0.011 + p.ph) * 0.018) * w;
+      const py = p.y * h;
+      const tw = 0.45 + 0.55 * Math.sin(vt * 0.06 + p.ph * 3);
+      // bigger ones burn cooler and further back, which gives the drift depth
+      light(c, p.sz > 1.4 ? warm : hot, px, py, R * 0.012 * p.sz * (1 + amt), amt * (0.3 + trebV * 0.3 + beatE * 0.2) * tw);
     }
   },
 
-  /** a lattice that breathes behind the theme */
+  /** a lattice in perspective with a light sweeping over it */
   LATTICE: (x) => {
-    const { c, w, h, vt, amt, slot, bassV, C2, TK } = x;
-    const step = Math.max(28, Math.min(w, h) / (7 + slot * 2));
-    const wob = Math.sin(vt * 0.01) * 5 * amt;
-    c.strokeStyle = C2(amt * 0.14 + bassV * 0.08, 52);
-    c.lineWidth = 0.7 * TK;
+    const { c, w, h, vt, amt, slot, bassV, C2, C1, TK } = x;
+    const step = Math.max(30, Math.min(w, h) / (6 + slot * 2));
+    const wob = Math.sin(vt * 0.01) * 6 * amt;
+    c.strokeStyle = C2(amt * 0.2 + bassV * 0.12, 56);
+    c.lineWidth = 0.8 * TK;
     c.beginPath();
-    for (let gx = 0; gx <= w + step; gx += step) {
-      c.moveTo(gx + wob, 0);
-      c.lineTo(gx - wob, h);
-    }
-    for (let gy = 0; gy <= h + step; gy += step) {
-      c.moveTo(0, gy - wob);
-      c.lineTo(w, gy + wob);
-    }
+    for (let gx = 0; gx <= w + step; gx += step) { c.moveTo(gx + wob, 0); c.lineTo(gx - wob, h); }
+    for (let gy = 0; gy <= h + step; gy += step) { c.moveTo(0, gy - wob); c.lineTo(w, gy + wob); }
+    c.stroke();
+    // the sweep: a soft band of light travelling down the grid
+    const sy = (((vt * 0.0022) % 1) + 1) % 1 * (h + step * 2) - step;
+    const band = h * 0.09;
+    const g = c.createLinearGradient(0, sy - band, 0, sy + band);
+    g.addColorStop(0, "transparent");
+    g.addColorStop(0.5, C1(amt * 0.3, 74));
+    g.addColorStop(1, "transparent");
+    c.strokeStyle = g;
+    c.lineWidth = 1.6 * TK;
+    c.beginPath();
+    for (let gy = Math.max(0, sy - band); gy <= Math.min(h, sy + band); gy += step) { c.moveTo(0, gy); c.lineTo(w, gy); }
+    for (let gx = 0; gx <= w + step; gx += step) { c.moveTo(gx + wob, Math.max(0, sy - band)); c.lineTo(gx - wob, Math.min(h, sy + band)); }
     c.stroke();
   },
 
-  /** light shafts fanning from the centre */
+  /** volumetric god rays */
   SHAFTS: (x) => {
-    const { c, cx, cy, R, vt, amt, slot, beatE, C1, C2 } = x;
-    const n = 5 + slot * 3;
-    const rad = R * 1.3;
+    const { c, cx, cy, R, vt, amt, slot, beatE, bassV, C1, C2 } = x;
+    const n = 5 + slot * 2;
+    const rad = R * 1.45;
     c.save();
     c.translate(cx, cy);
-    c.rotate(vt * 0.0016);
-    // The wedges all meet at the origin, so a gradient that is brightest there
-    // sums n times over on one spot and clips. Peak it out at a third of the
-    // radius instead, where the wedges have separated.
+    c.rotate(vt * 0.0014);
+    // The wedges meet at the origin, so a gradient brightest there sums n times
+    // over on one spot and clips. Peak it out where they have separated.
     const g = c.createRadialGradient(0, 0, 0, 0, 0, rad);
     g.addColorStop(0, "transparent");
-    g.addColorStop(0.3, C1(amt * 0.16 * (1 + beatE * 0.4), 68));
-    g.addColorStop(0.6, C2(amt * 0.07, 56));
+    g.addColorStop(0.26, C1(amt * 0.2 * (1 + beatE * 0.5 + bassV * 0.3), 74));
+    g.addColorStop(0.62, C2(amt * 0.12, 60));
     g.addColorStop(1, "transparent");
     c.fillStyle = g;
     c.beginPath();
     for (let i = 0; i < n; i++) {
       const a = (i / n) * TAU;
-      const wd = 0.03 + 0.05 * hash01(i);
+      // each ray breathes on its own phase, so the fan never looks like a wheel
+      const wd = (0.028 + 0.06 * hash01(i)) * (0.6 + 0.4 * Math.sin(vt * 0.02 + i * 1.7));
       c.moveTo(0, 0);
       c.lineTo(Math.cos(a - wd) * rad, Math.sin(a - wd) * rad);
       c.lineTo(Math.cos(a + wd) * rad, Math.sin(a + wd) * rad);
@@ -125,66 +182,80 @@ export const LAYERS: Record<string, LayerDraw> = {
     c.restore();
   },
 
-  /** slow expanding rings, one per beat, never a hard flash */
+  /** expanding rings of light, one per beat */
   PULSE: (x) => {
-    const { c, cx, cy, R, amt, slot, beat, TK, CMix, L } = x;
+    const { c, cx, cy, R, amt, slot, beat, TK, CMix, C1, L } = x;
     const S = (L.scratch.lyPulse ??= [] as number[]) as number[];
-    if (beat && S.length < 4 + slot) S.push(0);
+    if (beat && S.length < 5 + slot) S.push(0);
     for (let i = S.length - 1; i >= 0; i--) {
-      S[i] += 0.012 * (1 + amt);
+      S[i] += 0.011 * (1 + amt);
       if (S[i] > 1) { S.splice(i, 1); continue; }
-      const a = (1 - S[i]) ** 2 * amt;
-      c.strokeStyle = CMix(S[i], a * 0.5, 68);
-      c.lineWidth = (1 + a * 3) * TK;
+      const p = S[i];
+      const a = (1 - p) ** 2 * amt;
+      const rr = p * R * 1.05;
+      // a soft leading edge rather than a hairline circle
+      const g = c.createRadialGradient(cx, cy, rr * 0.82, cx, cy, rr * 1.1);
+      g.addColorStop(0, "transparent");
+      g.addColorStop(0.6, CMix(p, a * 0.4, 68));
+      g.addColorStop(1, "transparent");
+      c.fillStyle = g;
       c.beginPath();
-      c.arc(cx, cy, S[i] * R * 0.9, 0, TAU);
+      c.arc(cx, cy, rr * 1.1, 0, TAU);
+      c.fill();
+      c.strokeStyle = C1(a * 0.6, 78);
+      c.lineWidth = (0.8 + a * 2.4) * TK;
+      c.beginPath();
+      c.arc(cx, cy, rr, 0, TAU);
       c.stroke();
     }
   },
 
-  /** drifting dust that thickens with each unlock */
+  /** drifting motes at several depths */
   DUST: (x) => {
-    const { c, w, h, vt, amt, slot, C2, L } = x;
-    const S = (L.scratch.lyDust ??= [] as { x: number; y: number; ph: number; sz: number }[]) as { x: number; y: number; ph: number; sz: number }[];
-    const want = Math.round((40 + slot * 30) * amt);
-    while (S.length < want) S.push({ x: Math.random(), y: Math.random(), ph: Math.random() * TAU, sz: 0.5 + Math.random() * 1.6 });
+    const { c, w, h, R, vt, amt, slot, C2, CMix, L } = x;
+    const S = (L.scratch.lyDust ??= [] as { x: number; y: number; ph: number; sz: number; d: number }[]) as { x: number; y: number; ph: number; sz: number; d: number }[];
+    const want = Math.round((44 + slot * 34) * amt);
+    while (S.length < want) S.push({ x: Math.random(), y: Math.random(), ph: Math.random() * TAU, sz: 0.4 + Math.random() * 1.8, d: Math.random() });
     if (S.length > want) S.length = want;
-    c.fillStyle = C2(0.26 * amt, 66);
+    const near = C2(1, 72), far = CMix(0.35, 1, 54);
     for (const p of S) {
-      const px = (p.x + Math.sin(vt * 0.006 + p.ph) * 0.03) * w;
-      const py = (p.y + Math.cos(vt * 0.005 + p.ph * 1.7) * 0.03) * h;
-      c.beginPath();
-      c.arc(px, py, p.sz * (0.6 + amt), 0, TAU);
-      c.fill();
+      // nearer motes drift further and shine brighter — parallax for free
+      const k = 0.4 + p.d;
+      const px = (p.x + Math.sin(vt * 0.006 * k + p.ph) * 0.04 * k) * w;
+      const py = (p.y + Math.cos(vt * 0.005 * k + p.ph * 1.7) * 0.04 * k) * h;
+      light(c, p.d > 0.55 ? near : far, px, py, R * 0.008 * p.sz * (0.5 + p.d) * (1 + amt), amt * (0.18 + p.d * 0.32));
     }
   },
 
-  /** a horizon band the composition sits on */
+  /** a lit horizon the composition stands on */
   HORIZON: (x) => {
-    const { c, w, h, cy, amt, bassV, dropE, C1 } = x;
-    const band = h * (0.02 + bassV * 0.03 + dropE * 0.03) * (0.4 + amt);
+    const { c, w, h, cx, cy, R, amt, bassV, dropE, beatE, C1, C2 } = x;
+    const band = h * (0.03 + bassV * 0.04 + dropE * 0.04) * (0.5 + amt);
     const g = c.createLinearGradient(0, cy - band, 0, cy + band);
     g.addColorStop(0, "transparent");
-    // a full-width band lands on whatever the theme put across the middle, so
-    // it has to stay well under the others' alpha or it clips the horizon out
-    g.addColorStop(0.5, C1(amt * 0.2, 60));
+    // a full-width band lands on whatever the theme put across the middle, so it
+    // stays well under the others' alpha or it clips the horizon out
+    g.addColorStop(0.5, C1(amt * 0.18, 62));
     g.addColorStop(1, "transparent");
     c.fillStyle = g;
     c.fillRect(0, cy - band, w, band * 2);
+    // the light source sitting on it
+    light(c, C2(1, 70), cx, cy, R * (0.2 + bassV * 0.1 + beatE * 0.05), amt * 0.4);
   },
 
-  /** mirrored ghost of the composition, offset outward */
+  /** concentric contours breathing outward */
   ECHOES: (x) => {
-    const { c, cx, cy, amt, slot, R, beatE, CMix, TK } = x;
-    const n = 1 + slot;
+    const { c, cx, cy, amt, slot, R, beatE, vt, CMix, TK } = x;
+    const n = 2 + slot;
     for (let i = 1; i <= n; i++) {
-      const rr = R * (0.2 + i * 0.14) * (1 + beatE * 0.05);
-      c.strokeStyle = CMix(i / n, amt * 0.22, 60);
-      c.lineWidth = (0.7 + amt) * TK;
+      const rr = R * (0.18 + i * 0.13) * (1 + beatE * 0.07);
+      c.strokeStyle = CMix(i / n, amt * 0.4, 66);
+      c.lineWidth = (0.8 + amt * 1.5) * TK;
       c.beginPath();
-      for (let k = 0; k <= 48; k++) {
-        const a = (k / 48) * TAU;
-        const wob = 1 + Math.sin(a * (3 + i) + x.vt * 0.02) * 0.06 * amt;
+      for (let k = 0; k <= 64; k++) {
+        const a = (k / 64) * TAU;
+        const wob = 1 + Math.sin(a * (3 + i) + vt * 0.022) * 0.09 * amt
+          + Math.sin(a * (7 + i * 2) - vt * 0.014) * 0.04 * amt;
         const px = cx + Math.cos(a) * rr * wob;
         const py = cy + Math.sin(a) * rr * wob;
         if (k === 0) c.moveTo(px, py); else c.lineTo(px, py);
@@ -194,147 +265,174 @@ export const LAYERS: Record<string, LayerDraw> = {
     }
   },
 
-  /** falling streaks, like rain lit from behind */
+  /** falling light with gradient tails */
   RAINFALL: (x) => {
-    const { c, w, h, amt, slot, C1, TK, L } = x;
-    const S = (L.scratch.lyRain ??= [] as { x: number; y: number; sp: number; len: number }[]) as { x: number; y: number; sp: number; len: number }[];
-    const want = Math.round((24 + slot * 20) * amt);
-    while (S.length < want) S.push({ x: Math.random(), y: Math.random(), sp: 0.006 + Math.random() * 0.012, len: 0.03 + Math.random() * 0.06 });
+    const { c, w, h, amt, slot, C1, CMix, TK, L } = x;
+    const S = (L.scratch.lyRain ??= [] as { x: number; y: number; sp: number; len: number; d: number }[]) as { x: number; y: number; sp: number; len: number; d: number }[];
+    const want = Math.round((26 + slot * 22) * amt);
+    while (S.length < want) S.push({ x: Math.random(), y: Math.random(), sp: 0.006 + Math.random() * 0.014, len: 0.04 + Math.random() * 0.09, d: Math.random() });
     if (S.length > want) S.length = want;
-    c.strokeStyle = C1(0.3 * amt, 70);
-    c.lineWidth = 1 * TK;
-    c.beginPath();
     for (const p of S) {
       p.y += p.sp * (1 + amt);
-      if (p.y > 1.1) { p.y = -0.1; p.x = Math.random(); }
-      c.moveTo(p.x * w, p.y * h);
-      c.lineTo(p.x * w, (p.y - p.len) * h);
+      if (p.y > 1.12) { p.y = -0.12; p.x = Math.random(); }
+      const px = p.x * w, py = p.y * h, ty = (p.y - p.len) * h;
+      const g = c.createLinearGradient(px, py, px, ty);
+      g.addColorStop(0, C1(amt * (0.4 + p.d * 0.5), 78));
+      g.addColorStop(1, "transparent");
+      c.strokeStyle = g;
+      c.lineWidth = (0.6 + p.d * 1.4) * TK;
+      c.beginPath();
+      c.moveTo(px, py);
+      c.lineTo(px, ty);
+      c.stroke();
+      if (p.d > 0.7) {
+        c.fillStyle = CMix(0.5, amt * 0.5, 82);
+        c.beginPath();
+        c.arc(px, py, (0.7 + p.d) * TK, 0, TAU);
+        c.fill();
+      }
     }
-    c.stroke();
   },
 
-  /** a slow-turning halo that frames the whole piece */
+  /** a broad halo framing the whole piece */
   HALO: (x) => {
-    const { c, cx, cy, R, amt, slot, beatE, C1, C2 } = x;
-    const rr = R * (0.62 + slot * 0.06);
-    const g = c.createRadialGradient(cx, cy, rr * 0.7, cx, cy, rr * (1.25 + beatE * 0.05));
+    const { c, cx, cy, R, amt, slot, beatE, bassV, C1, C2 } = x;
+    const rr = R * (0.6 + slot * 0.05) * (1 + beatE * 0.04 + bassV * 0.03);
+    const g = c.createRadialGradient(cx, cy, rr * 0.62, cx, cy, rr * 1.35);
     g.addColorStop(0, "transparent");
-    g.addColorStop(0.6, C1(amt * 0.16, 62));
-    g.addColorStop(1, C2(amt * 0.05, 50));
+    g.addColorStop(0.45, C1(amt * 0.18, 66));
+    g.addColorStop(0.75, C2(amt * 0.14, 56));
+    g.addColorStop(1, "transparent");
     c.fillStyle = g;
     c.beginPath();
-    c.arc(cx, cy, rr * 1.3, 0, TAU);
+    c.arc(cx, cy, rr * 1.35, 0, TAU);
     c.fill();
   },
 
-  /** constellation of points wired together */
+  /** constellation of lit nodes */
   WEB: (x) => {
-    const { c, w, h, vt, amt, slot, C2, TK, L } = x;
+    const { c, w, h, R, vt, amt, slot, C2, C1, TK, L } = x;
     const S = (L.scratch.lyWeb ??= [] as { x: number; y: number; ph: number }[]) as { x: number; y: number; ph: number }[];
-    const want = Math.round((7 + slot * 5) * Math.max(0.3, amt));
+    const want = Math.round((8 + slot * 5) * Math.max(0.35, amt));
     while (S.length < want) S.push({ x: Math.random(), y: Math.random(), ph: Math.random() * TAU });
     if (S.length > want) S.length = want;
     const pts = S.map((p) => [
-      (p.x + Math.sin(vt * 0.005 + p.ph) * 0.05) * w,
-      (p.y + Math.cos(vt * 0.004 + p.ph * 1.3) * 0.05) * h,
+      (p.x + Math.sin(vt * 0.005 + p.ph) * 0.06) * w,
+      (p.y + Math.cos(vt * 0.004 + p.ph * 1.3) * 0.06) * h,
     ]);
-    c.strokeStyle = C2(amt * 0.2, 60);
-    c.lineWidth = 0.7 * TK;
-    c.beginPath();
+    const reach = (w * 0.24) ** 2;
+    c.lineWidth = 0.8 * TK;
     for (let i = 0; i < pts.length; i++) {
       for (let j = i + 1; j < pts.length; j++) {
         const dx = pts[i][0] - pts[j][0], dy = pts[i][1] - pts[j][1];
-        if (dx * dx + dy * dy > (w * 0.22) ** 2) continue;
+        const d2 = dx * dx + dy * dy;
+        if (d2 > reach) continue;
+        // links fade with distance, which is what makes it read as a web rather
+        // than a mesh
+        c.strokeStyle = C2(amt * 0.34 * (1 - d2 / reach), 64);
+        c.beginPath();
         c.moveTo(pts[i][0], pts[i][1]);
         c.lineTo(pts[j][0], pts[j][1]);
+        c.stroke();
       }
     }
-    c.stroke();
-    c.fillStyle = C2(amt * 0.5, 72);
-    for (const p of pts) {
-      c.beginPath();
-      c.arc(p[0], p[1], 1.6 + amt, 0, TAU);
-      c.fill();
-    }
+    const node = C1(1, 80);
+    for (const p of pts) light(c, node, p[0], p[1], R * 0.022 * (1 + amt), amt * 0.5);
   },
 
-  /** scan bars sweeping slowly, a signal rather than a strobe */
+  /** wide bands of light sweeping the frame */
   SCANS: (x) => {
-    const { c, w, h, vt, amt, slot, C1 } = x;
+    const { c, w, h, vt, amt, slot, beatE, C1, C2 } = x;
     const n = 1 + slot;
     for (let i = 0; i < n; i++) {
-      const y = (((vt * 0.0016 + i / n) % 1) + 1) % 1 * h;
-      const band = h * 0.03;
+      const y = (((vt * 0.0018 + i / n) % 1) + 1) % 1 * h;
+      const band = h * (0.05 + beatE * 0.02);
       const g = c.createLinearGradient(0, y - band, 0, y + band);
       g.addColorStop(0, "transparent");
-      g.addColorStop(0.5, C1(amt * 0.2, 72));
+      g.addColorStop(0.44, C2(amt * 0.1, 58));
+      g.addColorStop(0.5, C1(amt * 0.22, 76));
+      g.addColorStop(0.56, C2(amt * 0.07, 58));
       g.addColorStop(1, "transparent");
       c.fillStyle = g;
       c.fillRect(0, y - band, w, band * 2);
     }
   },
 
-  /** corner brackets that frame the piece like a viewfinder */
+  /** viewfinder brackets */
   FRAME: (x) => {
-    const { c, w, h, amt, slot, beatE, C1, TK } = x;
-    const m = Math.min(w, h) * (0.06 - slot * 0.006);
-    const len = Math.min(w, h) * (0.08 + slot * 0.02) * (1 + beatE * 0.1);
-    c.strokeStyle = C1(amt * 0.5, 70);
-    c.lineWidth = (1.2 + amt * 1.6) * TK;
-    c.beginPath();
-    for (const [px, py, sx, sy] of [[m, m, 1, 1], [w - m, m, -1, 1], [m, h - m, 1, -1], [w - m, h - m, -1, -1]] as [number, number, number, number][]) {
+    const { c, w, h, amt, slot, beatE, C1, C2, TK } = x;
+    const m = Math.min(w, h) * (0.06 - slot * 0.005);
+    const len = Math.min(w, h) * (0.09 + slot * 0.02) * (1 + beatE * 0.14);
+    const corners = [[m, m, 1, 1], [w - m, m, -1, 1], [m, h - m, 1, -1], [w - m, h - m, -1, -1]] as [number, number, number, number][];
+    for (const [px, py, sx, sy] of corners) {
+      const g = c.createLinearGradient(px, py, px + sx * len, py + sy * len);
+      g.addColorStop(0, C1(amt * 0.75, 78));
+      g.addColorStop(1, C2(amt * 0.1, 58));
+      c.strokeStyle = g;
+      c.lineWidth = (1.4 + amt * 2) * TK;
+      c.beginPath();
       c.moveTo(px + sx * len, py);
       c.lineTo(px, py);
       c.lineTo(px, py + sy * len);
+      c.stroke();
     }
-    c.stroke();
   },
 
   /** a column of light behind the composition */
   BEAM: (x) => {
-    const { c, w, h, cx, amt, slot, bassV, C1 } = x;
-    const wd = w * (0.05 + slot * 0.03) * (0.5 + bassV);
+    const { c, w, h, cx, cy, R, amt, slot, bassV, beatE, C1, C2 } = x;
+    const wd = w * (0.05 + slot * 0.025) * (0.6 + bassV + beatE * 0.3);
     const g = c.createLinearGradient(cx - wd, 0, cx + wd, 0);
     g.addColorStop(0, "transparent");
-    g.addColorStop(0.5, C1(amt * 0.18, 68));
+    g.addColorStop(0.42, C2(amt * 0.1, 58));
+    g.addColorStop(0.5, C1(amt * 0.2, 72));
+    g.addColorStop(0.58, C2(amt * 0.07, 58));
     g.addColorStop(1, "transparent");
     c.fillStyle = g;
     c.fillRect(cx - wd, 0, wd * 2, h);
+    light(c, C1(1, 82), cx, cy, R * (0.14 + bassV * 0.08), amt * 0.42);
   },
 
-  /** slowly tumbling shards orbiting the centre */
+  /** lit shards orbiting in a shallow ellipse */
   SHARDS: (x) => {
-    const { c, cx, cy, R, vt, amt, slot, CMix, L } = x;
+    const { c, cx, cy, R, vt, amt, slot, beatE, CMix, C1, L } = x;
     const S = (L.scratch.lyShard ??= [] as { a: number; r: number; sp: number; sz: number; rot: number }[]) as { a: number; r: number; sp: number; sz: number; rot: number }[];
-    const want = Math.round((6 + slot * 6) * amt);
-    while (S.length < want) S.push({ a: Math.random() * TAU, r: 0.35 + Math.random() * 0.45, sp: 0.001 + Math.random() * 0.003, sz: 0.4 + Math.random() * 0.9, rot: Math.random() * TAU });
+    const want = Math.round((7 + slot * 6) * amt);
+    while (S.length < want) S.push({ a: Math.random() * TAU, r: 0.32 + Math.random() * 0.5, sp: 0.0012 + Math.random() * 0.0036, sz: 0.5 + Math.random() * 1.1, rot: Math.random() * TAU });
     if (S.length > want) S.length = want;
     for (const p of S) {
       p.a += p.sp * (1 + amt);
-      p.rot += 0.01;
+      p.rot += 0.012;
       const px = cx + Math.cos(p.a) * R * p.r;
-      const py = cy + Math.sin(p.a) * R * p.r * 0.6;
-      const sz = R * 0.02 * p.sz * (0.5 + amt);
+      const py = cy + Math.sin(p.a) * R * p.r * 0.55;
+      const sz = R * 0.026 * p.sz * (0.6 + amt) * (1 + beatE * 0.18);
+      // the ones on the near side of the orbit are bigger and brighter
+      const near = 0.5 + 0.5 * Math.sin(p.a);
+      light(c, C1(1, 76), px, py, sz * 1.8, amt * 0.3 * near);
       c.save();
       c.translate(px, py);
       c.rotate(p.rot + vt * 0.002);
-      c.fillStyle = CMix(p.r, amt * 0.4, 66);
+      const g = c.createLinearGradient(0, -sz, 0, sz);
+      g.addColorStop(0, CMix(p.r, amt * (0.5 + near * 0.5), 82));
+      g.addColorStop(1, CMix(p.r, amt * 0.1, 52));
+      c.fillStyle = g;
       c.beginPath();
       c.moveTo(0, -sz);
-      c.lineTo(sz * 0.6, sz * 0.4);
-      c.lineTo(-sz * 0.5, sz * 0.5);
+      c.lineTo(sz * 0.55, sz * 0.42);
+      c.lineTo(-sz * 0.48, sz * 0.5);
       c.closePath();
       c.fill();
       c.restore();
     }
   },
 
-  /** a tide of colour washing from the edges inward */
+  /** a tide of colour washing in from the edges */
   TIDEWASH: (x) => {
-    const { c, w, h, cx, cy, R, amt, vt, C2 } = x;
-    const g = c.createRadialGradient(cx, cy, R * 0.3, cx, cy, R * (1.1 + Math.sin(vt * 0.006) * 0.06));
+    const { c, w, h, cx, cy, R, amt, vt, bassV, C2, CMix } = x;
+    const g = c.createRadialGradient(cx, cy, R * 0.22, cx, cy, R * (1.15 + Math.sin(vt * 0.006) * 0.08 + bassV * 0.06));
     g.addColorStop(0, "transparent");
-    g.addColorStop(1, C2(amt * 0.18, 46));
+    g.addColorStop(0.55, CMix(0.5, amt * 0.1, 46));
+    g.addColorStop(1, C2(amt * 0.2, 46));
     c.fillStyle = g;
     c.fillRect(0, 0, w, h);
   },
@@ -455,13 +553,24 @@ export function stepDropLayers(L: LiveState, beatStep: number, maxSlots: number)
   // of flickering with the meter
   const k = 1 - Math.exp(-beatStep * 0.8);
   for (let i = 0; i < n; i++) {
-    const need = (i / (n + 1)) * 0.55;
-    const want = Math.min(1, Math.max(0, (lift - need) / Math.max(0.2, 1 - need)));
-    // a floor, so an earned layer stays faintly present even in the quietest
-    // bar — it should read as receding, not as being switched off
-    const target = 0.16 + want * 0.84;
+    // How much lift a layer needs before it is fully present. This used to
+    // scale to 0.55, which held the newest layers down so hard on an average
+    // passage that unlocking one changed almost nothing visible — the whole
+    // feature read as "nothing happened". They still thin out in a calm
+    // section, just not to the point of invisibility.
+    const need = (i / (n + 1)) * 0.3;
+    const want = Math.min(1, Math.max(0, (lift - need) / Math.max(0.3, 1 - need)));
+    const target = 0.4 + want * 0.6;
     L.dropAmts[i] += (target - L.dropAmts[i]) * k;
   }
+
+  // Arrival. A layer that simply exists from one frame to the next is not felt,
+  // and the whole point is that a drop *lands*. This swells the newest layer
+  // over about two beats and settles — a bloom rather than the flash the old
+  // ladder fired, so it reads as the piece gaining something rather than as the
+  // picture being hit.
+  L.dropBloom = L.dropNew && n > 0 ? 1 : L.dropBloom * Math.exp(-beatStep * 0.55);
+  if (n > 0 && L.dropBloom > 0.004) L.dropAmts[n - 1] = Math.min(1.15, L.dropAmts[n - 1] + L.dropBloom * 0.55);
 }
 
 /**
@@ -477,7 +586,7 @@ export function drawDropLayers(x: ThemeCtx, amt: number): void {
   // These stack additively on an already-lit frame, so the deeper the stack the
   // smaller each share has to be or the picture clips to white. Falls off
   // slowly enough that more layers still reads as more.
-  const share = 0.55 + 0.45 / Math.sqrt(n);
+  const share = 0.6 + 0.4 / Math.sqrt(n);
 
   c.save();
   c.globalCompositeOperation = "lighter";

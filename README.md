@@ -39,8 +39,9 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
   3D ones. Any theme can be projected into 3D
   eight ways (floor plane, corridor, flying tunnel, vortex, rotating panel,
   cube, dome, cylinder). **Drop layers**: every drop the analyser finds adds a
-  persistent layer to the picture — orbits, embers, light shafts, rainfall,
-  scan bars, drifting shards and more — and it *stays*. When the track calms the
+  persistent layer to the picture — orbit rings carrying travelling lights, god
+  rays, rising embers, luminous constellations, falling light, tumbling shards
+  and more — and it *stays*, swelling in over a couple of beats as it arrives. When the track calms the
   newest layers thin out; when it lifts they come back, so a song builds through
   its length instead of flashing at each drop. Each theme has its own curated
   set of 7, drawn in the theme's own space (so a 3D projection carries them onto

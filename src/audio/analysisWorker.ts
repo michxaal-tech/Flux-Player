@@ -191,22 +191,53 @@ function analyse(mono: Float32Array, rate: number, post: (p: number) => void): A
     hits.push(+(i / fps).toFixed(3));
   }
 
-  // ── drops: sustained low-end lift out of a calmer passage ──
-  const drops: number[] = [];
+  // ── drops: where the mix lifts hardest ──
+  //
+  // This used to demand an absolute shape — the three seconds before a drop had
+  // to be quieter than the whole track's average, then the low end had to jump
+  // 70%. That describes a build-and-drop dance record and nothing else. On music
+  // that is loud all the way through (funk, hip-hop, most modern pop) the
+  // "quieter than average" test is never true, so the detector returned an empty
+  // list and every feature downstream of it silently did nothing.
+  //
+  // Two changes. Ranking is relative — score every position by how much the mix
+  // lifts across it and take the strongest few — so a track's biggest moments
+  // are always found whatever its absolute dynamics. And the lift is measured
+  // over two spans at once: a short one that catches an abrupt drop, and a
+  // four-second one that catches a section change, which a short window smears
+  // into nothing because the transition is longer than the window itself.
   let meanBass = 0;
   for (let i = 0; i < frames; i++) meanBass += bass[i];
   meanBass /= Math.max(1, frames);
-  const w2 = Math.round(fps * 1.5);
-  for (let i = w2 * 2; i < frames - w2; i += Math.round(fps * 0.25)) {
-    let before = 0, after = 0;
-    for (let k = i - w2 * 2; k < i; k++) before += bass[k];
-    for (let k = i; k < i + w2; k++) after += bass[k];
-    before /= w2 * 2; after /= w2;
-    if (before < meanBass * 0.75 && after > before * 1.7 && after > meanBass * 1.05) {
-      const t = +(i / fps).toFixed(2);
-      if (!drops.length || t - drops[drops.length - 1] > 6) drops.push(t);
-    }
+  const sum = (from: number, to: number): number => {
+    let v = 0;
+    const a = Math.max(0, from), b = Math.min(frames, to);
+    for (let k = a; k < b; k++) v += bass[k];
+    return v / Math.max(1, b - a);
+  };
+  const shortW = Math.round(fps * 1.5);
+  const longW = Math.round(fps * 4);
+  const cands: { t: number; score: number }[] = [];
+  for (let i = shortW; i < frames - shortW; i += Math.round(fps * 0.25)) {
+    const sBefore = sum(i - shortW * 2, i), sAfter = sum(i, i + shortW);
+    const lBefore = sum(i - longW, i), lAfter = sum(i, i + longW);
+    const lift = Math.max((sAfter + 1e-4) / (sBefore + 1e-4), (lAfter + 1e-4) / (lBefore + 1e-4));
+    // it still has to *land* somewhere loud: a lift into a quiet passage is a
+    // change, but it is not a drop
+    if (lift < 1.05 || Math.max(sAfter, lAfter) < meanBass * 0.8) continue;
+    // rank by the lift and by how hard it lands, so a loud song's chorus
+    // outranks a small swell in its intro
+    cands.push({ t: +(i / fps).toFixed(2), score: lift * (Math.max(sAfter, lAfter) / Math.max(1e-4, meanBass)) });
   }
+  cands.sort((a, b) => b.score - a.score);
+  const drops: number[] = [];
+  // greedy, strongest first, kept apart — otherwise one long build contributes a
+  // dozen neighbouring candidates and fills the whole ladder by itself
+  for (const cd of cands) {
+    if (drops.length >= 8) break;
+    if (drops.every((d) => Math.abs(d - cd.t) > 8)) drops.push(cd.t);
+  }
+  drops.sort((a, b) => a - b);
 
   // ── sections: where the arrangement's character changes. Compare the
   // spectral balance of adjacent 4s windows and mark the big shifts. ──
