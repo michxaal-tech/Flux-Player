@@ -55,8 +55,14 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
   of the theme picker, saveable looks with self-contained share codes, 34 stackable beat impacts (including a signature set with a frame
   history behind it — ghosting, datamosh, melt, fracture), 20 particle drifts × 12
   silhouettes × 3 size spreads × a size multiplier, edge spectrum meters on every tab.
-  Adaptive resolution keeps full-screen rendering at 60fps on any device (or
-  pin MAX SHARPNESS to disable it). Themes also read a smoothed musical
+  Adaptive **quality** keeps full-screen rendering at 60fps on any device: one
+  measured signal drives backing resolution, glow radius and particle count
+  together. Glow is what actually costs — WAVES renders 6× faster with it off
+  and RING 2.4×, while particle count barely registers — so capping blur radius
+  degrades far more gracefully than shrinking the canvas, and trading only
+  resolution left the heavy themes stuck at 290ms/frame. QUALITY in the TUNE
+  panel pins it high (MAX) or low (FAST) if you'd rather not let it adapt; the
+  COST readout shows where it settled. Themes also read a smoothed musical
   "energy" signal, so they move differently in a song's calm and driving parts.
   Analysis is delayed to compensate for audio output latency, so beats land on
   the sound rather than ahead of it (with a BEAT SYNC offset for Bluetooth).

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { BG, BORDER, CYAN, IMPACTS, MAG, NEW_ITEMS, P_SHAPES, P_SIZES, P_STYLES, PALETTES, STAGED_MARK, STAGED_THEMES, VIS_THEMES } from "../constants";
+import { BG, BORDER, CYAN, IMPACTS, MAG, NEW_ITEMS, P_SHAPES, P_SIZES, P_STYLES, PALETTES, QUALITY_MODES, STAGED_MARK, STAGED_THEMES, VIS_THEMES } from "../constants";
 import { nextTrack, prevTrack, togglePlay } from "../audio/transport";
 import { getCurrentTrack, useStore } from "../store/useStore";
 import { mix } from "../theme";
@@ -26,9 +26,9 @@ import { AiPrompt } from "./ai/AiBits";
  * panel at 60fps to display a number would itself cost more than it measures.
  */
 function PerfReadout() {
-  const [s, setS] = useState({ ms: 16.7, res: 1 });
+  const [s, setS] = useState({ ms: 16.7, res: 1, q: 1 });
   useEffect(() => {
-    const id = window.setInterval(() => setS({ ms: live.frameMs, res: live.resScale }), 400);
+    const id = window.setInterval(() => setS({ ms: live.frameMs, res: live.resScale, q: live.quality }), 400);
     return () => window.clearInterval(id);
   }, []);
   const fps = s.ms > 0 ? Math.min(60, Math.round(1000 / s.ms)) : 60;
@@ -43,6 +43,9 @@ function PerfReadout() {
       <span style={{ color: "rgba(255,255,255,0.4)" }}>
         {s.res >= 0.999 ? "full res" : `res ${Math.round(s.res * 100)}%`}
       </span>
+      {s.q < 0.98 && (
+        <span style={{ color: "rgba(255,255,255,0.4)" }}>quality {Math.round(s.q * 100)}%</span>
+      )}
     </div>
   );
 }
@@ -656,7 +659,25 @@ export function VisualizerOverlay() {
             {(visCfg.impacts ?? []).length > 0 && (
               <button onClick={() => setV("impacts", [])} style={{ ...chip(false), padding: "6px 10px", fontSize: 9.5 }}>✕ CLEAR</button>
             )}
-            <Toggle label="MAX SHARPNESS" on={visCfg.hiRes} onChange={(v) => setV("hiRes", v)} />
+          </div>
+
+          <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 6px" }}>QUALITY <NewTag /></div>
+          <div style={{ display: "flex", gap: 5, marginBottom: 6 }}>
+            {QUALITY_MODES.map((q) => (
+              <button
+                key={q}
+                data-quality={q}
+                onClick={() => { setV("quality", q); if (visCfg.hiRes) setV("hiRes", false); }}
+                style={{ ...chip((visCfg.quality ?? "AUTO") === q, MAG), flex: 1, padding: "8px 6px", fontSize: 10 }}
+              >{q}</button>
+            ))}
+          </div>
+          <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, marginBottom: 4 }}>
+            {(visCfg.quality ?? "AUTO") === "MAX"
+              ? "Full resolution and full glow, whatever it costs. Best on a desktop GPU."
+              : (visCfg.quality ?? "AUTO") === "FAST"
+                ? "Pinned low: smaller backing canvas, tight glow, fewer particles. Use this on a laptop or an older machine that stutters — it takes effect immediately rather than after the adaptive ramp."
+                : "Follows the measured frame rate: drops resolution, glow radius and particle count when the device can't keep up, and creeps back when it can. Check COST below to see where it settled."}
           </div>
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 4px" }}>BEAT SYNC</div>
           <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, marginBottom: 6 }}>

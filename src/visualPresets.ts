@@ -13,6 +13,7 @@
 import { DEFAULT_VIS_CFG, VIS_THEMES } from "./constants";
 import { sanitizeVis } from "./ai/commands";
 import { LIGHT_FX } from "./palette";
+import { QUALITY_MODES } from "./constants";
 import { LYRIC_FX } from "./visualizer/lyricFx";
 import { LYRIC_STYLES } from "./visualizer/lyricRenderer";
 import { useStore } from "./store/useStore";
@@ -65,7 +66,7 @@ const K: Record<string, string> = {
   pStyle: "ps", pShape: "ph", pSize: "pz", pScale: "px", speed: "sp",
   intensity: "in", zoom: "zm", spinV: "sv", bgWash: "bw", thick: "tk",
   mirror: "mi", shake: "sk", flash: "fl", impacts: "im", autoMode: "am",
-  hiRes: "hr", fastBeats: "fb", syncMs: "sy", vis3d: "d3", vis3dAmt: "da",
+  hiRes: "hr", quality: "ql", fastBeats: "fb", syncMs: "sy", vis3d: "d3", vis3dAmt: "da",
   dropFx: "df",
   lightFx: "lf",
 };
@@ -127,6 +128,7 @@ export function decodeLook(code: string): Look | null {
   if (typeof expanded.pSize === "string") passthrough.pSize = expanded.pSize;
   if (typeof expanded.vis3d === "string") passthrough.vis3d = expanded.vis3d;
   if (typeof expanded.lightFx === "string" && LIGHT_FX.includes(expanded.lightFx)) passthrough.lightFx = expanded.lightFx;
+  if (typeof expanded.quality === "string" && QUALITY_MODES.includes(expanded.quality)) passthrough.quality = expanded.quality;
   if (Array.isArray(expanded.impacts)) {
     passthrough.impacts = (expanded.impacts as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 40);
   }

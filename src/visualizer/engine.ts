@@ -268,15 +268,24 @@ export function startRenderLoop(): void {
   let t = 0;
   let lastFrame = 0;
 
-  // Adaptive resolution: a full-screen high-DPR canvas can be more pixels than
-  // a device rasters at 60fps (shadowBlur cost scales with area). Trade
-  // backing resolution for frame rate — but only under *real* sustained load.
+  // Adaptive quality.
+  //
+  // Resolution alone is not enough. Measured on a 1600x900 window, the cost of
+  // the heavy themes is dominated by shadowBlur, not by pixel count: WAVES runs
+  // 6x faster with glow off and RING 2.4x, while turning particles off changes
+  // almost nothing. Trading only resolution left WAVES at 290ms/frame — the
+  // machine was drowning in blur radius, and no amount of shrinking the canvas
+  // fixed that.
+  //
+  // So one continuous `quality` signal drives three things: backing resolution,
+  // a cap on glow radius, and particle count. It falls fast under load and
+  // creeps back slowly, because oscillating is worse than being slightly soft.
   //
   // The frame gate below quantizes draw deltas to multiples of the display's
-  // refresh interval (16.7ms or 25ms on a 120Hz panel), so judging single
-  // frames misreads one dropped tick as jank. Track a smoothed frame time and
-  // act only when it stays bad, with a floor that keeps the image sharp.
-  const MIN_RES = 0.62;
+  // refresh interval (16.7ms, or 25ms on a 120Hz panel), so judging single
+  // frames misreads one dropped tick as jank — hence the smoothed frame time.
+  const MIN_RES = 0.4;
+  let quality = 1;
   let resScale = 1;
   let frameEma = 16.7;
   let lastResChange = 0;
@@ -298,17 +307,33 @@ export function startRenderLoop(): void {
     // `live` directly: L is the local alias and is not bound until later
     live.frameMs = frameEma;
     live.resScale = resScale;
-    if (live.cfg.hiRes) {
-      // user asked for maximum sharpness — never trade resolution away
-      if (resScale !== 1) { resScale = 1; lastResChange = nowMs; }
-    } else if (frameEma > 27 && resScale > MIN_RES && nowMs - lastResChange > 1500) {
-      resScale = Math.max(MIN_RES, resScale * 0.85); // sustained sub-37fps
+    // `hiRes` was the old MAX SHARPNESS toggle. A config saved before QUALITY
+    // existed rehydrates with quality at its "AUTO" default, so the old flag has
+    // to stand in — picking a mode by hand clears it.
+    const qMode = live.cfg.hiRes && (live.cfg.quality ?? "AUTO") === "AUTO" ? "MAX" : (live.cfg.quality ?? "AUTO");
+    if (qMode === "MAX") {
+      quality = 1;
+    } else if (qMode === "FAST") {
+      // a fixed low setting, so a machine that cannot keep up is fixed
+      // immediately rather than after twenty seconds of measured decline
+      quality = 0.12;
+    } else {
+      // Proportional, so being 10x over budget is corrected in a few frames
+      // rather than a few seconds. Recovery is a slow creep: a machine that
+      // just barely copes should settle, not hunt.
+      const over = frameEma / 16.7;
+      if (over > 1.25) quality = Math.max(0, quality - Math.min(0.2, (over - 1) * 0.09));
+      else if (over < 1.06) quality = Math.min(1, quality + 0.008);
+    }
+    live.quality = quality;
+    // Resolution is the one term that cannot follow `quality` directly:
+    // resizing the backing store costs a frame and drops the trail with it. So
+    // it is quantized and rate-limited, while the glow cap and particle count
+    // — both free to change — track quality every frame.
+    const wantRes = Math.round((MIN_RES + (1 - MIN_RES) * quality) / 0.06) * 0.06;
+    if (Math.abs(wantRes - resScale) > 0.03 && nowMs - lastResChange > 900) {
+      resScale = Math.min(1, Math.max(MIN_RES, wantRes));
       lastResChange = nowMs;
-      frameEma = 20; // don't re-trigger before the new scale is measured
-    } else if (frameEma < 18.5 && resScale < 1 && nowMs - lastResChange > 6000) {
-      resScale = Math.min(1, resScale * 1.12); // steady headroom → sharpen up
-      lastResChange = nowMs;
-      frameEma = 20;
     }
     const n = engine.nodes;
     const L = live;
@@ -648,7 +673,7 @@ export function startRenderLoop(): void {
         bassV: Math.min(1, bass * pI), midV: Math.min(1, mid * pI), trebV: Math.min(1, treb * pI),
         beat, beatE: L.beatE, energy: L.energy, dropE: L.dropE, hit, hitE: L.hitE, section: L.section, cfg, I: pI, TK: cfg.thick,
         C1: pC1, C2: pC2, CMix: pCMix,
-        glow: (blur, color) => { pc.shadowBlur = blur * cfg.glow * 1.6; pc.shadowColor = color; },
+        glow: (blur, color) => { pc.shadowBlur = Math.min(blur * cfg.glow * 1.6, 4 + quality * 28); pc.shadowColor = color; },
         noGlow: () => { pc.shadowBlur = 0; },
         L, trackName: L.trackName,
       });
@@ -710,7 +735,15 @@ export function startRenderLoop(): void {
       const { C1, C2, CMix } = lit;
       const GLOW = cfg.glow;
       const TK = cfg.thick;
-      const glow = (blur: number, color: string) => { c.shadowBlur = blur * GLOW * 1.6; c.shadowColor = color; };
+      // Blur radius is the single most expensive thing the visualizer does, and
+      // its cost is superlinear in the radius. Capping it degrades far more
+      // gracefully than dropping resolution: the bloom gets tighter rather than
+      // the whole picture getting soft.
+      const glowCap = 4 + quality * 28;
+      const glow = (blur: number, color: string) => {
+        c.shadowBlur = Math.min(blur * GLOW * 1.6, glowCap);
+        c.shadowColor = color;
+      };
       const noGlow = () => { c.shadowBlur = 0; };
 
       const I = cfg.intensity;
@@ -799,7 +832,7 @@ export function startRenderLoop(): void {
       // free, because bigger reads as nearer.
       const spread = cfg.pSize === "UNIFORM" ? 0 : cfg.pSize === "WILD" ? 1 : 0.5;
       const pScale = cfg.pScale ?? 1;
-      const targetCount = Math.floor(cfg.particles * 150);
+      const targetCount = Math.floor(cfg.particles * 150 * (0.35 + quality * 0.65));
       while (L.vparts.length < targetCount) {
         // `sz` holds the particle's *rank* (0..1), not its radius. Sizes used to
         // be baked in at spawn, so changing the spread did nothing until a

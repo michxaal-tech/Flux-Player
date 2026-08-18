@@ -100,8 +100,12 @@ export interface VisCfg {
   impacts: string[];
   /** theme auto-advance every ~16s: off (stay put), cycle (in order), shuffle (random) */
   autoMode: "off" | "cycle" | "shuffle";
-  /** force maximum backing resolution, disabling adaptive quality scaling */
+  /** force maximum backing resolution, disabling adaptive quality scaling.
+   * Superseded by `quality`; kept so saved looks and presets still load. */
   hiRes: boolean;
+  /** AUTO adapts to the measured frame time, MAX pins full quality, FAST pins a
+   * low one for machines that cannot keep up (see engine.ts) */
+  quality: string;
   /** flash on every percussive hit, not just the tempo grid (analyzed mode) */
   fastBeats: boolean;
   /** 3D projection applied to whatever the theme drew: OFF renders it flat,
