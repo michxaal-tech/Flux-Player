@@ -14,6 +14,12 @@ const SEARCH = readFileSync("scripts/fixtures/archive-search.json", "utf8");
 const META = JSON.parse(readFileSync("scripts/fixtures/archive-metadata.json", "utf8"));
 // nothing decodes the audio during import, so any body of a plausible size does
 const CLIP = Buffer.alloc(60000, 3);
+// Apple serves nothing but 30-second excerpts, which is what the FULL TRACKS
+// ONLY filter exists to keep out of the library
+const APPLE = JSON.stringify({ results: [
+  { trackId: 1, trackName: "Blinding Lights", artistName: "The Weeknd", previewUrl: "https://audio-ssl.itunes.apple.com/x.m4a", primaryGenreName: "Pop" },
+  { trackId: 2, trackName: "Save Your Tears", artistName: "The Weeknd", previewUrl: "https://audio-ssl.itunes.apple.com/y.m4a", primaryGenreName: "Pop" },
+] });
 
 const preview = spawn("npx", ["vite", "preview", "--port", String(PORT)], { stdio: "ignore" });
 await new Promise((r) => setTimeout(r, 2500));
@@ -31,6 +37,7 @@ page.on("console", (m) => { if (m.type() === "error") errors.push(`console: ${m.
 await page.route("**/*", (r) => (r.request().url().startsWith(BASE) ? r.continue() : r.fulfill({ status: 404, body: "" })));
 let audioHits = 0;
 await page.route("**us.archive.org/**", (r) => { audioHits++; return r.fulfill({ contentType: "audio/mpeg", body: CLIP }); });
+await page.route("**itunes.apple.com/**", (r) => r.fulfill({ contentType: "application/json", body: APPLE }));
 await page.route("**/advancedsearch.php*", (r) => r.fulfill({ contentType: "application/json", body: SEARCH }));
 await page.route("**/metadata/**", (r) => {
   const id = decodeURIComponent(new URL(r.request().url()).pathname.split("/metadata/")[1] ?? "");
@@ -80,6 +87,33 @@ await step("it survives a reload", async () => {
   await page.click("button:has(div:text-is('LIBRARY'))");
   const body = await page.innerText("body");
   if (!/Grateful Dead|Of A Revolution/.test(body)) throw new Error("imported track missing after reload");
+});
+
+await step("previews are kept out by default", async () => {
+  await page.click("button:has(div:text-is('LIBRARY'))");
+  await page.click("button:has-text('BROWSE')");
+  await page.waitForSelector("button[data-fullonly]");
+  const label = await page.innerText("button[data-fullonly]");
+  if (!/FULL TRACKS ONLY/.test(label)) throw new Error(`filter is off by default: ${label}`);
+  await page.click("button[data-src='apple']");
+  await page.waitForSelector("text=30-second excerpt", { timeout: 15000 });
+  if (await page.$("button[data-add]")) throw new Error("an excerpt was still addable");
+});
+
+await step("previews can be shown deliberately", async () => {
+  await page.click("text=Show them anyway");
+  await page.waitForSelector("text=EXCERPT", { timeout: 10000 });
+  if (!(await page.$("button[data-add]"))) throw new Error("rows didn't come back");
+  const label = await page.innerText("button[data-fullonly]");
+  if (!/PREVIEWS SHOWN/.test(label)) throw new Error(`toggle didn't flip: ${label}`);
+});
+
+await step("the choice survives a reload", async () => {
+  await page.reload({ waitUntil: "networkidle" });
+  await page.click("button:has(div:text-is('LIBRARY'))");
+  await page.click("button:has-text('BROWSE')");
+  const label = await page.innerText("button[data-fullonly]");
+  if (!/PREVIEWS SHOWN/.test(label)) throw new Error(`not persisted: ${label}`);
 });
 
 await step("no script errors", async () => {

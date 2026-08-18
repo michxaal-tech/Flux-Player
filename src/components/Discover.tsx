@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { BORDER, CYAN, MAG, MONO } from "../constants";
 import { useStore } from "../store/useStore";
 import { chip, Module, NewTag } from "./ui";
+import { mix } from "../theme";
 import { importTrack, SOURCES, sourceById, type CatTrack } from "../catalogue";
 import { fmt } from "../utils";
 
@@ -20,6 +21,7 @@ export function Discover() {
   const status = useStore((s) => s.catStatus);
   const playlists = useStore((s) => s.playlists);
   const viewMode = useStore((s) => s.viewMode);
+  const fullOnly = useStore((s) => s.fullOnly);
 
   const [open, setOpen] = useState(false);
   const [srcId, setSrcId] = useState(SOURCES[0].id);
@@ -62,11 +64,17 @@ export function Discover() {
   };
 
   const add = async (t: CatTrack) => {
-    if (!target) return;
+    // the filter below already hides these; this is the second lock, so a stale
+    // row from a previous source can't slip a 30-second file into the library
+    if (!target || (fullOnly && t.preview)) return;
     setAdding(t.id);
     await importTrack(t, target);
     setAdding(null);
   };
+
+  /** what the list would show if previews were allowed, and what it shows now */
+  const shown = fullOnly ? rows.filter((t) => !t.preview) : rows;
+  const hidden = rows.length - shown.length;
 
   return (
     <Module
@@ -114,6 +122,20 @@ export function Discover() {
             >🔍</button>
           </div>
 
+          <div style={{ display: "flex", gap: 5, alignItems: "center", marginBottom: 8 }}>
+            <button
+              data-fullonly
+              onClick={() => useStore.setState({ fullOnly: !fullOnly })}
+              title="Hide 30-second excerpts, so only whole tracks can be added"
+              style={{ ...chip(fullOnly, CYAN), padding: "6px 10px", fontSize: 9 }}
+            >{fullOnly ? "✓ FULL TRACKS ONLY" : "PREVIEWS SHOWN"}</button>
+            {hidden > 0 && (
+              <span style={{ fontSize: 9.5, color: "rgba(255,255,255,0.38)" }}>
+                {hidden} excerpt{hidden === 1 ? "" : "s"} hidden
+              </span>
+            )}
+          </div>
+
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
             {src.genres.map((g) => (
               <button
@@ -129,7 +151,7 @@ export function Discover() {
           {!!status && <div style={{ fontSize: 11, color: CYAN, fontFamily: MONO, marginBottom: 6 }}>{status}</div>}
 
           <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 360, overflowY: "auto" }}>
-            {rows.map((t) => (
+            {shown.map((t) => (
               <div
                 key={`${t.source}-${t.id}`}
                 data-cat={t.id}
@@ -148,7 +170,12 @@ export function Discover() {
                       onClick={() => { setQ(t.artist); load(() => src.byArtist(t.artistKey)); }}
                       style={{ cursor: "pointer", color: MAG }}
                     >{t.artist}</span>
-                    {" · "}{fmt(t.duration)}{t.preview ? " preview" : ""}{t.genre ? ` · ${t.genre}` : ""}
+                    {" · "}{fmt(t.duration)}{t.genre ? ` · ${t.genre}` : ""}
+                    {t.preview && (
+                      <span style={{ marginLeft: 5, padding: "1px 5px", borderRadius: 5, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.06em", color: MAG, border: `1px solid ${mix(MAG, 34)}` }}>
+                        EXCERPT
+                      </span>
+                    )}
                   </div>
                 </div>
                 <button
@@ -161,9 +188,18 @@ export function Discover() {
             ))}
           </div>
 
-          {!busy && !err && rows.length === 0 && (
+          {!busy && !err && shown.length === 0 && (
             <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", lineHeight: 1.5 }}>
-              Nothing found. Try a different search, or pick a genre above.
+              {hidden > 0 ? (
+                <>
+                  Every result here is a 30-second excerpt — that's all {src.label} serves.
+                  {" "}
+                  <button
+                    onClick={() => useStore.setState({ fullOnly: false })}
+                    style={{ background: "none", border: "none", padding: 0, font: "inherit", color: CYAN, cursor: "pointer", textDecoration: "underline" }}
+                  >Show them anyway</button>, or try ARCHIVE or AUDIUS for whole tracks.
+                </>
+              ) : "Nothing found. Try a different search, or pick a genre above."}
             </div>
           )}
           <div style={{ fontSize: 10, color: "rgba(255,255,255,0.32)", lineHeight: 1.5, marginTop: 8 }}>

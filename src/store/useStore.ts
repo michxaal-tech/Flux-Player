@@ -116,6 +116,8 @@ export interface StoreState {
   revoiceDuck: number;
   /** a Spotify session exists in this browser (import is metadata-only) */
   spotifyReady: boolean;
+  /** hide 30-second excerpts in DISCOVER, so a tap can't import one by mistake */
+  fullOnly: boolean;
   /** float a mini player when the app is backgrounded */
   miniPlayer: boolean;
   /** spoken transitions between tracks */
@@ -235,6 +237,7 @@ export const useStore = create<StoreState>()(
         catStatus: "",
         revoiceDuck: 1,
         spotifyReady: false,
+        fullOnly: true,
         tab: "player",
         shortcutsOpen: false,
 
@@ -447,6 +450,7 @@ export const useStore = create<StoreState>()(
           lyricFx: s.lyricFx,
           lyricFxs: s.lyricFxs,
           lyricFxMatch: s.lyricFxMatch,
+          fullOnly: s.fullOnly,
           favThemes: s.favThemes,
           visPresets: s.visPresets,
           lyricAuto: s.lyricAuto,

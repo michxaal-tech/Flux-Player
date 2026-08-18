@@ -56,6 +56,9 @@ const usable = (t) =>
   !!t && typeof t.id === "string" && !!t.title && !!t.artist && /^https:\/\//.test(t.url ?? "");
 
 const QUERIES = { apple: "blinding lights", archive: "grateful dead", audius: "house" };
+// one chip beyond the default per source, since a chip is a hand-written query
+// and a wrong one returns an empty page rather than an error
+const EXTRA = { archive: "Hyperpop" };
 const only = process.argv[2];
 
 for (const src of SOURCES) {
@@ -66,6 +69,7 @@ for (const src of SOURCES) {
   for (const [what, run] of [
     ["search", () => src.search(QUERIES[src.id] ?? "music")],
     ["browse", () => src.browse(src.genres[0])],
+    ...(EXTRA[src.id] ? [[`browse ${EXTRA[src.id]}`, () => src.browse(EXTRA[src.id])]] : []),
   ]) {
     let rows = [];
     let err = "";

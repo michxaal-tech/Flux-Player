@@ -286,21 +286,46 @@ async function iaTracks(docs: IaDoc[], perItem: number, cap: number): Promise<Ca
   return lists.flat().slice(0, cap);
 }
 
-/** Each chip is a corner of the Archive worth arriving at, rather than a genre
- * word thrown at the whole thing. */
-const IA_BROWSE: Record<string, string> = {
-  "Live sets": "collection:etree",
-  "78s": "collection:georgeblood",
-  Jazz: "collection:georgeblood AND subject:(jazz)",
-  Blues: "collection:georgeblood AND subject:(blues)",
-  Swing: "collection:georgeblood AND subject:(swing OR foxtrot)",
-  Country: "collection:georgeblood AND subject:(country OR hillbilly)",
-  Latin: "collection:georgeblood AND subject:(latin OR rumba OR mambo)",
-  Rock: "collection:etree AND subject:(rock)",
-  Jam: "collection:etree AND subject:(jam OR improvisation)",
-  Folk: "collection:etree AND subject:(folk OR bluegrass)",
-  Electronic: "collection:netlabels AND subject:(electronic OR techno OR house OR ambient)",
-  Classical: "collection:audio_music AND subject:(classical)",
+/**
+ * Each chip is a corner of the Archive worth arriving at, rather than a genre
+ * word thrown at the whole thing. A chip may list more than one query, run in
+ * order — the narrow, exactly-right one first, then what fills the page out.
+ *
+ * Every one of these names a collection, which is also what keeps the results
+ * honest. The Archive takes uploads from anyone, so a bare subject search for a
+ * modern genre surfaces bootlegged commercial albums at the top; `netlabels`,
+ * `etree` and `georgeblood` are artist-published, taper-approved and
+ * out-of-copyright respectively. The item's own licence tag can't do this job —
+ * whoever uploads picks it, and the bootlegs claim Creative Commons too.
+ */
+/**
+ * The netlabel scene includes a shock-noise corner that tags itself with the
+ * genres either side of it, and sorting by downloads puts it first — one such
+ * release led the Hyperpop chip with hardcore-porn track titles until this
+ * existed. Excluding its own tags is narrow enough to leave the rest of the
+ * underground alone, which is the point: this is not a profanity filter.
+ */
+const IA_NO_SHOCK = ' AND NOT subject:(shitcore OR lolinoise OR "internet noise" OR pornogrind OR porngrind OR gore OR sexcore)';
+
+const IA_BROWSE: Record<string, string[]> = {
+  "Live sets": ["collection:etree"],
+  "78s": ["collection:georgeblood"],
+  Jazz: ["collection:georgeblood AND subject:(jazz)"],
+  Blues: ["collection:georgeblood AND subject:(blues)"],
+  Swing: ["collection:georgeblood AND subject:(swing OR foxtrot)"],
+  Country: ["collection:georgeblood AND subject:(country OR hillbilly)"],
+  Latin: ["collection:georgeblood AND subject:(latin OR rumba OR mambo)"],
+  Rock: ["collection:etree AND subject:(rock)"],
+  Jam: ["collection:etree AND subject:(jam OR improvisation)"],
+  Folk: ["collection:etree AND subject:(folk OR bluegrass)"],
+  Hyperpop: [
+    // tagged hyperpop on a netlabel is a short list, so it leads and the
+    // neighbouring sounds follow rather than burying it
+    `collection:netlabels AND subject:(hyperpop OR glitchcore OR digicore OR bloxcore)${IA_NO_SHOCK}`,
+    `collection:netlabels AND subject:(breakcore OR nightcore OR "glitch pop" OR chiptune OR mashup)${IA_NO_SHOCK}`,
+  ],
+  Electronic: ["collection:netlabels AND subject:(electronic OR techno OR house OR ambient)"],
+  Classical: ["collection:audio_music AND subject:(classical)"],
 };
 
 export const archive: Source = {
@@ -318,8 +343,17 @@ export const archive: Source = {
     return iaTracks(docs, 6, 40);
   },
   async browse(genre) {
-    const q = IA_BROWSE[genre] ?? IA_BROWSE["Live sets"];
-    return iaTracks(await iaSearch(`${IA_BASE} AND ${q}`, 10, "downloads desc"), 4, 40);
+    const qs = IA_BROWSE[genre] ?? IA_BROWSE["Live sets"];
+    const pages = await Promise.all(qs.map((q) => iaSearch(`${IA_BASE} AND ${q}`, 10, "downloads desc").catch(() => [])));
+    const seen = new Set<string>();
+    const docs: IaDoc[] = [];
+    for (const d of pages.flat()) {
+      if (seen.has(d.identifier)) continue;
+      seen.add(d.identifier);
+      docs.push(d);
+      if (docs.length >= 12) break;
+    }
+    return iaTracks(docs, 4, 40);
   },
   async byArtist(name) {
     if (!name) return [];
