@@ -16,6 +16,7 @@
 import type { ThemeCtx } from "./themeTypes";
 import type { LiveState } from "./live";
 import { light } from "./light";
+import { THEME_DROPS } from "./themeDrops";
 
 export interface LayerCtx extends ThemeCtx {
   /** 0..1 — how present this layer is right now, from musical energy */
@@ -866,12 +867,17 @@ export function drawDropLayers(x: ThemeCtx, amt: number, maxLayers = MAX_SLOTS):
   // slowly enough that more layers still reads as more.
   const share = 0.6 + 0.4 / Math.sqrt(n);
 
+  // A theme that has claimed its own drop effects draws those instead of
+  // picking from the shared library — additions that only make sense inside its
+  // own world beat a fitting selection from a common pool.
+  const own = THEME_DROPS[L.visTheme];
+
   c.save();
   c.globalCompositeOperation = "lighter";
   for (let i = 0; i < n; i++) {
     const a = L.dropAmts[i] * amt * share;
     if (a < 0.02) continue;
-    const draw = LAYERS[names[i]];
+    const draw = own ?? LAYERS[names[i]];
     if (!draw) continue;
     c.save();
     draw({ ...x, amt: a, slot: i });

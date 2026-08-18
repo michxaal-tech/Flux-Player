@@ -43,7 +43,10 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
   rays, rising embers, luminous constellations, falling light, tumbling shards
   and more — and it *stays*, swelling in over a couple of beats as it arrives. When the track calms the
   newest layers thin out; when it lifts they come back, so a song builds through
-  its length instead of flashing at each drop. All 85 themes have their own set of 7 from a
+  its length instead of flashing at each drop. Four themes — RING, CITY, TUNNEL, THUNDER — have
+  effects written only for them (window lights and a searchlight for the
+  skyline, rungs and a gate ring for the corridor, forked bolts and sheet
+  lightning for the storm); the rest draw from a
   library of 28 — every set unique, 25 different opening layers, checked by
   `node scripts/layers-check.mjs` since a missing or misspelt entry fails
   silently rather than visibly. Drawn in the theme's own space (so a 3D projection carries them onto
