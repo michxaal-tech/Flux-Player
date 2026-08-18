@@ -66,7 +66,10 @@ export const LAYERS: Record<string, LayerDraw> = {
       const ta = vt * 0.012 * (i % 2 ? 1 : -1) + i * 2.1;
       const px = cx + Math.cos(ta + a) * rr;
       const py = cy + Math.sin(ta + a) * rr * 0.4;
-      light(c, C1(1, 78), px, py, R * (0.03 + amt * 0.05) * (1 + beatE * 0.5), amt * 0.85);
+      // small and dim: this reads as a light running along the ring. Sized up
+      // it stops belonging to the ring and becomes a bright orb hanging in the
+      // frame for no reason anyone watching can infer.
+      light(c, C1(1, 78), px, py, R * (0.012 + amt * 0.016) * (1 + beatE * 0.4), amt * 0.3);
     }
   },
 
@@ -85,7 +88,7 @@ export const LAYERS: Record<string, LayerDraw> = {
       const py = p.y * h;
       const tw = 0.45 + 0.55 * Math.sin(vt * 0.06 + p.ph * 3);
       // bigger ones burn cooler and further back, which gives the drift depth
-      light(c, p.sz > 1.4 ? warm : hot, px, py, R * 0.012 * p.sz * (1 + amt), amt * (0.3 + trebV * 0.3 + beatE * 0.2) * tw);
+      light(c, p.sz > 1.4 ? warm : hot, px, py, R * 0.006 * p.sz * (1 + amt), amt * (0.16 + trebV * 0.16 + beatE * 0.12) * tw);
     }
   },
 
@@ -186,7 +189,7 @@ export const LAYERS: Record<string, LayerDraw> = {
       const k = 0.4 + p.d;
       const px = (p.x + Math.sin(vt * 0.006 * k + p.ph) * 0.04 * k) * w;
       const py = (p.y + Math.cos(vt * 0.005 * k + p.ph * 1.7) * 0.04 * k) * h;
-      light(c, p.d > 0.55 ? near : far, px, py, R * 0.008 * p.sz * (0.5 + p.d) * (1 + amt), amt * (0.18 + p.d * 0.32));
+      light(c, p.d > 0.55 ? near : far, px, py, R * 0.005 * p.sz * (0.5 + p.d) * (1 + amt), amt * (0.1 + p.d * 0.16));
     }
   },
 
@@ -202,8 +205,6 @@ export const LAYERS: Record<string, LayerDraw> = {
     g.addColorStop(1, "transparent");
     c.fillStyle = g;
     c.fillRect(0, cy - band, w, band * 2);
-    // the light source sitting on it
-    light(c, C2(1, 70), cx, cy, R * (0.2 + bassV * 0.1 + beatE * 0.05), amt * 0.4);
   },
 
   /** concentric contours breathing outward */
@@ -300,7 +301,7 @@ export const LAYERS: Record<string, LayerDraw> = {
       }
     }
     const node = C1(1, 80);
-    for (const p of pts) light(c, node, p[0], p[1], R * 0.022 * (1 + amt), amt * 0.5);
+    for (const p of pts) light(c, node, p[0], p[1], R * 0.01 * (1 + amt), amt * 0.22);
   },
 
   /** wide bands of light sweeping the frame */
@@ -353,7 +354,6 @@ export const LAYERS: Record<string, LayerDraw> = {
     g.addColorStop(1, "transparent");
     c.fillStyle = g;
     c.fillRect(cx - wd, 0, wd * 2, h);
-    light(c, C1(1, 82), cx, cy, R * (0.14 + bassV * 0.08), amt * 0.42);
   },
 
   /** lit shards orbiting in a shallow ellipse */
@@ -371,7 +371,6 @@ export const LAYERS: Record<string, LayerDraw> = {
       const sz = R * 0.026 * p.sz * (0.6 + amt) * (1 + beatE * 0.18);
       // the ones on the near side of the orbit are bigger and brighter
       const near = 0.5 + 0.5 * Math.sin(p.a);
-      light(c, C1(1, 76), px, py, sz * 1.8, amt * 0.3 * near);
       c.save();
       c.translate(px, py);
       c.rotate(p.rot + vt * 0.002);
@@ -413,7 +412,7 @@ export const LAYERS: Record<string, LayerDraw> = {
       // a plume spreads as it rises, so height drives size
       const rise = 1 - p.y;
       const px = (p.x + Math.sin(vt * 0.004 + p.ph) * 0.05) * w;
-      light(c, CMix(rise, 1, 60), px, p.y * h, R * 0.07 * p.sz * (0.4 + rise) * (0.5 + amt), amt * 0.16 * (1 - rise * 0.5));
+      light(c, CMix(rise, 1, 56), px, p.y * h, R * 0.06 * p.sz * (0.4 + rise) * (0.5 + amt), amt * 0.075 * (1 - rise * 0.5));
     }
     void C2;
   },
@@ -507,7 +506,7 @@ export const LAYERS: Record<string, LayerDraw> = {
         c.lineTo(px, py);
       }
       c.stroke();
-      light(c, CMix(0.4, 1, 80), px, py, R * 0.03 * p.life, amt * p.life * 0.6);
+      light(c, CMix(0.4, 1, 80), px, py, R * 0.014 * p.life, amt * p.life * 0.3);
     }
   },
 
@@ -856,10 +855,10 @@ export function stepDropLayers(L: LiveState, beatStep: number, maxSlots: number)
  * Draws every unlocked layer over the theme, in the theme's own coordinate
  * space (so in 3D they are part of the scene and get projected with it).
  */
-export function drawDropLayers(x: ThemeCtx, amt: number): void {
+export function drawDropLayers(x: ThemeCtx, amt: number, maxLayers = MAX_SLOTS): void {
   const { L, c } = x;
   const names = layersFor(L.visTheme);
-  const n = Math.min(L.dropSlots, L.dropAmts.length, names.length);
+  const n = Math.min(L.dropSlots, L.dropAmts.length, names.length, maxLayers);
   if (n < 1) return;
 
   // These stack additively on an already-lit frame, so the deeper the stack the

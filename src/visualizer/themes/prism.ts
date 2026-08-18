@@ -51,6 +51,18 @@ function getRay(i: number, color: string, key: string): HTMLCanvasElement {
   g.lineTo(0, RH * 0.5 + 7);
   g.closePath();
   g.fill();
+  // Fade the inner end *without narrowing it*. Every ray of every beam starts
+  // at the same place, so a wedge that is full brightness where it leaves the
+  // crystal means dozens of them summing on one spot — that pile-up, not the
+  // core glow, is what turned the middle into a white disc. The width has to
+  // stay: a needle tip is what left a black notch against the flat edges.
+  g.globalCompositeOperation = "destination-out";
+  const fade = g.createLinearGradient(0, 0, RW * 0.34, 0);
+  fade.addColorStop(0, "rgba(0,0,0,0.82)");
+  fade.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = fade;
+  g.fillRect(0, 0, RW * 0.34, RH);
+  g.globalCompositeOperation = "source-over";
   raySprites[i] = cv;
   rayKeys[i] = key;
   return cv;
@@ -170,7 +182,7 @@ export const PRISM: ThemeDraw = ({
   // additive paint over a slow trail buffer clips to white if it is not kept
   // well under the per-frame trail fade.
   const baseL = Math.round((52 + E * 12 + beatE * 8) / 6) * 6;   // <= 72
-  const baseA = Math.round((0.17 + E * 0.11) * 20) / 20;
+  const baseA = Math.round((0.11 + E * 0.07) * 20) / 20;
   const key = baseL + ":" + baseA + ":" + C1(1, 50) + C2(1, 50);
   for (let k = 0; k < BANDS; k++) {
     getRay(k, CMix(k / (BANDS - 1), baseA, baseL), key + k);
@@ -192,7 +204,7 @@ export const PRISM: ThemeDraw = ({
       const strobe = 1 - shatter * 0.55 * (0.5 + 0.5 * Math.sin(vt * 0.55 + k * 1.7));
       const len = rayLen * (0.55 + f * 0.3) * (1 + beatE * 0.25 + B * 0.7);
       const halfW = R * (0.035 + E * 0.05) * (1 + beatE * 0.5 + B * 0.8);
-      c.globalAlpha = Math.min(0.44, b.a * (0.24 + trebV * 0.14 + beatE * 0.2 + B * 0.3) * strobe);
+      c.globalAlpha = Math.min(0.3, b.a * (0.16 + trebV * 0.1 + beatE * 0.14 + B * 0.2) * strobe);
       c.save();
       // originate *inside* the crystal: the triangle's flat edges sit at
       // 0.5·pr while its corners reach pr, so any origin outside that leaves a
@@ -210,12 +222,16 @@ export const PRISM: ThemeDraw = ({
   // than a seam. Without it the flat edges of the triangle sit against bare
   // background wherever the fan happens not to point.
   {
-    const gr = pr * (1.7 + beatE * 0.3 + B * 1.6);
+    const gr = pr * (1.7 + beatE * 0.3 + B * 0.9);
     const cg2 = c.createRadialGradient(px, py, 0, px, py, gr);
     // kept under saturation on purpose: additive over the ray fan, a hotter
     // core clips to flat white and the crystal loses its colour entirely
-    cg2.addColorStop(0, C1(0.2 + S.flash * 0.12 + B * 0.2, 64));
-    cg2.addColorStop(0.35, CMix(0.5, 0.12 + B * 0.16, 56));
+    // Alphas kept low because this is the one part of the theme that never
+    // moves, and a stationary element is multiplied by the trail — about 4.7x
+    // at the default TRAILS. What reads as reasonable in a single frame is a
+    // blinding white core a second later.
+    cg2.addColorStop(0, C1(0.085 + S.flash * 0.07 + B * 0.08, 62));
+    cg2.addColorStop(0.35, CMix(0.5, 0.05 + B * 0.07, 54));
     cg2.addColorStop(1, "transparent");
     c.fillStyle = cg2;
     c.beginPath();
