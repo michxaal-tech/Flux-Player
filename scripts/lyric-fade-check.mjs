@@ -18,12 +18,28 @@ import { chromium } from "playwright";
 
 const PORT = 4199;
 const BASE = `http://localhost:${PORT}`;
-// Styles whose whole point is keeping earlier lines on screen — STACK, SCATTER,
-// ECHO — are excluded: for them, ink that never reaches zero is the design.
-const STYLES = (process.env.STYLES || "DRIFT,POP,KARAOKE,SLIDE").split(",");
+// Every style, because "recheck them all" is the only way to find the ones that
+// take their own path through the renderer — WAVE and KARAOKE bypass the shared
+// block renderer, SCATTER/STACK/CASCADE draw their own history, and each of
+// those was broken in its own way while the shared path measured fine.
+const ALL = [
+  "DRIFT", "SCATTER", "STACK", "POP", "RISE", "SPIN", "FLIP", "SLIDE",
+  "FOCUS", "PULSE", "ORBIT", "CASCADE", "TYPE", "KARAOKE",
+  "WAVE", "BOUNCE", "GLITCH", "ECHO", "SWEEP", "SPOTLIGHT",
+];
+const STYLES = (process.env.STYLES || ALL.join(",")).split(",");
+// styles that keep earlier lines on screen on purpose: ink that never reaches
+// zero is the design there, not a stuck line
+const PERSIST = new Set(["SCATTER", "STACK", "ECHO"]);
+// centred styles use the shorter crossfade (see CENTRED_GHOST_SECS)
+const CENTRED = new Set(["WAVE", "KARAOKE"]);
 
 function makeTone(path) {
-  const rate = 22050, secs = 30, n = rate * secs;
+  // Long enough to outlast the whole walk. At 30s the track ran out partway
+  // through and every style after that was measured against stopped playback,
+  // which reads as "the line never faded" for reasons that have nothing to do
+  // with the renderer.
+  const rate = 22050, secs = 400, n = rate * secs;
   const b = Buffer.alloc(44 + n * 2);
   b.write("RIFF", 0); b.writeUInt32LE(36 + n * 2, 4); b.write("WAVE", 8); b.write("fmt ", 12);
   b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
@@ -40,6 +56,33 @@ function makeTone(path) {
 
 const tone = join(mkdtempSync(join(tmpdir(), "lyrfade-")), "tone.wav");
 makeTone(tone);
+
+// A line arriving on top of the one still fading is a layout question, not a
+// timing one, so it is checked here without a browser: consecutive units must
+// land far apart. The scatter this replaced walked in small steps, which is
+// what put two lines in the same place badly enough to be unreadable.
+{
+  const { execFileSync } = await import("node:child_process");
+  const { mkdtempSync } = await import("node:fs");
+  const tmp = mkdtempSync(join(tmpdir(), "pos-"));
+  execFileSync("node_modules/.bin/esbuild", [
+    "src/visualizer/lyricRenderer.ts", "--bundle", "--format=esm", `--outfile=${join(tmp, "lr.mjs")}`,
+  ], { stdio: "pipe" });
+  const { zonePos } = await import(join(tmp, "lr.mjs"));
+  const W = 1000, H = 800;
+  let worst = Infinity, worstAt = 0;
+  for (let u = 0; u < 200; u++) {
+    const [x1, y1] = zonePos(u, W, H);
+    const [x2, y2] = zonePos(u + 1, W, H);
+    const d = Math.hypot(x2 - x1, y2 - y1);
+    if (d < worst) { worst = d; worstAt = u; }
+  }
+  console.log("\nlayout");
+  // a lyric block is roughly a fifth of the width tall and half of it wide, so
+  // neighbours closer than a quarter of the screen can genuinely collide
+  console.log(`  ${worst >= W * 0.25 ? "✓" : "✗"} consecutive lines land apart — closest pair ${Math.round(worst)}px at unit ${worstAt}, need ${Math.round(W * 0.25)}`);
+  if (worst < W * 0.25) process.exitCode = 1;
+}
 
 const preview = spawn("npx", ["vite", "preview", "--port", String(PORT)], { stdio: "ignore" });
 await new Promise((r) => setTimeout(r, 2500));
@@ -128,7 +171,7 @@ for (const style of STYLES) {
   // sampled every ~140ms, a 0.5s fade *must* lose about half its ink between
   // consecutive samples, and that is the curve rather than a step. Expectations
   // are derived from the style's own fade length instead of one flat number.
-  const fadeSecs = ({ WAVE: 0.5, KARAOKE: 0.5 })[style] ?? 1.1;
+  const fadeSecs = CENTRED.has(style) ? 0.5 : 1.1;
   const dt = 0.14;
   const expectedLoss = 1 - Math.pow(Math.max(0, (fadeSecs - dt) / fadeSecs), 1.6);
   const allowedLoss = Math.min(0.85, expectedLoss * 1.8);
@@ -164,6 +207,9 @@ for (const style of STYLES) {
     console.log("  – it starts dimming immediately — the fade was over before a second sample landed");
   } else {
     const early = at.ink / first.ink;
+    if (PERSIST.has(style)) {
+      console.log(`  – it starts dimming immediately — not asserted: this style settles earlier lines into a stack rather than fading them out (${(early * 100).toFixed(0)}%)`);
+    } else
     check("it starts dimming immediately", early <= 0.8,
       `${(early * 100).toFixed(0)}% of its opacity still there ${at.wall - first.wall}ms in`);
   }
@@ -182,7 +228,11 @@ for (const style of STYLES) {
   const dy = Math.max(...cy) - Math.min(...cy);
   check("it holds its position and size", dx <= 4 && dy <= 4, `centre moved ${dx.toFixed(1)}x${dy.toFixed(1)}px`);
 
-  check("it fades all the way out", series[series.length - 1].ink === 0, `ends at ${series[series.length - 1].ink}`);
+  if (PERSIST.has(style)) {
+    console.log("  – it fades all the way out — not asserted: this style keeps earlier lines up by design");
+  } else {
+    check("it fades all the way out", series[series.length - 1].ink === 0, `ends at ${series[series.length - 1].ink}`);
+  }
 }
 
 await browser.close();

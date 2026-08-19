@@ -67,10 +67,21 @@ const easeOut = (x: number) => {
   return 1 - Math.pow(1 - t, 3);
 };
 
-/** split a line into two halves when it has 5+ words */
+/**
+ * Split a line into two halves when it has 5+ words, or when it is long enough
+ * to wrap however few words it has.
+ *
+ * The word count alone left a gap: four long words wrap to two or three rows
+ * and were shown as one unit, so that line held the screen for its whole span
+ * while its neighbours were split into halves showing for half as long. That is
+ * the "sometimes it lingers, only once in a few" — and it correlated with the
+ * tall blocks, because those are exactly the lines the word count missed.
+ */
+const SPLIT_CHARS = 26;
 const splitTxt = (t: string): string[] => {
   const ws = t.split(" ").filter(Boolean);
-  if (ws.length < 5) return [t];
+  if (ws.length < 2) return [t];
+  if (ws.length < 5 && t.length <= SPLIT_CHARS) return [t];
   const m = Math.ceil(ws.length / 2);
   return [ws.slice(0, m).join(" "), ws.slice(m).join(" ")];
 };
@@ -96,13 +107,6 @@ function halved(cur: CurrentLyric): CurrentLyric {
   };
 }
 
-/** golden-ratio scatter: varied but evenly balanced positions, per unit index */
-const posFor = (i: number, w: number, h: number): [number, number] => {
-  const fx = (i * 0.618033988 + 0.31) % 1;
-  const fy = (i * 0.381966011 + 0.12) % 1;
-  return [w * (0.28 + fx * 0.44), h * (0.22 + fy * 0.42)];
-};
-
 /**
  * Position for a unit that is guaranteed to be far from the previous unit's.
  * The golden-ratio scatter above walks in small steps, so consecutive chunks
@@ -110,7 +114,7 @@ const posFor = (i: number, w: number, h: number): [number, number] => {
  * stride co-prime to 9, so successive units jump across the frame, with
  * deterministic jitter inside each zone so it never looks like a grid.
  */
-const zonePos = (unit: number, w: number, h: number): [number, number] => {
+export const zonePos = (unit: number, w: number, h: number): [number, number] => {
   const z = ((unit % 9) + 9) % 9;
   const slot = (z * 5) % 9; // 0,5,1,6,2,7,3,8,4 — neighbours land far apart
   const col = slot % 3;
@@ -121,6 +125,17 @@ const zonePos = (unit: number, w: number, h: number): [number, number] => {
   const fy = 0.44 + (row - 1) * 0.22 + jy;
   return [w * Math.min(0.82, Math.max(0.18, fx)), h * Math.min(0.76, Math.max(0.2, fy))];
 };
+
+/**
+ * Where a lyric unit sits on screen.
+ *
+ * This used to be a golden-ratio scatter, which walks in small steps — so
+ * consecutive units landed almost on top of each other and a line could arrive
+ * over the one still fading, illegibly. `zonePos` below was written to fix
+ * exactly that and then only ever used by one style, while every other one kept
+ * the scatter. They all use the zone walk now.
+ */
+const posFor = (i: number, w: number, h: number): [number, number] => zonePos(i, w, h);
 
 /** deterministic gentle tilt per unit, ±0.09 rad, never harsh */
 const angFor = (i: number): number => (((i * 2654435761) % 97) / 97 - 0.5) * 0.18;
@@ -234,10 +249,17 @@ let letterCtx: {
  * the live one.
  */
 let lastBlock: (BlockOpts & { text: string }) | null = null;
+/** brightest block drawn so far this frame; becomes `lastBlock` at the next one */
+let frameBest: (BlockOpts & { text: string }) | null = null;
 
 function drawBlock(c: CanvasRenderingContext2D, text: string, o: BlockOpts, w: number): void {
   if (o.alpha <= 0.01 || !text) return;
-  lastBlock = { ...o, text };
+  // The *brightest* block of the frame, not the last one. Several styles draw
+  // decoration after the line itself — GLITCH lays down RGB-split copies, ECHO
+  // a trail — so "last drawn" handed the fade a faint offset layer to replay
+  // instead of the line, which is why those two neither dimmed from the right
+  // level nor held still.
+  if (!frameBest || o.alpha > frameBest.alpha) frameBest = { ...o, text };
   const m = blockMetrics(c, text, o, w);
   c.save();
   c.translate(m.x, o.y);
@@ -408,6 +430,9 @@ const ghostAlpha = (age: number): number => Math.pow(1 - Math.min(1, Math.max(0,
  */
 const GHOST_MAX = 1;
 
+/** how long a line may hold the screen before it fades on its own, in seconds */
+const MAX_DWELL = 5.5;
+
 /**
  * Styles that draw their outgoing line themselves, and are skipped by the
  * shared fade below.
@@ -432,6 +457,9 @@ const hash01 = (n: number): number => {
 };
 
 export function drawLyricOverlay(x: LyricCtx): void {
+  // hand the previous frame's brightest block over before this frame draws
+  lastBlock = frameBest;
+  frameBest = null;
   const { c, w, h, time, beatE, vt, TK, C1, C2, CMix, L } = x;
   const lines = L.lyricLines;
   if (!lines) return;
@@ -573,13 +601,29 @@ export function drawLyricOverlay(x: LyricCtx): void {
           glowColor: CMix((unit % 9) / 9),
         }, w);
       };
-      // The outgoing chunk holds most of its brightness while the next one is
-      // already arriving, so there is a real overlap rather than a handoff.
-      const outAlpha = local < 0.42 ? 0.8 : 0.8 * (1 - smooth((local - 0.42) / 0.44));
+      // The outgoing chunk overlaps the incoming one, but it starts at full and
+      // loses opacity from the first frame. Holding flat at 0.8 for the first
+      // 42% and then dropping is the shape that reads as popping rather than
+      // fading, and it stepped down to 0.8 at the handover on top of that.
+      const outAlpha = Math.pow(1 - local, 1.6);
       drawChunk(active - 1, outAlpha, 1.0, -smooth(Math.max(0, local - 0.42) / 0.6) * 14);
       const appear2 = smooth(local / 0.3);
       const out2 = local > 0.86 ? smooth((local - 0.86) / 0.14) : 0;
-      drawChunk(active, appear2 * (1 - out2 * 0.5), 0.84 + appear2 * 0.16 + beatE * 0.05, (1 - appear2) * 12);
+      drawChunk(active, appear2 * (1 - out2 * 0.5), 0.84 + appear2 * 0.16, (1 - appear2) * 12);
+    }
+    // Chunks belong to the current line, so at a line boundary every one of
+    // them disappeared at once and the screen went nearly empty before the next
+    // line's first chunk faded in — measured as an 84% drop in a single step.
+    // The unit that just left fades out across that gap instead.
+    for (const g of G.items) {
+      const ga = ghostAlpha(time - g.t0);
+      if (ga <= 0.02) continue;
+      const [gx, gy] = zonePos(g.unit, w, h);
+      drawBlock(c, g.text, {
+        x: gx, y: gy, alpha: 0.9 * ga, scale: 1,
+        rot: angFor(g.unit), maxW: w * 0.62, size,
+        glowAmt: 16 * ga, glowColor: CMix((g.unit % 9) / 9), fxFrac: 1,
+      }, w);
     }
     c.restore();
     return;
@@ -588,21 +632,22 @@ export function drawLyricOverlay(x: LyricCtx): void {
   if (style === "SCATTER") {
     // halves pop in one at a time at scattered spots with gentle tilts and
     // stay up as a small fading collage — newest brightest
-    const older = [raw.index - 1, raw.index - 2];
-    older.forEach((idx, k) => {
-      if (idx < 0 || !lines[idx]) return;
-      const text = lastHalf(lines[idx].text);
-      const unit = idx * 2 + 1;
-      const [sx, sy] = posFor(unit, w, h);
-      const fade = Math.max(0, 0.5 - k * 0.26 - raw.age * 0.1);
-      if (fade <= 0.02) return;
-      drawBlock(c, text, {
-        x: sx, y: sy - (k + 1) * 8,
-        alpha: fade,
-        scale: 0.82 - k * 0.08,
-        rot: angFor(unit),
-        maxW: w * 0.44, size: size * 0.8,
-        glowAmt: 6, glowColor: CMix((idx % 9) / 9),
+    // The collage is built from the units that have actually left, not from the
+    // previous *lines*. Long lines are shown as two halves, so a line-indexed
+    // history pointed at the wrong unit: it redrew the outgoing text at another
+    // unit's scatter position and at 80% size, which is a teleport, not a fade.
+    // G.items carries the unit that just went, so it can be drawn where it sat.
+    G.items.forEach((g) => {
+      const ga = ghostAlpha(time - g.t0);
+      if (ga <= 0.02) return;
+      const [sx, sy] = posFor(g.unit, w, h);
+      drawBlock(c, g.text, {
+        x: sx, y: sy,
+        alpha: 0.95 * ga,
+        scale: 1,
+        rot: angFor(g.unit),
+        maxW: w * 0.5, size,
+        glowAmt: 14 * ga, glowColor: CMix((g.unit % 9) / 9),
       }, w);
     });
     if (cur.text) {
@@ -611,7 +656,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
       drawBlock(c, cur.text, {
         x: sx, y: sy + (1 - pop) * 26,
         alpha: 0.95 * pop,
-        scale: 0.86 + pop * 0.14 + beatE * 0.025,
+        scale: 0.86 + pop * 0.14,
         rot: angFor(cur.index) * pop,
         maxW: w * 0.5, size,
         glowAmt: 16 + beatE * 22,
@@ -629,15 +674,18 @@ export function drawLyricOverlay(x: LyricCtx): void {
     const shift = (1 - enter) * space;
     const entries: { text: string; slot: number; alpha: number; hot: boolean }[] = [];
     if (cur.text) entries.push({ text: cur.text, slot: 0, alpha: enter, hot: true });
-    if (cur.prev) entries.push({ text: cur.prev, slot: 1, alpha: 0.45, hot: false });
+    // The displaced lines dim on the same ramp that moves them up the stack.
+    // Fixed 0.45 and 0.22 meant the line you were reading dropped straight from
+    // full to less than half the moment the next one appeared.
+    if (cur.prev) entries.push({ text: cur.prev, slot: 1, alpha: 1 - enter * 0.55, hot: false });
     const older = lines[raw.index - 1];
-    if (older && cur.index % 2 === 0) entries.push({ text: lastHalf(older.text), slot: 2, alpha: 0.22, hot: false });
+    if (older && cur.index % 2 === 0) entries.push({ text: lastHalf(older.text), slot: 2, alpha: 0.45 - enter * 0.23, hot: false });
     for (const e of entries) {
       drawBlock(c, e.text, {
         x: w / 2,
         y: h * 0.58 - e.slot * space + shift,
         alpha: e.alpha,
-        scale: e.hot ? 1 + beatE * 0.02 : 0.86,
+        scale: e.hot ? 1 : 0.86,
         maxW: w * 0.62,
         size: e.hot ? size : size * 0.85,
         glowAmt: e.hot ? 16 + beatE * 20 : 4,
@@ -658,7 +706,10 @@ export function drawLyricOverlay(x: LyricCtx): void {
   const waveLine = (text: string, a: number, scl: number, swell: number) => {
     if (!text || a <= 0.02) return;
     const m = blockMetrics(c, text, { x: w / 2, scale: scl, maxW: w * 0.62, size }, w);
-    const amp = m.sizePx * (0.1 + beatE * 0.4) * swell;
+    // A fixed swell. It used to be `0.1 + beatE * 0.4`, so the wave grew five
+    // times taller on every beat — that jump, not the travel speed, is most of
+    // what made it look frantic.
+    const amp = m.sizePx * 0.13 * swell;
     // colour ramp built once per line, then indexed per character (no
     // per-character string building in the inner loop)
     const last = WAVE_PAL.length - 1;
@@ -680,7 +731,8 @@ export function drawLyricOverlay(x: LyricCtx): void {
       let px = -c.measureText(row).width / 2;
       for (const ch of row) {
         const cw = c.measureText(ch).width;
-        const s2 = Math.sin(vt * 0.08 - ci * 0.5);
+        // slow enough to read a word while it moves; it used to be 0.08
+        const s2 = Math.sin(vt * 0.028 - ci * 0.5);
         c.fillStyle = WAVE_PAL[Math.round((s2 + 1) * 0.5 * last)];
         c.fillText(ch, px + cw / 2, ry + s2 * amp);
         px += cw;
@@ -743,14 +795,18 @@ export function drawLyricOverlay(x: LyricCtx): void {
   // The whole fade-out now belongs to the ghost stage, which runs on its own
   // clock and is not cut short by the next line arriving. So the live line only
   // dips slightly at the end and hands over near full brightness.
-  const alpha = appear * (1 - leave * 0.12);
+  // A line's span is the gap to the next one, so an instrumental break left the
+  // last words hanging for the length of the break. After MAX_DWELL it fades
+  // out by itself and the screen is clear until the next line.
+  const overstay = smooth((cur.age - MAX_DWELL) / 0.9);
+  const alpha = appear * (1 - leave * 0.12) * (1 - overstay);
 
   if (style === "DRIFT") {
     drawBlock(c, cur.text, {
       x: lx + Math.sin(vt * 0.008 + cur.index) * 8,
       y: ly + (1 - appear) * 24 - cur.age * 9 - leave * 14,
       alpha,
-      scale: 0.92 + appear * 0.08 + beatE * 0.025,
+      scale: 0.92 + appear * 0.08,
       maxW: w * 0.52, size,
       glowAmt: 18 + beatE * 22, glowColor: C1(),
     }, w);
@@ -759,7 +815,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
     drawBlock(c, cur.text, {
       x: lx, y: ly,
       alpha,
-      scale: (0.6 + spring * 0.4) * (1 + leave * 0.35) + beatE * 0.04,
+      scale: (0.6 + spring * 0.4) * (1 + leave * 0.35),
       rot: (1 - appear) * 0.06 * (cur.index % 2 ? 1 : -1),
       maxW: w * 0.52, size,
       glowAmt: 16 + beatE * 26, glowColor: CMix((cur.index % 8) / 8),
@@ -770,7 +826,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
       x: lx,
       y: h * 0.85 + (ly - h * 0.85) * settle - leave * h * 0.28,
       alpha: Math.min(1, cur.age * 3) * (1 - leave),
-      scale: 0.88 + settle * 0.12 + beatE * 0.02,
+      scale: 0.88 + settle * 0.12,
       rot: angFor(cur.index) * 0.5 * settle,
       maxW: w * 0.52, size,
       glowAmt: 16 + beatE * 20, glowColor: C1(),
@@ -780,7 +836,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
     drawBlock(c, cur.text, {
       x: lx, y: ly,
       alpha,
-      scale: (0.6 + inn * 0.4) * (1 - leave * 0.25) + beatE * 0.03,
+      scale: (0.6 + inn * 0.4) * (1 - leave * 0.25),
       rot: (1 - inn) * -0.4 + angFor(cur.index) * inn + leave * 0.45,
       maxW: w * 0.5, size,
       glowAmt: 16 + beatE * 22, glowColor: CMix((cur.index % 7) / 7),
@@ -792,7 +848,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
     drawBlock(c, cur.text, {
       x: lx, y: ly,
       alpha: Math.min(1, cur.age * 4) * (1 - leave * 0.7),
-      scale: 0.95 + beatE * 0.03,
+      scale: 0.95,
       scaleY: Math.max(0.02, sy),
       rot: angFor(cur.index) * 0.4,
       maxW: w * 0.52, size,
@@ -806,7 +862,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
       x: lx + dir * (1 - inn) * w * 0.4 - dir * leave * w * 0.35,
       y: ly,
       alpha: Math.min(1, cur.age * 3.5) * (1 - leave),
-      scale: 0.94 + inn * 0.06 + beatE * 0.02,
+      scale: 0.94 + inn * 0.06,
       rot: dir * (1 - inn) * 0.05,
       maxW: w * 0.52, size,
       glowAmt: 16 + beatE * 20, glowColor: CMix((cur.index % 6) / 6),
@@ -819,7 +875,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
       drawBlock(c, cur.text, {
         x: lx + dx2, y: ly,
         alpha: alpha * (ga === 1 ? 0.55 + sharp * 0.45 : (1 - sharp) * ga),
-        scale: 1.06 - sharp * 0.06 + beatE * 0.02,
+        scale: 1.06 - sharp * 0.06,
         maxW: w * 0.52, size,
         glowAmt: 8 + blur, glowColor: C1(),
       }, w);
@@ -840,7 +896,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
       x: w / 2 + Math.cos(ang) * rad * 1.25,
       y: h * 0.45 + Math.sin(ang) * rad * 0.75 + (1 - appear) * 18,
       alpha,
-      scale: 0.9 + appear * 0.1 + beatE * 0.03,
+      scale: 0.9 + appear * 0.1,
       rot: Math.sin(ang) * 0.05,
       maxW: w * 0.44, size: size * 0.92,
       glowAmt: 16 + beatE * 20, glowColor: C1(),
@@ -853,7 +909,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
     drawBlock(c, text + (cursorOn ? "▌" : shown < chars.length ? " " : ""), {
       x: w / 2, y: h * 0.45,
       alpha: 1 - leave,
-      scale: 1 + beatE * 0.02,
+      scale: 1,
       maxW: w * 0.66, size,
       glowAmt: 14 + beatE * 16, glowColor: C1(),
     }, w);
@@ -883,7 +939,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
     const jy = (hash01(tick + 91) - 0.5) * size * 0.26 * hit;
     const off = size * (0.05 + hit * 0.45);
     const ga = alpha * (0.16 + hit * 0.5);
-    const split = { y: gy, scale: 0.98 + beatE * 0.03, maxW: w * 0.6, size, glowAmt: 0, alpha };
+    const split = { y: gy, scale: 0.98, maxW: w * 0.6, size, glowAmt: 0, alpha };
     c.globalCompositeOperation = "lighter";
     drawBlock(c, cur.text, { ...split, x: w / 2 - off + jx, color: CMix(0, ga, 58), glowColor: C1() }, w);
     drawBlock(c, cur.text, { ...split, x: w / 2 + off - jx, color: CMix(1, ga, 58), glowColor: C2() }, w);
@@ -891,7 +947,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
     drawBlock(c, cur.text, {
       x: w / 2 + jx * 0.25, y: gy + jy,
       alpha,
-      scale: 0.98 + beatE * 0.03,
+      scale: 0.98,
       maxW: w * 0.6, size,
       glowAmt: 12 + hit * 26, glowColor: C1(),
     }, w);
@@ -925,7 +981,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
         x: lx + Math.sin(tt * 3 + cur.index) * w * 0.05 + dir * e2 * w * 0.12 + back * k * w * 0.016,
         y: ly + Math.cos(tt * 1.35 + cur.index) * h * 0.02 + e2 * 16 + k * 6,
         alpha: fade,
-        scale: (0.95 + beatE * 0.02) * (1 - k * 0.035),
+        scale: (0.95) * (1 - k * 0.035),
         maxW: w * 0.52, size,
         color: k === 0 ? undefined : CMix(k / 3, fade, 62),
         glowAmt: k === 0 ? 20 + beatE * 22 : 0,
@@ -934,7 +990,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
     }
   } else if (style === "SWEEP") {
     // a bright band of light travels across the line, lighting it as it goes
-    const scl = 0.98 + appear * 0.02 + beatE * 0.03;
+    const scl = 0.98 + appear * 0.02;
     const base = { x: w / 2, y: h * 0.45, scale: scl, maxW: w * 0.62, size, alpha };
     const m = blockMetrics(c, cur.text, base, w);
     const band = Math.max(24, m.sizePx * 1.1);
@@ -957,7 +1013,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
     c.restore();
   } else if (style === "SPOTLIGHT") {
     // a soft pool of light walks the rows, revealing the words it lands on
-    const scl = 0.98 + appear * 0.02 + beatE * 0.02;
+    const scl = 0.98 + appear * 0.02;
     const cy2 = h * 0.45;
     const base = { x: w / 2, y: cy2, scale: scl, maxW: w * 0.62, size, alpha };
     const m = blockMetrics(c, cur.text, base, w);
