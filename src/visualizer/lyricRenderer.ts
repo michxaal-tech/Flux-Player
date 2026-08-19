@@ -1,9 +1,18 @@
-// Draws synced lyrics over any visualizer theme as fluid, floating text.
-// Lines are split into two sequential halves (when longer than 4 words), so
-// what's on screen is short and large; long halves still wrap to ≤3 rows and
-// are never shrunk into a tiny strip.
+// Draws synced lyrics over any visualizer theme.
+//
+// One path for every style. A style (see lyricStyles.ts) contributes only its
+// motion; layout, the crossfade in and out, the dwell cap and the letter effects
+// all live here, so every style behaves identically at the seams. That is the
+// point of the rewrite: the twenty hand-written branches this replaced each had
+// their own position, their own entry ramp and their own handover, which meant
+// twenty different ways for a line to jump, collide or vanish — and they did.
+//
+// Lines are split into two sequential halves when they are long, so what's on
+// screen is short and large; halves still wrap to ≤3 rows and are never shrunk
+// into a tiny strip.
 import type { LiveState } from "./live";
 import { LYRIC_FX, letterFx, makeRamp, type LetterFxCtx, type LetterStyle } from "./lyricFx";
+import { styleFor, type CharMotion, type StyleArg } from "./lyricStyles";
 
 export interface LyricCtx {
   c: CanvasRenderingContext2D;
@@ -26,11 +35,7 @@ export interface LyricCtx {
   L: LiveState;
 }
 
-export const LYRIC_STYLES = [
-  "DRIFT", "SCATTER", "STACK", "POP", "RISE", "SPIN", "FLIP", "SLIDE",
-  "FOCUS", "PULSE", "ORBIT", "CASCADE", "TYPE", "KARAOKE",
-  "WAVE", "BOUNCE", "GLITCH", "ECHO", "SWEEP", "SPOTLIGHT",
-];
+export { LYRIC_STYLES } from "./lyricStyles";
 
 export interface CurrentLyric {
   prev: string;
@@ -107,39 +112,6 @@ function halved(cur: CurrentLyric): CurrentLyric {
   };
 }
 
-/**
- * Position for a unit that is guaranteed to be far from the previous unit's.
- * The golden-ratio scatter above walks in small steps, so consecutive chunks
- * landed almost on top of each other. This walks a 3x3 zone grid with a
- * stride co-prime to 9, so successive units jump across the frame, with
- * deterministic jitter inside each zone so it never looks like a grid.
- */
-export const zonePos = (unit: number, w: number, h: number): [number, number] => {
-  const z = ((unit % 9) + 9) % 9;
-  const slot = (z * 5) % 9; // 0,5,1,6,2,7,3,8,4 — neighbours land far apart
-  const col = slot % 3;
-  const row = Math.floor(slot / 3);
-  const jx = (((unit * 2654435761) % 101) / 101 - 0.5) * 0.12;
-  const jy = (((unit * 40503) % 89) / 89 - 0.5) * 0.1;
-  const fx = 0.5 + (col - 1) * 0.26 + jx;
-  const fy = 0.44 + (row - 1) * 0.22 + jy;
-  return [w * Math.min(0.82, Math.max(0.18, fx)), h * Math.min(0.76, Math.max(0.2, fy))];
-};
-
-/**
- * Where a lyric unit sits on screen.
- *
- * This used to be a golden-ratio scatter, which walks in small steps — so
- * consecutive units landed almost on top of each other and a line could arrive
- * over the one still fading, illegibly. `zonePos` below was written to fix
- * exactly that and then only ever used by one style, while every other one kept
- * the scatter. They all use the zone walk now.
- */
-const posFor = (i: number, w: number, h: number): [number, number] => zonePos(i, w, h);
-
-/** deterministic gentle tilt per unit, ±0.09 rad, never harsh */
-const angFor = (i: number): number => (((i * 2654435761) % 97) / 97 - 0.5) * 0.18;
-
 // ── multi-row text blocks ───────────────────────────────────────
 interface Block {
   rows: string[];
@@ -194,6 +166,12 @@ interface BlockOpts {
    * instant a new line began and it vanished instead of fading.
    */
   fxFrac?: number;
+  /** the style's continuous per-character motion, if it has one */
+  motion?: (a: StyleArg) => CharMotion;
+  /** the arguments a motion needs that the block itself doesn't know */
+  motionArg?: { flow: number; frac: number; age: number };
+  /** 0..1 of the line that has been sung, for the styles that light up as they go */
+  fill?: number;
 }
 
 /** geometry of a laid-out block, exactly as drawBlock would place it. Leaves
@@ -237,29 +215,9 @@ let letterCtx: {
   glowColor: string;
 } | null = null;
 
-/**
- * The last block drawn this frame, so an outgoing line can be replayed exactly
- * as it last appeared. Every style lays its line out differently — its own
- * position, its own maxW, its own scale — and a fade that re-derives the layout
- * gets a different block: the ghost used to pass `maxW: w * 0.52` against the
- * live line's `w * 0.62`, which pushed `layoutBlock` down a size step, and it
- * positioned by `posFor` while most styles centre the line. So it faded a
- * smaller line in a different place, which reads as a swap however smooth the
- * alpha ramp is. Ghosts draw before the live line, so by frame end this holds
- * the live one.
- */
-let lastBlock: (BlockOpts & { text: string }) | null = null;
-/** brightest block drawn so far this frame; becomes `lastBlock` at the next one */
-let frameBest: (BlockOpts & { text: string }) | null = null;
 
 function drawBlock(c: CanvasRenderingContext2D, text: string, o: BlockOpts, w: number): void {
   if (o.alpha <= 0.01 || !text) return;
-  // The *brightest* block of the frame, not the last one. Several styles draw
-  // decoration after the line itself — GLITCH lays down RGB-split copies, ECHO
-  // a trail — so "last drawn" handed the fade a faint offset layer to replay
-  // instead of the line, which is why those two neither dimmed from the right
-  // level nor held still.
-  if (!frameBest || o.alpha > frameBest.alpha) frameBest = { ...o, text };
   const m = blockMetrics(c, text, o, w);
   c.save();
   c.translate(m.x, o.y);
@@ -271,15 +229,43 @@ function drawBlock(c: CanvasRenderingContext2D, text: string, o: BlockOpts, w: n
   c.textAlign = "center";
   c.textBaseline = "middle";
 
-  if (letterCtx && letterCtx.fxs.length) {
-    drawBlockLetters(c, m, o, letterCtx.base, letterCtx);
+  // The style's motion and the letter effects both want per-character control,
+  // so either one sends the block down the same path and they compose there.
+  if (o.motion || (letterCtx && letterCtx.fxs.length)) {
+    drawBlockLetters(c, m, o, letterCtx?.base, letterCtx);
     c.restore();
     return;
   }
 
-  m.rows.forEach((row, i) => {
-    c.fillText(row, 0, (i - (m.rows.length - 1) / 2) * m.lineH);
-  });
+  const rowY = (i: number) => (i - (m.rows.length - 1) / 2) * m.lineH;
+  if (o.fill !== undefined) {
+    // Sung-so-far lighting: the whole line dim, then the part that has been
+    // sung again at full strength, clipped. Two passes rather than per-character
+    // alpha so the unsung text stays readable instead of disappearing.
+    const dim = c.fillStyle;
+    c.globalAlpha = 0.42;
+    m.rows.forEach((row, i) => c.fillText(row, 0, rowY(i)));
+    c.globalAlpha = 1;
+    c.fillStyle = dim;
+    const total = m.rows.reduce((acc, r) => acc + r.length, 0);
+    let sung = o.fill * total;
+    m.rows.forEach((row, i) => {
+      const part = Math.min(1, Math.max(0, sung / Math.max(1, row.length)));
+      sung -= row.length;
+      if (part <= 0) return;
+      const rw = c.measureText(row).width;
+      c.save();
+      c.beginPath();
+      c.rect(-rw / 2, rowY(i) - m.lineH / 2, rw * part, m.lineH);
+      c.clip();
+      c.fillText(row, 0, rowY(i));
+      c.restore();
+    });
+    c.restore();
+    return;
+  }
+
+  m.rows.forEach((row, i) => c.fillText(row, 0, rowY(i)));
   c.restore();
 }
 
@@ -296,8 +282,8 @@ function drawBlockLetters(
   c: CanvasRenderingContext2D,
   m: BlockMetrics,
   o: BlockOpts,
-  base: Omit<LetterFxCtx, "i" | "n" | "row">,
-  lc: { fxs: string[]; match: boolean; glowColor: string },
+  base: Omit<LetterFxCtx, "i" | "n" | "row"> | undefined,
+  lc: { fxs: string[]; match: boolean; glowColor: string } | null | undefined,
 ): void {
   const em = m.sizePx;                    // offsets are in em so they scale
   const total = m.rows.reduce((s, r) => s + r.length, 0);
@@ -313,16 +299,24 @@ function drawBlockLetters(
       const ch = row[ci];
       const adv = c.measureText(ch).width;
       if (ch !== " ") {
-        const arg = {
-          ...base,
-          frac: o.fxFrac ?? base.frac,
-          i: seen, n: Math.max(1, total), row: ri,
-        };
+        // The style moves the character first; letter effects then compose on
+        // top of that, so picking an effect never cancels the style's motion.
+        const mo = o.motion && o.motionArg
+          ? o.motion({
+            i: seen, n: Math.max(1, total), row: ri, rows: m.rows.length,
+            flow: o.motionArg.flow, frac: o.motionArg.frac, age: o.motionArg.age,
+          })
+          : null;
+        const arg = base
+          ? { ...base, frac: o.fxFrac ?? base.frac, i: seen, n: Math.max(1, total), row: ri }
+          : null;
         // Effects stack. Offsets add, scales and alphas multiply, glow takes
         // the strongest, and anything that names a colour or a treatment lets
         // the later one win — so a colour ramp, a motion and a reveal compose
         // into one letter instead of the last pick silently replacing the rest.
-        const st: LetterStyle = lc.fxs.length === 1
+        const st: LetterStyle = !lc || !arg || lc.fxs.length === 0
+          ? {}
+          : lc.fxs.length === 1
           ? letterFx(lc.fxs[0], arg)
           : lc.fxs.reduce<LetterStyle>((acc, f) => {
             const s2 = letterFx(f, arg);
@@ -341,21 +335,26 @@ function drawBlockLetters(
             if (s2.glow !== undefined) acc.glow = Math.max(acc.glow ?? 0, s2.glow);
             return acc;
           }, {});
-        const a = (st.alpha ?? 1) * o.alpha;
+        // A sung-so-far style with a letter effect on top can't use the clipped
+        // two-pass fill, so it dims the characters that haven't been reached.
+        const lit = o.fill === undefined ? 1 : seen / Math.max(1, total) <= o.fill ? 1 : 0.42;
+        const a = (st.alpha ?? 1) * (mo?.alpha ?? 1) * lit * o.alpha;
         if (a > 0.01) {
           c.save();
           c.globalAlpha = a;
           // position at the glyph's centre so scale and rotation pivot there
-          c.translate(x + adv / 2 + (st.dx ?? 0) * em, y + (st.dy ?? 0) * em);
-          if (st.rot) c.rotate(st.rot);
-          if (st.scale !== undefined || st.scaleY !== undefined) c.scale(st.scale ?? 1, (st.scale ?? 1) * (st.scaleY ?? 1));
+          c.translate(x + adv / 2 + ((st.dx ?? 0) + (mo?.dx ?? 0)) * em, y + ((st.dy ?? 0) + (mo?.dy ?? 0)) * em);
+          const rot = (st.rot ?? 0) + (mo?.rot ?? 0);
+          if (rot) c.rotate(rot);
+          const sc = (st.scale ?? 1) * (mo?.scale ?? 1);
+          if (sc !== 1 || st.scaleY !== undefined) c.scale(sc, sc * (st.scaleY ?? 1));
           // A matched effect that sets no glow of its own still gets a soft
           // palette bloom, which is what stops translucent letters reading as
           // washed out and gives them the WAVE style's halo.
           if (st.glow !== undefined) c.shadowBlur = st.glow;
-          else if (lc.match) c.shadowBlur = Math.max(o.glowAmt, 13 + base.beatE * 16);
+          else if (lc?.match && base) c.shadowBlur = Math.max(o.glowAmt, 13 + base.beatE * 16);
           if (st.glowColor) c.shadowColor = st.glowColor;
-          else if (lc.match) c.shadowColor = lc.glowColor;
+          else if (lc?.match) c.shadowColor = lc.glowColor;
           c.textBaseline = "middle";
 
           // depth copies first, so the glyph itself lands on top
@@ -395,89 +394,45 @@ function drawBlockLetters(
 }
 
 /** reusable colour ramp for the per-character WAVE style (filled each frame) */
-const WAVE_PAL: string[] = new Array<string>(9).fill("");
-
-/** A line that has already gone, still fading out on its own clock. `block` is
- * how it was last drawn, so the fade replays that rather than laying it out
- * again from scratch. */
-interface Ghost { text: string; unit: number; t0: number; block: (BlockOpts & { text: string }) | null }
-interface GhostState { last: number; items: Ghost[] }
-
-/** How long an outgoing line takes to fade to nothing. It starts at full
- * opacity rather than stepping down first — a step at the handover is visible
- * as a flicker, and a fade that begins with a flicker is not a fade. */
-const GHOST_SECS = 1.1;
 
 /**
- * Opacity of an outgoing line, `age` seconds after it left.
+ * How long an outgoing line takes to fade to nothing.
  *
- * Ease *out*, not the smoothstep this used to be. Smoothstep is symmetric, so
- * it barely moves at the start — 0.98 after 100ms, 0.93 after 200ms, 0.84 after
- * 300ms — and then falls off a cliff. Measured as a curve that looks like a
- * fade; watched, it reads as the line sitting there and then popping out, which
- * is the complaint this was supposed to fix. Losing a quarter of its opacity in
- * the first 200ms is what makes it read as fading from the moment it starts.
+ * Every line sits at the same anchor now, so the line leaving and the line
+ * arriving share a spot — which is how WAVE always worked, and is why it never
+ * had lines colliding. At one anchor the crossfade has to be quick, or two
+ * solid texts are printed over each other.
  */
-const ghostAlpha = (age: number): number => Math.pow(1 - Math.min(1, Math.max(0, age / GHOST_SECS)), 1.6);
-
-/**
- * How many outgoing lines may be fading at once.
- *
- * One. Each replays the live line at its full size, so three of them plus the
- * line that just arrived puts four blocks of text on screen at once — on
- * densely timed lyrics that is a wall of words, which is not what a fade is
- * for. The older ones were never the point; the line you just read is.
- */
-const GHOST_MAX = 1;
+const OUT_SECS = 0.5;
+/** ease *out*: a symmetric curve holds ~93% opacity for 200ms and then drops,
+ * which measures like a fade and watches like the line popping */
+const outAlpha = (age: number): number => Math.pow(1 - Math.min(1, Math.max(0, age / OUT_SECS)), 1.6);
 
 /** how long a line may hold the screen before it fades on its own, in seconds */
 const MAX_DWELL = 5.5;
 
-/**
- * Styles that draw their outgoing line themselves, and are skipped by the
- * shared fade below.
- *
- * Both of these render characters directly rather than through `drawBlock`, so
- * nothing records where their line was — the shared fade fell back to the
- * scatter position at full size and dropped the old line on top of the new one,
- * in a different typeface treatment. They also both centre every line, so the
- * outgoing and incoming lines share a spot by construction, which is why they
- * get their own shorter crossfade: at the same position, a slow fade means two
- * solid texts printed over each other, which is neither a fade nor readable.
- */
-const SELF_FADE = new Set(["KARAOKE", "WAVE"]);
-const CENTRED_GHOST_SECS = 0.5;
-const centredGhostAlpha = (age: number): number =>
-  Math.pow(1 - Math.min(1, Math.max(0, age / CENTRED_GHOST_SECS)), 1.6);
-
-/** deterministic 0..1 hash — stable jitter without per-frame allocation */
-const hash01 = (n: number): number => {
-  const s = Math.sin(n * 12.9898 + 78.233) * 43758.5453;
-  return s - Math.floor(s);
-};
+/** A line that has gone, still fading on its own clock. */
+interface Ghost { text: string; unit: number; t0: number }
+interface GhostState { last: number; items: Ghost[] }
 
 export function drawLyricOverlay(x: LyricCtx): void {
-  // hand the previous frame's brightest block over before this frame draws
-  lastBlock = frameBest;
-  frameBest = null;
-  const { c, w, h, time, beatE, vt, TK, C1, C2, CMix, L } = x;
+  const { c, w, h, time, beatE, C1, C2, CMix, L } = x;
   const lines = L.lyricLines;
   if (!lines) return;
   const raw = currentLyric(lines, time);
   if (!raw) return;
-  const style = LYRIC_STYLES.includes(L.lyricStyle) ? L.lyricStyle : "DRIFT";
+
+  const def = styleFor(L.lyricStyle);
   const size = Math.min(w * 0.058, h * 0.072);
   c.save();
   c.globalCompositeOperation = "source-over";
 
-  // Arm the per-letter path for this frame. Kept as module state rather than
-  // threaded through every style branch: the styles all funnel into drawBlock,
-  // so this is the one place that needs to know.
+  // Arm the per-letter path for this frame. Module state rather than an
+  // argument, because drawBlock is the one place that needs it.
   const fxs = (L.lyricFxs ?? []).filter((f) => f !== "NONE" && LYRIC_FX.includes(f));
-  const fxMatch = !!L.lyricFxMatch;
   letterCtx = fxs.length === 0 ? null : {
     fxs,
-    match: fxMatch,
+    match: !!L.lyricFxMatch,
     glowColor: C1(0.85, 62),
     base: {
       t: time, flow: L.flow, beatE, hitE: L.hitE,
@@ -489,565 +444,66 @@ export function drawLyricOverlay(x: LyricCtx): void {
 
   const cur = halved(raw);
 
-  // Outgoing lines carry their own fade clock.
-  //
-  // The ghost used to be re-derived from the live line every frame, which meant
-  // it was destroyed the instant the *next* line arrived — on densely timed
-  // lyrics that is well before its fade has finished, so the line vanished
-  // rather than faded. Each outgoing unit now records when it left and finishes
-  // its own fade regardless of what arrives after it, and several can overlap
-  // while fast lines stack up.
-  //
-  // This sits above the style branches because several of them return before
-  // reaching the shared drawing below. KARAOKE did, which is why lines under it
-  // disappeared in a single frame no matter what the shared fade did — measured
-  // at 362 ink to 0 with no ghost ever recorded. Styles that draw their own
-  // history (SCATTER, CASCADE) simply never read these.
+  // A line records when it left and finishes its own fade, so the next line
+  // arriving cannot cut it short. One at a time: each is drawn at full size, and
+  // a pile of them is a wall of text rather than a fade.
   const G = (L.scratch.lyrGhosts ??= { last: -1, items: [] as Ghost[] }) as GhostState;
   if (cur.index !== G.last) {
-    // `lastBlock` still holds the previous frame's live line, which is exactly
-    // the line that has just gone
-    if (G.last >= 0 && cur.prev) {
-      const block = lastBlock && lastBlock.text === cur.prev ? lastBlock : null;
-      G.items.push({ text: cur.prev, unit: G.last, t0: time, block });
-    }
+    if (G.last >= 0 && cur.prev) G.items.push({ text: cur.prev, unit: G.last, t0: time });
     G.last = cur.index;
-    if (G.items.length > GHOST_MAX) G.items.splice(0, G.items.length - GHOST_MAX);
+    if (G.items.length > 1) G.items.splice(0, G.items.length - 1);
   }
   for (let i = G.items.length - 1; i >= 0; i--) {
-    const a = time - G.items[i].t0;
+    const age = time - G.items[i].t0;
     // the second test catches a seek backwards, which would otherwise strand a
-    // ghost with a start time in the future
-    if (a > GHOST_SECS || a < 0) G.items.splice(i, 1);
+    // line with a start time in the future
+    if (age > OUT_SECS || age < 0) G.items.splice(i, 1);
   }
 
-  if (style === "KARAOKE") {
-    // Subtitle layout: centred, fixed height, its own two-pass fill. An
-    // outgoing line is the same thing drawn dimmer and fully sung, so it fades
-    // where it sat rather than being replaced.
-    // `base` is the dim white underlay a live line needs to stay legible over
-    // the theme; a fading line skips it, since two overlapping coats composite
-    // closer to opaque than either alone. Note this did not fully fix KARAOKE's
-    // fade: it still holds ~93% of its ink 265ms in, where the other styles are
-    // at 47-77%, and the cause is not yet identified. It does fade smoothly to
-    // nothing and holds its position — it just starts slower than it should.
-    // `npm run lyricfade` reports this as a failing check rather than hiding it.
-    const karaokeLine = (text: string, frac: number, a: number, base = true) => {
-      c.font = `700 ${Math.floor(size)}px 'Space Grotesk', sans-serif`;
-      const block = layoutBlock(c, text, size, w * 0.84);
-      const sizePx = size * block.scale;
-      const lineH = sizePx * 1.16;
-      const y = h * 0.68;
-      c.font = `700 ${Math.floor(sizePx)}px 'Space Grotesk', sans-serif`;
-      c.textAlign = "center";
-      c.textBaseline = "middle";
-      const totalChars = block.rows.reduce((acc, r) => acc + r.length, 0);
-      let sung = Math.floor(frac * totalChars);
-      block.rows.forEach((row, i) => {
-        const ry = y + (i - (block.rows.length - 1) / 2) * lineH;
-        const rw = c.measureText(row).width;
-        if (base) {
-          c.shadowBlur = 12 * a;
-          c.shadowColor = `rgba(0,0,0,${0.8 * a})`;
-          c.fillStyle = `rgba(255,255,255,${0.35 * a})`;
-          c.fillText(row, w / 2, ry);
-        }
-        const rowFrac = Math.min(1, Math.max(0, sung / row.length));
-        sung -= row.length;
-        if (rowFrac > 0) {
-          c.save();
-          c.beginPath();
-          c.rect(w / 2 - rw / 2, ry - lineH / 2, rw * rowFrac, lineH);
-          c.clip();
-          c.shadowBlur = (18 + beatE * 18) * a;
-          c.shadowColor = C1(a);
-          c.fillStyle = C1(a, 70);
-          c.fillText(row, w / 2, ry);
-          c.restore();
-        }
-      });
-    };
-    for (const g of G.items) {
-      const ga = centredGhostAlpha(time - g.t0);
-      // the line is over, so it fades fully sung rather than half-filled
-      if (ga > 0.02) karaokeLine(g.text, 1, ga, false);
-    }
-    if (cur.text) karaokeLine(cur.text, cur.frac, 1);
-    c.restore();
-    return;
-  }
+  // `time` is playback seconds and never resets, so every motion driven by it
+  // is continuous across lines — nothing restarts, so nothing can jump.
+  const flow = time;
+  const anchorY = h * (def.anchorY ?? 0.45);
+  const maxW = w * (def.anchorY ? 0.84 : 0.62);
 
-  if (style === "CASCADE") {
-    // 2-3 words at a time from the full line, crossfading between spots
-    if (raw.text) {
-      const words = raw.text.split(" ").filter(Boolean);
-      const per = words.length <= 4 ? 2 : 3;
-      const chunks: string[] = [];
-      for (let i = 0; i < words.length; i += per) chunks.push(words.slice(i, i + per).join(" "));
-      const n = chunks.length;
-      const pos2 = raw.frac * n;
-      const active = Math.min(n - 1, Math.floor(pos2));
-      const local = Math.min(1, pos2 - active);
-      // every chunk gets its own zone across the frame, never beside the last
-      const drawChunk = (k: number, alpha: number, scl: number, rise: number) => {
-        if (k < 0 || k >= n || alpha <= 0.02) return;
-        const unit = raw.index * 7 + k;
-        const [wx, wy] = zonePos(unit, w, h);
-        drawBlock(c, chunks[k], {
-          x: wx, y: wy + rise, alpha, scale: scl,
-          rot: angFor(unit),
-          maxW: w * 0.62, size: size * 1.22,
-          glowAmt: 18 + beatE * 22,
-          glowColor: CMix((unit % 9) / 9),
-        }, w);
-      };
-      // The outgoing chunk overlaps the incoming one, but it starts at full and
-      // loses opacity from the first frame. Holding flat at 0.8 for the first
-      // 42% and then dropping is the shape that reads as popping rather than
-      // fading, and it stepped down to 0.8 at the handover on top of that.
-      const outAlpha = Math.pow(1 - local, 1.6);
-      drawChunk(active - 1, outAlpha, 1.0, -smooth(Math.max(0, local - 0.42) / 0.6) * 14);
-      const appear2 = smooth(local / 0.3);
-      const out2 = local > 0.86 ? smooth((local - 0.86) / 0.14) : 0;
-      drawChunk(active, appear2 * (1 - out2 * 0.5), 0.84 + appear2 * 0.16, (1 - appear2) * 12);
-    }
-    // Chunks belong to the current line, so at a line boundary every one of
-    // them disappeared at once and the screen went nearly empty before the next
-    // line's first chunk faded in — measured as an 84% drop in a single step.
-    // The unit that just left fades out across that gap instead.
-    for (const g of G.items) {
-      const ga = ghostAlpha(time - g.t0);
-      if (ga <= 0.02) continue;
-      const [gx, gy] = zonePos(g.unit, w, h);
-      drawBlock(c, g.text, {
-        x: gx, y: gy, alpha: 0.9 * ga, scale: 1,
-        rot: angFor(g.unit), maxW: w * 0.62, size,
-        glowAmt: 16 * ga, glowColor: CMix((g.unit % 9) / 9), fxFrac: 1,
-      }, w);
-    }
-    c.restore();
-    return;
-  }
-
-  if (style === "SCATTER") {
-    // halves pop in one at a time at scattered spots with gentle tilts and
-    // stay up as a small fading collage — newest brightest
-    // The collage is built from the units that have actually left, not from the
-    // previous *lines*. Long lines are shown as two halves, so a line-indexed
-    // history pointed at the wrong unit: it redrew the outgoing text at another
-    // unit's scatter position and at 80% size, which is a teleport, not a fade.
-    // G.items carries the unit that just went, so it can be drawn where it sat.
-    G.items.forEach((g) => {
-      const ga = ghostAlpha(time - g.t0);
-      if (ga <= 0.02) return;
-      const [sx, sy] = posFor(g.unit, w, h);
-      drawBlock(c, g.text, {
-        x: sx, y: sy,
-        alpha: 0.95 * ga,
-        scale: 1,
-        rot: angFor(g.unit),
-        maxW: w * 0.5, size,
-        glowAmt: 14 * ga, glowColor: CMix((g.unit % 9) / 9),
-      }, w);
-    });
-    if (cur.text) {
-      const [sx, sy] = posFor(cur.index, w, h);
-      const pop = easeOut(cur.age * 2.6);
-      drawBlock(c, cur.text, {
-        x: sx, y: sy + (1 - pop) * 26,
-        alpha: 0.95 * pop,
-        scale: 0.86 + pop * 0.14,
-        rot: angFor(cur.index) * pop,
-        maxW: w * 0.5, size,
-        glowAmt: 16 + beatE * 22,
-        glowColor: CMix((cur.index % 9) / 9),
-      }, w);
-    }
-    c.restore();
-    return;
-  }
-
-  if (style === "STACK") {
-    // teleprompter stack: new halves push the previous ones up smoothly
-    const space = size * 1.7;
-    const enter = easeOut(cur.age * 2.4);
-    const shift = (1 - enter) * space;
-    const entries: { text: string; slot: number; alpha: number; hot: boolean }[] = [];
-    if (cur.text) entries.push({ text: cur.text, slot: 0, alpha: enter, hot: true });
-    // The displaced lines dim on the same ramp that moves them up the stack.
-    // Fixed 0.45 and 0.22 meant the line you were reading dropped straight from
-    // full to less than half the moment the next one appeared.
-    if (cur.prev) entries.push({ text: cur.prev, slot: 1, alpha: 1 - enter * 0.55, hot: false });
-    const older = lines[raw.index - 1];
-    if (older && cur.index % 2 === 0) entries.push({ text: lastHalf(older.text), slot: 2, alpha: 0.45 - enter * 0.23, hot: false });
-    for (const e of entries) {
-      drawBlock(c, e.text, {
-        x: w / 2,
-        y: h * 0.58 - e.slot * space + shift,
-        alpha: e.alpha,
-        scale: e.hot ? 1 : 0.86,
-        maxW: w * 0.62,
-        size: e.hot ? size : size * 0.85,
-        glowAmt: e.hot ? 16 + beatE * 20 : 4,
-        glowColor: e.hot ? C1() : C2(),
-        // only the live line is mid-progress; the ones stacked above it are done
-        fxFrac: e.hot ? undefined : 1,
-      }, w);
-    }
-    c.restore();
-    return;
-  }
-
-  // WAVE renders characters itself rather than through drawBlock, so its
-  // outgoing line has to be drawn by the same code or it changes appearance,
-  // position and size at the handover — which is what put two lines on top of
-  // each other. Defined here rather than in the branch below so a line still
-  // fades when nothing follows it.
-  const waveLine = (text: string, a: number, scl: number, swell: number) => {
-    if (!text || a <= 0.02) return;
-    const m = blockMetrics(c, text, { x: w / 2, scale: scl, maxW: w * 0.62, size }, w);
-    // A fixed swell. It used to be `0.1 + beatE * 0.4`, so the wave grew five
-    // times taller on every beat — that jump, not the travel speed, is most of
-    // what made it look frantic.
-    const amp = m.sizePx * 0.13 * swell;
-    // colour ramp built once per line, then indexed per character (no
-    // per-character string building in the inner loop)
-    const last = WAVE_PAL.length - 1;
-    for (let i = 0; i <= last; i++) {
-      const f2 = i / last;
-      WAVE_PAL[i] = CMix(f2, a, 54 + f2 * 26);
-    }
-    c.save();
-    c.translate(m.x, h * 0.45);
-    c.scale(scl, scl);
-    c.shadowBlur = (14 + beatE * 20) * a;
-    c.shadowColor = C1(a);
-    c.textAlign = "center";
-    c.textBaseline = "middle";
-    let ci = 0;
-    for (let r = 0; r < m.rows.length; r++) {
-      const row = m.rows[r];
-      const ry = (r - (m.rows.length - 1) / 2) * m.lineH;
-      let px = -c.measureText(row).width / 2;
-      for (const ch of row) {
-        const cw = c.measureText(ch).width;
-        // slow enough to read a word while it moves; it used to be 0.08
-        const s2 = Math.sin(vt * 0.028 - ci * 0.5);
-        c.fillStyle = WAVE_PAL[Math.round((s2 + 1) * 0.5 * last)];
-        c.fillText(ch, px + cw / 2, ry + s2 * amp);
-        px += cw;
-        ci++;
-      }
-    }
-    c.restore();
+  const drawUnit = (text: string, age: number, frac: number, alpha: number): void => {
+    if (!text || alpha <= 0.02) return;
+    const lm = def.line?.({ i: 0, n: 1, row: 0, rows: 1, flow, frac, age }) ?? {};
+    drawBlock(c, text, {
+      x: w / 2 + (lm.dx ?? 0) * size,
+      y: anchorY + (lm.dy ?? 0) * size,
+      rot: lm.rot,
+      scale: lm.scale ?? 1,
+      alpha,
+      maxW,
+      size,
+      // the halo fades with the letters. A constant blur radius leaves a wide
+      // bright cloud hanging around text that is nearly gone, which is both
+      // wrong to look at and why the outgoing line measured at 82% of its ink
+      // when its opacity was down to 29%.
+      glowAmt: 16 * alpha,
+      glowColor: C1(alpha),
+      fxFrac: frac,
+      motion: def.char,
+      motionArg: { flow, frac, age },
+      fill: def.fill ? frac : undefined,
+    }, w);
   };
 
-  if (style === "WAVE") {
-    for (const g of G.items) {
-      // its own opacity, not the incoming line's appear ramp
-      waveLine(g.text, centredGhostAlpha(time - g.t0), 0.97, 1);
-    }
+  // The line that just left. It is drawn as settled — its entry animation is
+  // over — so it only loses opacity while it goes.
+  for (const g of G.items) {
+    drawUnit(g.text, 3, 1, outAlpha(time - g.t0));
   }
 
-  // Lines that have gone: the same line, in the same place, at the same size,
-  // losing opacity until it is not there.
-  //
-  // It has taken two goes to get this right and both failures were the same
-  // mistake — the line was being *replaced* by something rather than fading.
-  // First it was swapped instantly for a small dim ghost at 72% of the size
-  // (measured across a transition, the ink on the lyric canvas fell from 68 to
-  // 32 in one step, which is why it read as vanishing). Then it kept its size
-  // but still drifted up 26px and shrank a fifth on the way out, so it read as
-  // leaving rather than fading. Anything that moves or resizes reads as motion,
-  // and motion is not a fade. Nothing here changes but alpha.
-  for (const g of SELF_FADE.has(style) ? [] : G.items) {
-    const age = time - g.t0;
-    const ga = ghostAlpha(age);
-    if (ga < 0.02) continue;
-    if (g.block) {
-      // the same block, in the same place, at the same size — only dimmer
-      drawBlock(c, g.text, {
-        ...g.block,
-        alpha: g.block.alpha * ga,
-        // the halo goes with it, or it outlives the letters it belongs to
-        glowAmt: g.block.glowAmt * ga,
-        // the line is over, so effects that key off progress see it as finished
-        fxFrac: 1,
-      }, w);
-      continue;
-    }
-    // nothing was captured (the line was never drawn, e.g. a seek landed past
-    // it): fall back to laying it out where the scatter would have put it
-    const [px, py] = posFor(g.unit, w, h);
-    drawBlock(c, g.text, {
-      x: px, y: py, alpha: ga, scale: 1, maxW: w * 0.62, size,
-      glowAmt: (16 + beatE * 20) * ga, glowColor: C2(), fxFrac: 1,
-    }, w);
-  }
-
-  if (!cur.text) {
-    c.restore();
-    return;
-  }
-  const [lx, ly] = posFor(Math.max(0, cur.index), w, h);
-  const appear = smooth(cur.age * 2.2);
-  const leave = cur.frac > 0.84 ? smooth((cur.frac - 0.84) / 0.16) : 0;
-  // The whole fade-out now belongs to the ghost stage, which runs on its own
-  // clock and is not cut short by the next line arriving. So the live line only
-  // dips slightly at the end and hands over near full brightness.
-  // A line's span is the gap to the next one, so an instrumental break left the
-  // last words hanging for the length of the break. After MAX_DWELL it fades
-  // out by itself and the screen is clear until the next line.
+  // The live line. It fades in over the same sort of ramp it fades out on, and
+  // gives up on its own after MAX_DWELL: a line's span is the gap to the next
+  // one, so an instrumental break used to leave the last words hanging for the
+  // length of the break.
+  const appear = smooth(cur.age / 0.4);
   const overstay = smooth((cur.age - MAX_DWELL) / 0.9);
-  const alpha = appear * (1 - leave * 0.12) * (1 - overstay);
+  drawUnit(cur.text, cur.age, cur.frac, appear * (1 - overstay));
 
-  if (style === "DRIFT") {
-    drawBlock(c, cur.text, {
-      x: lx + Math.sin(vt * 0.008 + cur.index) * 8,
-      y: ly + (1 - appear) * 24 - cur.age * 9 - leave * 14,
-      alpha,
-      scale: 0.92 + appear * 0.08,
-      maxW: w * 0.52, size,
-      glowAmt: 18 + beatE * 22, glowColor: C1(),
-    }, w);
-  } else if (style === "POP") {
-    const spring = appear + Math.sin(Math.min(1, cur.age * 2.2) * Math.PI) * 0.14 * (1 - appear);
-    drawBlock(c, cur.text, {
-      x: lx, y: ly,
-      alpha,
-      scale: (0.6 + spring * 0.4) * (1 + leave * 0.35),
-      rot: (1 - appear) * 0.06 * (cur.index % 2 ? 1 : -1),
-      maxW: w * 0.52, size,
-      glowAmt: 16 + beatE * 26, glowColor: CMix((cur.index % 8) / 8),
-    }, w);
-  } else if (style === "RISE") {
-    const settle = easeOut(cur.age * 1.9);
-    drawBlock(c, cur.text, {
-      x: lx,
-      y: h * 0.85 + (ly - h * 0.85) * settle - leave * h * 0.28,
-      alpha: Math.min(1, cur.age * 3) * (1 - leave),
-      scale: 0.88 + settle * 0.12,
-      rot: angFor(cur.index) * 0.5 * settle,
-      maxW: w * 0.52, size,
-      glowAmt: 16 + beatE * 20, glowColor: C1(),
-    }, w);
-  } else if (style === "SPIN") {
-    const inn = easeOut(cur.age * 2);
-    drawBlock(c, cur.text, {
-      x: lx, y: ly,
-      alpha,
-      scale: (0.6 + inn * 0.4) * (1 - leave * 0.25),
-      rot: (1 - inn) * -0.4 + angFor(cur.index) * inn + leave * 0.45,
-      maxW: w * 0.5, size,
-      glowAmt: 16 + beatE * 22, glowColor: CMix((cur.index % 7) / 7),
-    }, w);
-  } else if (style === "FLIP") {
-    // card-flip: unfolds vertically with a soft overshoot, folds away
-    const inn = easeOut(cur.age * 2.6);
-    const sy = inn * (1 + (1 - inn) * 0.35) * (1 - leave);
-    drawBlock(c, cur.text, {
-      x: lx, y: ly,
-      alpha: Math.min(1, cur.age * 4) * (1 - leave * 0.7),
-      scale: 0.95,
-      scaleY: Math.max(0.02, sy),
-      rot: angFor(cur.index) * 0.4,
-      maxW: w * 0.52, size,
-      glowAmt: 16 + beatE * 22, glowColor: C1(),
-    }, w);
-  } else if (style === "SLIDE") {
-    // glides in from alternating sides, exits out the other side
-    const dir = cur.index % 2 ? 1 : -1;
-    const inn = easeOut(cur.age * 2.2);
-    drawBlock(c, cur.text, {
-      x: lx + dir * (1 - inn) * w * 0.4 - dir * leave * w * 0.35,
-      y: ly,
-      alpha: Math.min(1, cur.age * 3.5) * (1 - leave),
-      scale: 0.94 + inn * 0.06,
-      rot: dir * (1 - inn) * 0.05,
-      maxW: w * 0.52, size,
-      glowAmt: 16 + beatE * 20, glowColor: CMix((cur.index % 6) / 6),
-    }, w);
-  } else if (style === "FOCUS") {
-    // materializes out of blur, razor-sharp mid-line, defocuses away
-    const sharp = Math.min(appear, 1 - leave);
-    const blur = (1 - sharp) * 46;
-    for (const [dx2, ga] of [[-blur * 0.18, 0.2], [blur * 0.18, 0.2], [0, 1]] as const) {
-      drawBlock(c, cur.text, {
-        x: lx + dx2, y: ly,
-        alpha: alpha * (ga === 1 ? 0.55 + sharp * 0.45 : (1 - sharp) * ga),
-        scale: 1.06 - sharp * 0.06,
-        maxW: w * 0.52, size,
-        glowAmt: 8 + blur, glowColor: C1(),
-      }, w);
-    }
-  } else if (style === "PULSE") {
-    // centered, breathing with the music, kicking on every beat
-    drawBlock(c, cur.text, {
-      x: w / 2, y: h * 0.42,
-      alpha,
-      scale: 0.96 + appear * 0.04 + beatE * 0.12,
-      maxW: w * 0.6, size: size * 1.08,
-      glowAmt: 14 + beatE * 40, glowColor: CMix((cur.index % 5) / 5),
-    }, w);
-  } else if (style === "ORBIT") {
-    const ang = cur.index * 2.4 + vt * 0.0015;
-    const rad = Math.min(w, h) * (0.22 + ((cur.index * 37) % 10) / 10 * 0.1);
-    drawBlock(c, cur.text, {
-      x: w / 2 + Math.cos(ang) * rad * 1.25,
-      y: h * 0.45 + Math.sin(ang) * rad * 0.75 + (1 - appear) * 18,
-      alpha,
-      scale: 0.9 + appear * 0.1,
-      rot: Math.sin(ang) * 0.05,
-      maxW: w * 0.44, size: size * 0.92,
-      glowAmt: 16 + beatE * 20, glowColor: C1(),
-    }, w);
-  } else if (style === "TYPE") {
-    const chars = [...cur.text];
-    const shown = Math.min(chars.length, Math.floor(cur.age * Math.max(12, chars.length * 1.8)));
-    const text = chars.slice(0, shown).join("");
-    const cursorOn = (Math.floor(vt / 14) % 2 === 0 && shown < chars.length) || shown === 0;
-    drawBlock(c, text + (cursorOn ? "▌" : shown < chars.length ? " " : ""), {
-      x: w / 2, y: h * 0.45,
-      alpha: 1 - leave,
-      scale: 1,
-      maxW: w * 0.66, size,
-      glowAmt: 14 + beatE * 16, glowColor: C1(),
-    }, w);
-  } else if (style === "WAVE") {
-    waveLine(cur.text, alpha, 0.97 + appear * 0.03 + beatE * 0.03, appear);
-  } else if (style === "BOUNCE") {
-    // drops in from above the frame and settles with decaying overshoots
-    const t2 = Math.max(0, cur.age);
-    const damp = Math.exp(-3.1 * t2);
-    const dropY = -h * 0.34 * damp * Math.cos(7.4 * t2);
-    const squash = 1 - 0.14 * damp * Math.sin(7.4 * t2);
-    drawBlock(c, cur.text, {
-      x: lx,
-      y: ly + dropY + leave * h * 0.16,
-      alpha: Math.min(1, cur.age * 6) * (1 - leave),
-      scale: 0.96 + beatE * 0.03,
-      scaleY: Math.max(0.05, squash),
-      maxW: w * 0.56, size,
-      glowAmt: 16 + beatE * 22, glowColor: C1(),
-    }, w);
-  } else if (style === "GLITCH") {
-    // clean and readable between beats, tearing into split copies on the hits
-    const gy = h * 0.45;
-    const hit = Math.min(1, beatE);
-    const tick = Math.floor(vt / 5) + cur.index * 13;
-    const jx = (hash01(tick) - 0.5) * size * 0.9 * hit;
-    const jy = (hash01(tick + 91) - 0.5) * size * 0.26 * hit;
-    const off = size * (0.05 + hit * 0.45);
-    const ga = alpha * (0.16 + hit * 0.5);
-    const split = { y: gy, scale: 0.98, maxW: w * 0.6, size, glowAmt: 0, alpha };
-    c.globalCompositeOperation = "lighter";
-    drawBlock(c, cur.text, { ...split, x: w / 2 - off + jx, color: CMix(0, ga, 58), glowColor: C1() }, w);
-    drawBlock(c, cur.text, { ...split, x: w / 2 + off - jx, color: CMix(1, ga, 58), glowColor: C2() }, w);
-    c.globalCompositeOperation = "source-over";
-    drawBlock(c, cur.text, {
-      x: w / 2 + jx * 0.25, y: gy + jy,
-      alpha,
-      scale: 0.98,
-      maxW: w * 0.6, size,
-      glowAmt: 12 + hit * 26, glowColor: C1(),
-    }, w);
-    if (hit > 0.3) {
-      // a single torn slice slides sideways for one beat
-      const bh = size * (0.16 + hash01(tick + 7) * 0.3);
-      const by = gy - size * 1.2 + hash01(tick + 3) * size * 2.4;
-      c.save();
-      c.beginPath();
-      c.rect(0, by, w, bh);
-      c.clip();
-      drawBlock(c, cur.text, {
-        x: w / 2 + (hash01(tick + 17) - 0.5) * size * 1.6, y: gy,
-        alpha, scale: 0.98, maxW: w * 0.6, size,
-        color: CMix(0.5, alpha, 88), glowAmt: 0, glowColor: C1(),
-      }, w);
-      c.restore();
-    }
-  } else if (style === "ECHO") {
-    // a motion trail: ghost copies lag behind the live line and fade out
-    const dir = cur.index % 2 ? 1 : -1;
-    for (let k = 3; k >= 0; k--) {
-      // each ghost samples the line's path further in the past, and is pushed
-      // a little further back along the travel direction so the trail still
-      // reads once the line has settled into its drift
-      const tt = cur.age - k * 0.11;
-      const e2 = 1 - easeOut(Math.max(0, tt) * 2.2);
-      const back = Math.cos(tt * 3 + cur.index) >= 0 ? -1 : 1;
-      const fade = k === 0 ? alpha : alpha * (0.3 - k * 0.06);
-      drawBlock(c, cur.text, {
-        x: lx + Math.sin(tt * 3 + cur.index) * w * 0.05 + dir * e2 * w * 0.12 + back * k * w * 0.016,
-        y: ly + Math.cos(tt * 1.35 + cur.index) * h * 0.02 + e2 * 16 + k * 6,
-        alpha: fade,
-        scale: (0.95) * (1 - k * 0.035),
-        maxW: w * 0.52, size,
-        color: k === 0 ? undefined : CMix(k / 3, fade, 62),
-        glowAmt: k === 0 ? 20 + beatE * 22 : 0,
-        glowColor: C1(),
-      }, w);
-    }
-  } else if (style === "SWEEP") {
-    // a bright band of light travels across the line, lighting it as it goes
-    const scl = 0.98 + appear * 0.02;
-    const base = { x: w / 2, y: h * 0.45, scale: scl, maxW: w * 0.62, size, alpha };
-    const m = blockMetrics(c, cur.text, base, w);
-    const band = Math.max(24, m.sizePx * 1.1);
-    const p = smooth(Math.min(1, Math.max(0, cur.frac / 0.72)));
-    const sxp = m.x - m.widest / 2 - band + (m.widest + band * 2) * p;
-    drawBlock(c, cur.text, { ...base, color: CMix(0.5, alpha * 0.5, 54), glowAmt: 6, glowColor: C2() }, w);
-    c.save();
-    c.beginPath();
-    c.rect(0, 0, Math.max(0, sxp), h);
-    c.clip();
-    // no `color`: drawBlock's own full-strength fill is the lit state
-    drawBlock(c, cur.text, { ...base, glowAmt: 16 + beatE * 20, glowColor: C1() }, w);
-    c.restore();
-    c.save();
-    c.beginPath();
-    c.rect(sxp - band, 0, band, h);
-    c.clip();
-    c.globalCompositeOperation = "lighter";
-    drawBlock(c, cur.text, { ...base, color: CMix(0.1, alpha * 0.8, 88), glowAmt: 22 + beatE * 26, glowColor: C1() }, w);
-    c.restore();
-  } else if (style === "SPOTLIGHT") {
-    // a soft pool of light walks the rows, revealing the words it lands on
-    const scl = 0.98 + appear * 0.02;
-    const cy2 = h * 0.45;
-    const base = { x: w / 2, y: cy2, scale: scl, maxW: w * 0.62, size, alpha };
-    const m = blockMetrics(c, cur.text, base, w);
-    const n = Math.max(1, m.rows.length);
-    const p = Math.min(0.9999, Math.max(0, smooth(Math.min(1, cur.frac / 0.86))));
-    const ri = Math.min(n - 1, Math.floor(p * n));
-    const rw = c.measureText(m.rows[ri] ?? "").width * scl;
-    const px = m.x - rw / 2 + rw * (p * n - ri);
-    const py = cy2 + (ri - (n - 1) / 2) * m.lineH * scl;
-    const rad = Math.max(10, m.sizePx * scl * (1.45 + beatE * 0.3));
-    drawBlock(c, cur.text, { ...base, color: CMix(0.5, alpha * 0.42, 52), glowAmt: 4, glowColor: C2() }, w);
-    c.save();
-    c.globalCompositeOperation = "lighter";
-    const pool = c.createRadialGradient(px, py, 0, px, py, rad * 1.9);
-    pool.addColorStop(0, C1(alpha * 0.3, 72));
-    pool.addColorStop(1, C1(0, 72));
-    c.fillStyle = pool;
-    c.beginPath();
-    c.arc(px, py, rad * 1.9, 0, Math.PI * 2);
-    c.fill();
-    c.restore();
-    // soft-edged reveal: a halo pass, then a hard bright core inside it
-    for (const [rr, aa, li] of [[rad * 1.55, 0.45, 74], [rad, 1, 94]] as const) {
-      c.save();
-      c.beginPath();
-      c.arc(px, py, rr, 0, Math.PI * 2);
-      c.clip();
-      drawBlock(c, cur.text, {
-        ...base,
-        color: CMix(0.15, alpha * aa, li),
-        glowAmt: 16 + beatE * 18, glowColor: C1(),
-      }, w);
-      c.restore();
-    }
-  }
   c.restore();
+  letterCtx = null;
 }

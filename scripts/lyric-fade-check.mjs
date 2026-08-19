@@ -23,16 +23,18 @@ const BASE = `http://localhost:${PORT}`;
 // block renderer, SCATTER/STACK/CASCADE draw their own history, and each of
 // those was broken in its own way while the shared path measured fine.
 const ALL = [
-  "DRIFT", "SCATTER", "STACK", "POP", "RISE", "SPIN", "FLIP", "SLIDE",
-  "FOCUS", "PULSE", "ORBIT", "CASCADE", "TYPE", "KARAOKE",
-  "WAVE", "BOUNCE", "GLITCH", "ECHO", "SWEEP", "SPOTLIGHT",
+  "WAVE", "RIPPLE", "TIDE", "FLOAT", "SWELL", "PENDULUM", "SPIRAL", "SHIMMER",
+  "TWINKLE", "DRIFT", "GLIDE", "BREATHE", "LEAN", "ORBIT", "ZOOM", "REVEAL",
+  "SPOTLIGHT", "KARAOKE", "CASCADE", "STILL",
 ];
 const STYLES = (process.env.STYLES || ALL.join(",")).split(",");
 // styles that keep earlier lines on screen on purpose: ink that never reaches
 // zero is the design there, not a stuck line
-const PERSIST = new Set(["SCATTER", "STACK", "ECHO"]);
+// nothing persists any more: every style hands over the same way
+const PERSIST = new Set([]);
 // centred styles use the shorter crossfade (see CENTRED_GHOST_SECS)
-const CENTRED = new Set(["WAVE", "KARAOKE"]);
+// every style crossfades at one anchor now, so they all use the short fade
+const CENTRED = new Set(ALL);
 
 function makeTone(path) {
   // Long enough to outlast the whole walk. At 30s the track ran out partway
@@ -57,32 +59,12 @@ function makeTone(path) {
 const tone = join(mkdtempSync(join(tmpdir(), "lyrfade-")), "tone.wav");
 makeTone(tone);
 
-// A line arriving on top of the one still fading is a layout question, not a
-// timing one, so it is checked here without a browser: consecutive units must
-// land far apart. The scatter this replaced walked in small steps, which is
-// what put two lines in the same place badly enough to be unreadable.
-{
-  const { execFileSync } = await import("node:child_process");
-  const { mkdtempSync } = await import("node:fs");
-  const tmp = mkdtempSync(join(tmpdir(), "pos-"));
-  execFileSync("node_modules/.bin/esbuild", [
-    "src/visualizer/lyricRenderer.ts", "--bundle", "--format=esm", `--outfile=${join(tmp, "lr.mjs")}`,
-  ], { stdio: "pipe" });
-  const { zonePos } = await import(join(tmp, "lr.mjs"));
-  const W = 1000, H = 800;
-  let worst = Infinity, worstAt = 0;
-  for (let u = 0; u < 200; u++) {
-    const [x1, y1] = zonePos(u, W, H);
-    const [x2, y2] = zonePos(u + 1, W, H);
-    const d = Math.hypot(x2 - x1, y2 - y1);
-    if (d < worst) { worst = d; worstAt = u; }
-  }
-  console.log("\nlayout");
-  // a lyric block is roughly a fifth of the width tall and half of it wide, so
-  // neighbours closer than a quarter of the screen can genuinely collide
-  console.log(`  ${worst >= W * 0.25 ? "✓" : "✗"} consecutive lines land apart — closest pair ${Math.round(worst)}px at unit ${worstAt}, need ${Math.round(W * 0.25)}`);
-  if (worst < W * 0.25) process.exitCode = 1;
-}
+// There is no layout check any more, and that is the point: every line is drawn
+// at the same anchor, so a line can no longer arrive on top of the one still
+// fading at some other position. What used to be a tuning problem — a scatter
+// that placed consecutive lines close together — is now impossible by
+// construction, and what remains is the crossfade, which the per-style checks
+// below measure directly.
 
 const preview = spawn("npx", ["vite", "preview", "--port", String(PORT)], { stdio: "ignore" });
 await new Promise((r) => setTimeout(r, 2500));

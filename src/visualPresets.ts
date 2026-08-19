@@ -15,7 +15,7 @@ import { sanitizeVis } from "./ai/commands";
 import { LIGHT_FX } from "./palette";
 import { QUALITY_MODES } from "./constants";
 import { LYRIC_FX } from "./visualizer/lyricFx";
-import { LYRIC_STYLES } from "./visualizer/lyricRenderer";
+import { normaliseStyle } from "./visualizer/lyricStyles";
 import { useStore } from "./store/useStore";
 import type { VisCfg } from "./types";
 
@@ -54,7 +54,7 @@ export function applyLook(look: Look): void {
   useStore.setState({
     visTheme: VIS_THEMES.includes(look.theme) ? look.theme : useStore.getState().visTheme,
     visCfg: cfg,
-    lyricStyle: LYRIC_STYLES.includes(look.lyricStyle) ? look.lyricStyle : "DRIFT",
+    lyricStyle: normaliseStyle(look.lyricStyle),
     lyricFx: LYRIC_FX.includes(look.lyricFx) ? look.lyricFx : "NONE",
     // a code saved before stacking carries one effect; promote it to the list
     lyricFxs: (look.lyricFxs ?? []).filter((f) => LYRIC_FX.includes(f)).length
@@ -147,7 +147,7 @@ export function decodeLook(code: string): Look | null {
   return {
     theme: VIS_THEMES.includes(theme) ? theme : "RING",
     cfg: { ...DEFAULT_VIS_CFG, ...cfg, ...passthrough },
-    lyricStyle: typeof payload.ls === "string" && LYRIC_STYLES.includes(payload.ls) ? payload.ls : "DRIFT",
+    lyricStyle: typeof payload.ls === "string" ? normaliseStyle(payload.ls) : "WAVE",
     lyricFx: typeof payload.lf === "string" && LYRIC_FX.includes(payload.lf) ? payload.lf : "NONE",
     lyricFxs: Array.isArray(payload.lfs)
       ? (payload.lfs as unknown[]).filter((f): f is string => typeof f === "string" && LYRIC_FX.includes(f)).slice(0, 8)

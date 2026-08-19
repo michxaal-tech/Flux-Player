@@ -99,22 +99,30 @@ npm run catalogue        # every Discover source, against the live services
   scoring, auto-search per track, .lrc import, and a manual "wrong lyrics?"
   search so a mismatched file can be corrected by picking the right song
   yourself. 20 line animations × 44 per-letter effects, drawn on a dedicated
-  canvas layer. An outgoing line **fades in place**: the same block, the same
-  position, the same size, losing only opacity. That is harder than it sounds
-  because every style lays its line out differently, so the fade replays the
-  block the line was last drawn as rather than laying it out again — three
-  earlier attempts each failed by *replacing* the line with something (a smaller
-  ghost, then one that drifted and shrank), which reads as a swap however smooth
-  the alpha ramp is. The curve is an ease-*out*: a smoothstep holds 93%
-  opacity for the first 200ms and then falls off a cliff, which measures like a
-  fade but watches like the line sitting there and popping out. One line fades
-  at a time, since each replays the live line at full size and a pile of them is
-  a wall of text rather than a fade. `npm run lyricfade` measures the ink and the
-  bounding-box centre across a handover, timed against the wall clock rather than
-  the playhead the store publishes, which is too coarse to resolve a 1s fade.
-  KARAOKE currently fails its early-dimming check — it fades smoothly to nothing
-  and holds position, but starts slower than the rest, and that is reported
-  rather than hidden.
+  canvas layer. Every style is a **continuous function of time** — an optional
+  per-character offset and an optional whole-line one, in em so they scale with
+  the font — and nothing else. Layout, the crossfade in and out, the dwell cap
+  and the letter effects all live in the renderer, so every style behaves
+  identically at the seams and differs only in its motion.
+
+  That replaced twenty hand-written branches, each with its own screen position,
+  its own entry ramp and its own idea of what happens when a line leaves. WAVE
+  was the one that felt right, and the reason is that it never makes a decision:
+  each frame is a smooth function of (time, character index), so there is
+  nothing to jump. The rest arrived somewhere, sat, and were replaced — and
+  twenty branches meant twenty handovers to get right, which they were not.
+  Every line now sits at one anchor, so a line can no longer land on top of one
+  still fading; the outgoing line crossfades out over 0.5s on an ease-*out*
+  curve, because a symmetric one holds most of its opacity for 200ms and then
+  drops, which measures like a fade and watches like a pop. A line also gives up
+  after 5.5s, since its span is the gap to the next one and an instrumental
+  break used to leave the last words hanging.
+
+  `npm run lyricfade` walks all twenty and measures, for each: that an outgoing
+  line exists at all, that it loses opacity from the first frame rather than
+  later, that it never steps, that it holds its position while it goes, and that
+  it reaches nothing.
+
 - **Recorder** — captures the master output (FX, stutters, ambience included)
   via MediaRecorder; takes are stored and downloadable.
 - **Offline export** — renders a whole track through the FX graph with

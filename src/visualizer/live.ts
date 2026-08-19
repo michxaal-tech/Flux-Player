@@ -117,7 +117,7 @@ export interface LiveState {
 
 export const live: LiveState = {
   playing: false, speed: 1, spin: false, spinRate: 0.55, visOpen: false, visTheme: "RING",
-  cfg: { ...DEFAULT_VIS_CFG }, trackName: "", peaks: null, lyricLines: null, lyricsOn: true, lyricStyle: "FADE", lyricFxs: [], lyricFxMatch: true,
+  cfg: { ...DEFAULT_VIS_CFG }, trackName: "", peaks: null, lyricLines: null, lyricsOn: true, lyricStyle: "WAVE", lyricFxs: [], lyricFxMatch: true,
   prog: 0, dur: 0, loopA: null, loopB: null,
   rot: 0, vt: 0, tunnel: [], stars: [], vparts: [], specHist: [], ripples: [],
   flies: [], vort: [], cityH: [], shakeVal: 0,
