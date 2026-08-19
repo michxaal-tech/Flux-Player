@@ -16,6 +16,7 @@ npm run preview    # serve the production build
 node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
 npm run spotify          # Spotify import, network stubbed (after build)
 npm run spotify:live     # same, against the live service — needs the internet
+npm run drops            # drop escalation over a whole track (after build)
 npm run discover         # Internet Archive source, network stubbed (after build)
 npm run catalogue        # every Discover source, against the live services
 ```
@@ -45,7 +46,16 @@ npm run catalogue        # every Discover source, against the live services
   cube, dome, cylinder). **Drop layers**: every drop the analyser finds adds a
   persistent layer to the picture — orbit rings carrying travelling lights, god
   rays, rising embers, luminous constellations, falling light, tumbling shards
-  and more — and it *stays*, swelling in over a couple of beats as it arrives. When the track calms the
+  and more — and it *stays*, swelling in over a couple of beats as it arrives.
+  Placement comes from the analysed timeline, which is why **ANALYZED is on by
+  default**: it knows where every drop is, rather than guessing from the low end
+  as it arrives. The guessed path still runs until the timeline lands and on any
+  file that won't analyse, measuring the low end as a ratio against a floor that
+  falls fast and rises slowly — so an eight-bar loud section doesn't become the
+  new normal before the next drop, and a track that is merely loud throughout
+  doesn't invent drops it never had. `npm run drops` plays synthesised tracks
+  with drops at known times and checks the layers land on them, because this
+  broke once in a way no screenshot or smoke test could see. When the track calms the
   newest layers thin out; when it lifts they come back, so a song builds through
   its length instead of flashing at each drop. Four themes — RING, CITY, TUNNEL, THUNDER — have
   effects written only for them (window lights and a searchlight for the

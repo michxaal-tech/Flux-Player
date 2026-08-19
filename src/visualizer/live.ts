@@ -71,6 +71,9 @@ export interface LiveState {
   dropE: number;
   /** slow-following bass baseline, for approximating drops without analysis */
   prevBassSlow: number;
+  /** seconds the low end has held above the baseline, so one loud kick in a
+   * quiet bar can't be mistaken for a drop */
+  dropHold: number;
   hitE: number;
   section: number;
   /** index of the next entry in anal.hits */
@@ -95,7 +98,9 @@ export interface LiveState {
   flow: number;
   /** how many drops of the analysed timeline have gone by (see dropLayers.ts) */
   dropIdx: number;
-  /** frame index of the last approximated drop, for rate limiting */
+  /** media time of the last approximated drop, in seconds, for rate limiting —
+   * media time rather than frames so the spacing is the same at any refresh
+   * rate, and so it rewinds naturally with the track */
   lastDropAt: number;
   /** true on the single frame a new drop lands */
   dropNew: boolean;
@@ -117,7 +122,7 @@ export const live: LiveState = {
   rot: 0, vt: 0, tunnel: [], stars: [], vparts: [], specHist: [], ripples: [],
   flies: [], vort: [], cityH: [], shakeVal: 0,
   beatAvg: 0, prevBass: 0, fluxAvg: 0, fluxDev: 0, lastBeatAt: 0, beats: [], bpm: 0, flashVal: 0, cycleT: 0,
-  beatE: 0, energy: 0.35, anal: null, analOn: false, analBeat: 0, dropE: 0, prevBassSlow: 0, hitE: 0, section: 0, analHit: 0, impRings: [], impScan: -1, impShock: [], syncMs: 0, playerTheme: "AURORA", playerBgOn: true, scratch: {},
+  beatE: 0, energy: 0.35, anal: null, analOn: false, analBeat: 0, dropE: 0, prevBassSlow: 0, dropHold: 0, hitE: 0, section: 0, analHit: 0, impRings: [], impScan: -1, impShock: [], syncMs: 0, playerTheme: "AURORA", playerBgOn: true, scratch: {},
   frameMs: 16.7, resScale: 1, quality: 1, flow: 0, lastDropAt: -9999, dropIdx: 0, dropNew: false, dropSlots: 0, dropAmts: [], dropBloom: 0,
 };
 

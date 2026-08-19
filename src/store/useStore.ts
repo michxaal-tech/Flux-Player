@@ -230,7 +230,7 @@ export const useStore = create<StoreState>()(
         coverRev: 0,
         radioMode: "off",
         miniPlayer: true,
-        analyzedMode: false,
+        analyzedMode: true,
         analyzeStatus: "",
         miniStatus: "",
         melodyStatus: "",
@@ -423,7 +423,17 @@ export const useStore = create<StoreState>()(
       }),
       {
         name: "flux-store",
-        version: 1,
+        version: 2,
+        // v2 turns ANALYZED on. It was opt-in and off by default, which meant
+        // almost nobody had the exact drop timeline and everyone got the guessed
+        // one instead — and that guessed path was the broken one. Existing
+        // installs carry `false` in storage, so flipping the default alone would
+        // leave them on the old behaviour forever.
+        migrate: (prev: unknown, from: number) => {
+          const s = (prev ?? {}) as Record<string, unknown>;
+          if (from < 2) s.analyzedMode = true;
+          return s;
+        },
         storage: lazyJsonStorage(1500),
         partialize: (s) => ({
           playlists: s.playlists,

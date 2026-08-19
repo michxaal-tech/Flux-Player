@@ -189,6 +189,25 @@ function syncLive(): void {
   };
   sub((s) => s.analyzedMode, wantAnalysis);
   sub((s) => getCurrentTrack(s)?.fileId, wantAnalysis, { fireImmediately: true });
+  // The escalation belongs to a song, so every part of it has to be rewound
+  // when the song changes. Without this the guessed-drop counter carried over
+  // between tracks, so the second track opened with the first one's layers and
+  // — once the running total passed the cap — nothing ever unlocked again for
+  // the rest of the session. The analysed path recomputes the ordinal from the
+  // timeline every frame and so hid the bug entirely.
+  sub(
+    (s) => getCurrentTrack(s)?.fileId,
+    () => {
+      live.dropIdx = 0;
+      live.dropSlots = 0;
+      live.dropAmts = [];
+      live.dropBloom = 0;
+      live.dropE = 0;
+      live.lastDropAt = -9999;
+      live.prevBassSlow = 0;
+      live.dropHold = 0;
+    }
+  );
   sub((s) => s.lyricsOn, (v) => { live.lyricsOn = v; }, { fireImmediately: true });
   sub((s) => s.lyricStyle, (v) => { live.lyricStyle = v; }, { fireImmediately: true });
   // a look saved before effects could stack carries a single `lyricFx`; fold it
@@ -509,24 +528,63 @@ export function startRenderLoop(): void {
           L.section = sec;
         }
       } else {
-        // no timeline: approximate a drop from a sudden sustained low-end lift
+        // No timeline: infer drops from the low end.
+        //
+        // This is worth getting right rather than treating as a rough stand-in,
+        // because it is what runs before the analysis lands and on any file that
+        // won't analyse. Measured against a track with drops at 8s, 20s and 32s,
+        // the version before this one unlocked exactly one layer per track — and
+        // that one at t≈0. Two causes: the baseline started at zero, so the first
+        // frames of music scored 0.90 against 0.42 for a real drop (and burned the
+        // spacing window on the way past); and it compared an absolute difference
+        // against a baseline that followed at 1%/frame, which had caught up long
+        // before the next drop, scoring it 0.08 — under any threshold that the
+        // opening didn't already trip.
         hit = beat;
-        const jump = bass - L.prevBassSlow;
-        L.prevBassSlow += (bass - L.prevBassSlow) * 0.01;
-        const prevDrop = L.dropE;
-        L.dropE = Math.max(L.dropE * 0.97, Math.min(1, Math.max(0, jump - 0.18) * 3));
-        // no timeline to count against, so a rising edge stands in for a drop —
-        // escalation still works without analysis, just less reliably placed
-        // A loud four-to-the-floor track crosses this threshold constantly, so
-        // without a minimum spacing the escalation ladder tops out in seconds.
-        // Real drops are tens of seconds apart.
-        // Approximated drops are unreliable enough that letting them run the
-        // whole ladder would bury a loud track in layers it never earned, so
-        // guessed drops only ever unlock the first few.
-        if (L.dropE > 0.55 && prevDrop <= 0.55 && t - L.lastDropAt > 60 * 20 && L.dropIdx < 3) {
+        const dsec = Math.min(0.1, delta / 1000);
+        const media = engine.audio.currentTime;
+        // The loudest jump in any track is its first second — silence into
+        // music — and it is not a drop. Seeding the floor from that first frame
+        // just moved the false positive rather than removing it: the frame is
+        // near-silent, so the very next frame reads as an enormous lift. So the
+        // floor only starts tracking once there is real signal to track, and
+        // nothing unlocks until it has had a few seconds to settle.
+        // Two phases. For the first few seconds the floor chases the signal
+        // hard so that it is already accurate when detection starts — otherwise
+        // the moment detection switches on, whatever the floor happens to be
+        // reads as a lift, and the warm-up boundary becomes the false positive
+        // that the track opening used to be.
+        const settling = media < 6;
+        const warm = !settling && L.prevBassSlow > 0;
+        if (L.prevBassSlow <= 0 && bass > 0.05) L.prevBassSlow = bass;
+        // A floor that drops quickly and rises slowly. Asymmetry is the point:
+        // a loud eight bars must not become the new normal before the next drop
+        // arrives, while a track that genuinely quietens should be measured
+        // against where it now sits.
+        if (L.prevBassSlow > 0) {
+          const k = settling ? 3 : bass < L.prevBassSlow ? 2.2 : 0.16;
+          L.prevBassSlow += (bass - L.prevBassSlow) * Math.min(1, k * dsec);
+        }
+        // ratio, not difference, so the same passage reads the same whether the
+        // master is hot or quiet
+        const lift = warm ? bass / Math.max(0.02, L.prevBassSlow) - 1 : 0;
+        L.dropE = Math.max(L.dropE * Math.pow(0.35, dsec), Math.min(1, lift * 0.5));
+        // a drop sustains; one loud kick over a quiet bar does not. The
+        // threshold is set from measurement rather than taste: an unmistakable
+        // quiet-to-full transition measures a lift of about 0.7 here, because
+        // `bass` is a normalised FFT band and not linear amplitude, while a
+        // track that is simply loud throughout sits around 0.2 once the floor
+        // has settled.
+        L.dropHold = lift > 0.5 ? L.dropHold + dsec : 0;
+        if (
+          L.dropHold > 0.35 &&
+          media - L.lastDropAt > 12 &&
+          L.dropSlots < MAX_SLOTS
+        ) {
           L.dropIdx++;
           L.dropNew = true;
-          L.lastDropAt = t;
+          L.lastDropAt = media;
+          L.dropHold = 0;
         }
         L.section = 0;
       }

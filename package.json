@@ -13,7 +13,8 @@
     "spotify": "node scripts/spotify-e2e.mjs",
     "spotify:live": "node scripts/spotify-check.mjs",
     "discover": "node scripts/discover-e2e.mjs",
-    "catalogue": "node scripts/catalogue-check.mjs"
+    "catalogue": "node scripts/catalogue-check.mjs",
+    "drops": "node scripts/drop-check.mjs"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
