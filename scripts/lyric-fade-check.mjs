@@ -83,7 +83,17 @@ const sample = () => page.evaluate(() => {
       if (py < y0) y0 = py; if (py > y1) y1 = py;
     }
   }
-  return { ink: Math.round(ink / 1000), box: x1 < 0 ? null : [x0, y0, x1, y1], ghosts: window.__flux?.scratch?.lyrGhosts?.items?.length ?? 0 };
+  const L = window.__flux, G = L?.scratch?.lyrGhosts;
+  const t0 = G?.items?.[0]?.t0;
+  return {
+    ink: Math.round(ink / 1000),
+    box: x1 < 0 ? null : [x0, y0, x1, y1],
+    ghosts: G?.items?.length ?? 0,
+    // seconds since this line left, from the same clock the renderer fades on —
+    // sample index is not a usable stand-in, since media time advances
+    // unevenly between samples
+    age: t0 == null ? -1 : L.prog * (L.dur || 0) - t0,
+  };
 });
 
 for (const style of STYLES) {
@@ -101,7 +111,10 @@ for (const style of STYLES) {
 
   const series = [];
   for (let i = 0; i < 30; i++) {
-    series.push(await sample());
+    // Wall clock, not the playhead: playback is real time, so elapsed wall time
+    // between samples is exact, while the playhead the store publishes advances
+    // in steps of a few hundred ms and aliased the whole fade into three points.
+    series.push({ ...(await sample()), wall: Date.now() });
     await page.waitForTimeout(120);
   }
 
@@ -125,6 +138,28 @@ for (const style of STYLES) {
     worst = Math.max(worst, (fading[i - 1].ink - fading[i].ink) / fading[i - 1].ink);
   }
   check("it fades rather than stepping", worst < 0.5, `largest single-frame loss ${(worst * 100).toFixed(0)}%`);
+
+  // It must start dimming *at once*. A smoothstep passes every check above and
+  // still reads as popping, because it holds 93% opacity for the first 200ms
+  // and then falls off a cliff — the eye sees a line that sits there and then
+  // goes. This is the property that was missing, so it is the one asserted.
+  // The property that was missing, so the one worth asserting: a smoothstep
+  // passes every other check here and still reads as popping, because it holds
+  // 93% opacity for 200ms and then falls off a cliff.
+  const first = fading[0];
+  const at = fading.find((s) => s.wall - first.wall >= 220);
+  if (!at) {
+    console.log("  – it starts dimming immediately — the fade was over before a second sample landed");
+  } else {
+    const early = at.ink / first.ink;
+    check("it starts dimming immediately", early <= 0.8,
+      `${(early * 100).toFixed(0)}% of its opacity still there ${at.wall - first.wall}ms in`);
+  }
+
+  // One outgoing line, not a pile of them: each replays the live line at full
+  // size, so several at once is a wall of text rather than a fade.
+  const most = Math.max(...series.map((s) => s.ghosts));
+  check("only one line fades at a time", most <= 1, `${most} at once`);
 
   // Only opacity changes. The box contracts as dim pixels fall under the
   // threshold — that is what a fading halo does — so the centre is what says

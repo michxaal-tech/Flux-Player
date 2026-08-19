@@ -105,9 +105,16 @@ npm run catalogue        # every Discover source, against the live services
   block the line was last drawn as rather than laying it out again — three
   earlier attempts each failed by *replacing* the line with something (a smaller
   ghost, then one that drifted and shrank), which reads as a swap however smooth
-  the alpha ramp is. `npm run lyricfade` measures the ink and the bounding-box
-  centre across a handover, since a still frame of a dim line looks the same
-  either way.
+  the alpha ramp is. The curve is an ease-*out*: a smoothstep holds 93%
+  opacity for the first 200ms and then falls off a cliff, which measures like a
+  fade but watches like the line sitting there and popping out. One line fades
+  at a time, since each replays the live line at full size and a pile of them is
+  a wall of text rather than a fade. `npm run lyricfade` measures the ink and the
+  bounding-box centre across a handover, timed against the wall clock rather than
+  the playhead the store publishes, which is too coarse to resolve a 1s fade.
+  KARAOKE currently fails its early-dimming check — it fades smoothly to nothing
+  and holds position, but starts slower than the rest, and that is reported
+  rather than hidden.
 - **Recorder** — captures the master output (FX, stutters, ambience included)
   via MediaRecorder; takes are stored and downloadable.
 - **Offline export** — renders a whole track through the FX graph with

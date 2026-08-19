@@ -384,7 +384,29 @@ interface GhostState { last: number; items: Ghost[] }
 /** How long an outgoing line takes to fade to nothing. It starts at full
  * opacity rather than stepping down first — a step at the handover is visible
  * as a flicker, and a fade that begins with a flicker is not a fade. */
-const GHOST_SECS = 1.2;
+const GHOST_SECS = 1.1;
+
+/**
+ * Opacity of an outgoing line, `age` seconds after it left.
+ *
+ * Ease *out*, not the smoothstep this used to be. Smoothstep is symmetric, so
+ * it barely moves at the start — 0.98 after 100ms, 0.93 after 200ms, 0.84 after
+ * 300ms — and then falls off a cliff. Measured as a curve that looks like a
+ * fade; watched, it reads as the line sitting there and then popping out, which
+ * is the complaint this was supposed to fix. Losing a quarter of its opacity in
+ * the first 200ms is what makes it read as fading from the moment it starts.
+ */
+const ghostAlpha = (age: number): number => Math.pow(1 - Math.min(1, Math.max(0, age / GHOST_SECS)), 1.6);
+
+/**
+ * How many outgoing lines may be fading at once.
+ *
+ * One. Each replays the live line at its full size, so three of them plus the
+ * line that just arrived puts four blocks of text on screen at once — on
+ * densely timed lyrics that is a wall of words, which is not what a fade is
+ * for. The older ones were never the point; the line you just read is.
+ */
+const GHOST_MAX = 1;
 
 /** deterministic 0..1 hash — stable jitter without per-frame allocation */
 const hash01 = (n: number): number => {
@@ -445,7 +467,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
       G.items.push({ text: cur.prev, unit: G.last, t0: time, block });
     }
     G.last = cur.index;
-    if (G.items.length > 3) G.items.splice(0, G.items.length - 3);
+    if (G.items.length > GHOST_MAX) G.items.splice(0, G.items.length - GHOST_MAX);
   }
   for (let i = G.items.length - 1; i >= 0; i--) {
     const a = time - G.items[i].t0;
@@ -458,7 +480,14 @@ export function drawLyricOverlay(x: LyricCtx): void {
     // Subtitle layout: centred, fixed height, its own two-pass fill. An
     // outgoing line is the same thing drawn dimmer and fully sung, so it fades
     // where it sat rather than being replaced.
-    const karaokeLine = (text: string, frac: number, a: number) => {
+    // `base` is the dim white underlay a live line needs to stay legible over
+    // the theme; a fading line skips it, since two overlapping coats composite
+    // closer to opaque than either alone. Note this did not fully fix KARAOKE's
+    // fade: it still holds ~93% of its ink 265ms in, where the other styles are
+    // at 47-77%, and the cause is not yet identified. It does fade smoothly to
+    // nothing and holds its position — it just starts slower than it should.
+    // `npm run lyricfade` reports this as a failing check rather than hiding it.
+    const karaokeLine = (text: string, frac: number, a: number, base = true) => {
       c.font = `700 ${Math.floor(size)}px 'Space Grotesk', sans-serif`;
       const block = layoutBlock(c, text, size, w * 0.84);
       const sizePx = size * block.scale;
@@ -472,10 +501,12 @@ export function drawLyricOverlay(x: LyricCtx): void {
       block.rows.forEach((row, i) => {
         const ry = y + (i - (block.rows.length - 1) / 2) * lineH;
         const rw = c.measureText(row).width;
-        c.shadowBlur = 12 * a;
-        c.shadowColor = `rgba(0,0,0,${0.8 * a})`;
-        c.fillStyle = `rgba(255,255,255,${0.35 * a})`;
-        c.fillText(row, w / 2, ry);
+        if (base) {
+          c.shadowBlur = 12 * a;
+          c.shadowColor = `rgba(0,0,0,${0.8 * a})`;
+          c.fillStyle = `rgba(255,255,255,${0.35 * a})`;
+          c.fillText(row, w / 2, ry);
+        }
         const rowFrac = Math.min(1, Math.max(0, sung / row.length));
         sung -= row.length;
         if (rowFrac > 0) {
@@ -492,9 +523,9 @@ export function drawLyricOverlay(x: LyricCtx): void {
       });
     };
     for (const g of G.items) {
-      const ga = 1 - smooth((time - g.t0) / GHOST_SECS);
+      const ga = ghostAlpha(time - g.t0);
       // the line is over, so it fades fully sung rather than half-filled
-      if (ga > 0.02) karaokeLine(g.text, 1, ga);
+      if (ga > 0.02) karaokeLine(g.text, 1, ga, false);
     }
     if (cur.text) karaokeLine(cur.text, cur.frac, 1);
     c.restore();
@@ -615,7 +646,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
   // and motion is not a fade. Nothing here changes but alpha.
   for (const g of G.items) {
     const age = time - g.t0;
-    const ga = 1 - smooth(age / GHOST_SECS);
+    const ga = ghostAlpha(age);
     if (ga < 0.02) continue;
     if (g.block) {
       // the same block, in the same place, at the same size — only dimmer
