@@ -408,6 +408,23 @@ const ghostAlpha = (age: number): number => Math.pow(1 - Math.min(1, Math.max(0,
  */
 const GHOST_MAX = 1;
 
+/**
+ * Styles that draw their outgoing line themselves, and are skipped by the
+ * shared fade below.
+ *
+ * Both of these render characters directly rather than through `drawBlock`, so
+ * nothing records where their line was — the shared fade fell back to the
+ * scatter position at full size and dropped the old line on top of the new one,
+ * in a different typeface treatment. They also both centre every line, so the
+ * outgoing and incoming lines share a spot by construction, which is why they
+ * get their own shorter crossfade: at the same position, a slow fade means two
+ * solid texts printed over each other, which is neither a fade nor readable.
+ */
+const SELF_FADE = new Set(["KARAOKE", "WAVE"]);
+const CENTRED_GHOST_SECS = 0.5;
+const centredGhostAlpha = (age: number): number =>
+  Math.pow(1 - Math.min(1, Math.max(0, age / CENTRED_GHOST_SECS)), 1.6);
+
 /** deterministic 0..1 hash — stable jitter without per-frame allocation */
 const hash01 = (n: number): number => {
   const s = Math.sin(n * 12.9898 + 78.233) * 43758.5453;
@@ -523,7 +540,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
       });
     };
     for (const g of G.items) {
-      const ga = ghostAlpha(time - g.t0);
+      const ga = centredGhostAlpha(time - g.t0);
       // the line is over, so it fades fully sung rather than half-filled
       if (ga > 0.02) karaokeLine(g.text, 1, ga, false);
     }
@@ -633,6 +650,53 @@ export function drawLyricOverlay(x: LyricCtx): void {
     return;
   }
 
+  // WAVE renders characters itself rather than through drawBlock, so its
+  // outgoing line has to be drawn by the same code or it changes appearance,
+  // position and size at the handover — which is what put two lines on top of
+  // each other. Defined here rather than in the branch below so a line still
+  // fades when nothing follows it.
+  const waveLine = (text: string, a: number, scl: number, swell: number) => {
+    if (!text || a <= 0.02) return;
+    const m = blockMetrics(c, text, { x: w / 2, scale: scl, maxW: w * 0.62, size }, w);
+    const amp = m.sizePx * (0.1 + beatE * 0.4) * swell;
+    // colour ramp built once per line, then indexed per character (no
+    // per-character string building in the inner loop)
+    const last = WAVE_PAL.length - 1;
+    for (let i = 0; i <= last; i++) {
+      const f2 = i / last;
+      WAVE_PAL[i] = CMix(f2, a, 54 + f2 * 26);
+    }
+    c.save();
+    c.translate(m.x, h * 0.45);
+    c.scale(scl, scl);
+    c.shadowBlur = (14 + beatE * 20) * a;
+    c.shadowColor = C1(a);
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    let ci = 0;
+    for (let r = 0; r < m.rows.length; r++) {
+      const row = m.rows[r];
+      const ry = (r - (m.rows.length - 1) / 2) * m.lineH;
+      let px = -c.measureText(row).width / 2;
+      for (const ch of row) {
+        const cw = c.measureText(ch).width;
+        const s2 = Math.sin(vt * 0.08 - ci * 0.5);
+        c.fillStyle = WAVE_PAL[Math.round((s2 + 1) * 0.5 * last)];
+        c.fillText(ch, px + cw / 2, ry + s2 * amp);
+        px += cw;
+        ci++;
+      }
+    }
+    c.restore();
+  };
+
+  if (style === "WAVE") {
+    for (const g of G.items) {
+      // its own opacity, not the incoming line's appear ramp
+      waveLine(g.text, centredGhostAlpha(time - g.t0), 0.97, 1);
+    }
+  }
+
   // Lines that have gone: the same line, in the same place, at the same size,
   // losing opacity until it is not there.
   //
@@ -644,7 +708,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
   // but still drifted up 26px and shrank a fifth on the way out, so it read as
   // leaving rather than fading. Anything that moves or resizes reads as motion,
   // and motion is not a fade. Nothing here changes but alpha.
-  for (const g of G.items) {
+  for (const g of SELF_FADE.has(style) ? [] : G.items) {
     const age = time - g.t0;
     const ga = ghostAlpha(age);
     if (ga < 0.02) continue;
@@ -794,39 +858,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
       glowAmt: 14 + beatE * 16, glowColor: C1(),
     }, w);
   } else if (style === "WAVE") {
-    // characters ride a travelling sine wave; the swell grows on every beat
-    const scl = 0.97 + appear * 0.03 + beatE * 0.03;
-    const m = blockMetrics(c, cur.text, { x: w / 2, scale: scl, maxW: w * 0.62, size }, w);
-    const amp = m.sizePx * (0.1 + beatE * 0.4) * appear;
-    // colour ramp built once per frame, then indexed per character (no
-    // per-character string building in the inner loop)
-    const last = WAVE_PAL.length - 1;
-    for (let i = 0; i <= last; i++) {
-      const f2 = i / last;
-      WAVE_PAL[i] = CMix(f2, alpha, 54 + f2 * 26);
-    }
-    c.save();
-    c.translate(m.x, h * 0.45);
-    c.scale(scl, scl);
-    c.shadowBlur = 14 + beatE * 20;
-    c.shadowColor = C1();
-    c.textAlign = "center";
-    c.textBaseline = "middle";
-    let ci = 0;
-    for (let r = 0; r < m.rows.length; r++) {
-      const row = m.rows[r];
-      const ry = (r - (m.rows.length - 1) / 2) * m.lineH;
-      let px = -c.measureText(row).width / 2;
-      for (const ch of row) {
-        const cw = c.measureText(ch).width;
-        const s2 = Math.sin(vt * 0.08 - ci * 0.5);
-        c.fillStyle = WAVE_PAL[Math.round((s2 + 1) * 0.5 * last)];
-        c.fillText(ch, px + cw / 2, ry + s2 * amp);
-        px += cw;
-        ci++;
-      }
-    }
-    c.restore();
+    waveLine(cur.text, alpha, 0.97 + appear * 0.03 + beatE * 0.03, appear);
   } else if (style === "BOUNCE") {
     // drops in from above the frame and settles with decaying overshoots
     const t2 = Math.max(0, cur.age);

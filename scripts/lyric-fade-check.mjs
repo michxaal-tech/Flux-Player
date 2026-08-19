@@ -123,11 +123,22 @@ for (const style of STYLES) {
   // to the right as it ends — and measuring across that boundary attributes the
   // live animation to the fade. The next line is empty, so in these frames the
   // outgoing line is the only thing drawn.
+  // Centred styles (they draw the outgoing and incoming line in the same spot)
+  // use a deliberately quicker crossfade, so what counts as "smooth" differs:
+  // sampled every ~140ms, a 0.5s fade *must* lose about half its ink between
+  // consecutive samples, and that is the curve rather than a step. Expectations
+  // are derived from the style's own fade length instead of one flat number.
+  const fadeSecs = ({ WAVE: 0.5, KARAOKE: 0.5 })[style] ?? 1.1;
+  const dt = 0.14;
+  const expectedLoss = 1 - Math.pow(Math.max(0, (fadeSecs - dt) / fadeSecs), 1.6);
+  const allowedLoss = Math.min(0.85, expectedLoss * 1.8);
+  const minFrames = Math.max(2, Math.round(fadeSecs / 0.25));
+
   const live = Math.max(...series.map((s) => s.ink));
   const fading = series.filter((s) => s.ghosts >= 1 && s.ink > 0);
   check("the line is drawn at all", live > 100, `peak ink ${live}`);
-  check("an outgoing line is kept at all", fading.length >= 3,
-    `${fading.length} frames of fade — 0 means it was dropped the instant the next line arrived`);
+  check("an outgoing line is kept at all", fading.length >= minFrames,
+    `${fading.length} frames of fade over ${fadeSecs}s — 0 means it was dropped the instant the next line arrived`);
   if (!fading.length) continue;
 
   // No step: while it is still bright, no single frame may lose most of it.
@@ -137,7 +148,8 @@ for (const style of STYLES) {
     if (fading[i - 1].ink < top * 0.35) break; // the tail is alpha cutoff and 8-bit noise
     worst = Math.max(worst, (fading[i - 1].ink - fading[i].ink) / fading[i - 1].ink);
   }
-  check("it fades rather than stepping", worst < 0.5, `largest single-frame loss ${(worst * 100).toFixed(0)}%`);
+  check("it fades rather than stepping", worst < allowedLoss,
+    `largest single-frame loss ${(worst * 100).toFixed(0)}%, allowed ${(allowedLoss * 100).toFixed(0)}% for a ${fadeSecs}s fade`);
 
   // It must start dimming *at once*. A smoothstep passes every check above and
   // still reads as popping, because it holds 93% opacity for the first 200ms
