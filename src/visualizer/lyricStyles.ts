@@ -180,9 +180,11 @@ export const LYRIC_STYLE_DEFS: LyricStyleDef[] = [
     blurb: "letters fall into place one after another",
     char: ({ i, n, age }) => {
       // each character has its own start, so the line assembles smoothly
-      const lead = (i / Math.max(1, n)) * 0.45;
-      const k = rise(age - lead, 0.5);
-      return { dy: (1 - k) * -0.5, alpha: 0.15 + k * 0.85 };
+      const lead = (i / Math.max(1, n)) * 0.4;
+      const k = rise(age - lead, 0.55);
+      // a short drop, not a plunge: half an em of travel reads as letters being
+      // thrown at the screen rather than settling onto it
+      return { dy: (1 - k) * -0.22, alpha: 0.2 + k * 0.8 };
     },
   },
   {

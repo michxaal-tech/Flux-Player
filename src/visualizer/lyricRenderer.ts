@@ -395,25 +395,8 @@ function drawBlockLetters(
 
 /** reusable colour ramp for the per-character WAVE style (filled each frame) */
 
-/**
- * How long an outgoing line takes to fade to nothing.
- *
- * Every line sits at the same anchor now, so the line leaving and the line
- * arriving share a spot — which is how WAVE always worked, and is why it never
- * had lines colliding. At one anchor the crossfade has to be quick, or two
- * solid texts are printed over each other.
- */
-const OUT_SECS = 0.5;
-/** ease *out*: a symmetric curve holds ~93% opacity for 200ms and then drops,
- * which measures like a fade and watches like the line popping */
-const outAlpha = (age: number): number => Math.pow(1 - Math.min(1, Math.max(0, age / OUT_SECS)), 1.6);
-
 /** how long a line may hold the screen before it fades on its own, in seconds */
 const MAX_DWELL = 5.5;
-
-/** A line that has gone, still fading on its own clock. */
-interface Ghost { text: string; unit: number; t0: number }
-interface GhostState { last: number; items: Ghost[] }
 
 export function drawLyricOverlay(x: LyricCtx): void {
   const { c, w, h, time, beatE, C1, C2, CMix, L } = x;
@@ -444,22 +427,6 @@ export function drawLyricOverlay(x: LyricCtx): void {
 
   const cur = halved(raw);
 
-  // A line records when it left and finishes its own fade, so the next line
-  // arriving cannot cut it short. One at a time: each is drawn at full size, and
-  // a pile of them is a wall of text rather than a fade.
-  const G = (L.scratch.lyrGhosts ??= { last: -1, items: [] as Ghost[] }) as GhostState;
-  if (cur.index !== G.last) {
-    if (G.last >= 0 && cur.prev) G.items.push({ text: cur.prev, unit: G.last, t0: time });
-    G.last = cur.index;
-    if (G.items.length > 1) G.items.splice(0, G.items.length - 1);
-  }
-  for (let i = G.items.length - 1; i >= 0; i--) {
-    const age = time - G.items[i].t0;
-    // the second test catches a seek backwards, which would otherwise strand a
-    // line with a start time in the future
-    if (age > OUT_SECS || age < 0) G.items.splice(i, 1);
-  }
-
   // `time` is playback seconds and never resets, so every motion driven by it
   // is continuous across lines — nothing restarts, so nothing can jump.
   const flow = time;
@@ -478,9 +445,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
       maxW,
       size,
       // the halo fades with the letters. A constant blur radius leaves a wide
-      // bright cloud hanging around text that is nearly gone, which is both
-      // wrong to look at and why the outgoing line measured at 82% of its ink
-      // when its opacity was down to 29%.
+      // bright cloud hanging around text that is nearly gone.
       glowAmt: 16 * alpha,
       glowColor: C1(alpha),
       fxFrac: frac,
@@ -490,19 +455,29 @@ export function drawLyricOverlay(x: LyricCtx): void {
     }, w);
   };
 
-  // The line that just left. It is drawn as settled — its entry animation is
-  // over — so it only loses opacity while it goes.
-  for (const g of G.items) {
-    drawUnit(g.text, 3, 1, outAlpha(time - g.t0));
-  }
-
-  // The live line. It fades in over the same sort of ramp it fades out on, and
-  // gives up on its own after MAX_DWELL: a line's span is the gap to the next
-  // one, so an instrumental break used to leave the last words hanging for the
-  // length of the break.
-  const appear = smooth(cur.age / 0.4);
+  // One line on screen, ever.
+  //
+  // Every line sits at the same place, so anything that crossfades one line
+  // into the next prints two different texts on top of each other for the
+  // length of the fade — which is unreadable, and is what a "handover" between
+  // an outgoing and an incoming line always produced here no matter how the
+  // fade itself was shaped. There is no handover now: a line knows how long it
+  // has, so it fades *itself* out in its final moments and is gone before the
+  // next one starts. The next line then fades up from nothing onto a clear
+  // screen.
+  //
+  // `span` comes from the gap to the next line, which is what the timing file
+  // gives us, so the exit is anchored to when the words actually stop rather
+  // than to a fixed delay after they began.
+  const span = cur.frac > 0.02 ? cur.age / Math.max(0.02, cur.frac) : 3;
+  const inSecs = Math.min(0.32, span * 0.22);
+  const outSecs = Math.min(0.4, span * 0.28);
+  const appear = smooth(cur.age / Math.max(0.08, inSecs));
+  const leaving = smooth((cur.age - (span - outSecs)) / Math.max(0.08, outSecs));
+  // a line's span is the gap to the next one, so an instrumental break would
+  // otherwise leave the last words hanging for the length of the break
   const overstay = smooth((cur.age - MAX_DWELL) / 0.9);
-  drawUnit(cur.text, cur.age, cur.frac, appear * (1 - overstay));
+  drawUnit(cur.text, cur.age, cur.frac, appear * (1 - leaving) * (1 - overstay));
 
   c.restore();
   letterCtx = null;

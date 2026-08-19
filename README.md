@@ -111,17 +111,23 @@ npm run catalogue        # every Discover source, against the live services
   each frame is a smooth function of (time, character index), so there is
   nothing to jump. The rest arrived somewhere, sat, and were replaced — and
   twenty branches meant twenty handovers to get right, which they were not.
-  Every line now sits at one anchor, so a line can no longer land on top of one
-  still fading; the outgoing line crossfades out over 0.5s on an ease-*out*
-  curve, because a symmetric one holds most of its opacity for 200ms and then
-  drops, which measures like a fade and watches like a pop. A line also gives up
-  after 5.5s, since its span is the gap to the next one and an instrumental
-  break used to leave the last words hanging.
+  **One line is on screen at a time.** Every line sits at the same place, so
+  anything that crossfades one into the next prints two different texts on top
+  of each other for the length of the fade — unreadable, and what a handover
+  between an outgoing and an incoming line always produced here however the fade
+  was shaped. There is no handover: a line knows how long it has from the gap to
+  the next one, so it fades *itself* out in its final moments and is gone before
+  the next starts, which then fades up onto a clear screen. A line also gives up
+  after 5.5s, since an instrumental break would otherwise leave the last words
+  hanging for the length of the break.
 
-  `npm run lyricfade` walks all twenty and measures, for each: that an outgoing
-  line exists at all, that it loses opacity from the first frame rather than
-  later, that it never steps, that it holds its position while it goes, and that
-  it reaches nothing.
+  `npm run lyricfade` walks all twenty against **two real consecutive lines** and
+  measures, for each: that a line is drawn, that the ink never reaches what two
+  lines would (which is what catches them overlapping), that the screen actually
+  clears between them, and that a line holds its place while it is up. Every
+  earlier version of this check made the second line empty so the first could be
+  measured alone — so it never once measured what happens when one line follows
+  another, which is exactly where every fault was.
 
 - **Recorder** — captures the master output (FX, stutters, ambience included)
   via MediaRecorder; takes are stored and downloadable.

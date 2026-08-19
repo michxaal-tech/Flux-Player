@@ -126,8 +126,16 @@ for (const style of STYLES) {
   await page.evaluate((st) => {
     const s = window.__fluxStore.getState();
     const now = window.__fluxEngine.audio.currentTime;
-    // placeholder text, and an empty line after it so the outgoing one is alone
-    const lyrics = [{ t: now + 0.4, text: "ONE TWO THREE" }, { t: now + 2.2, text: "" }];
+    // Two real consecutive lines. The earlier version of this check made the
+    // second line empty so the first could be measured alone — which meant it
+    // never once measured what actually happens when one line follows another,
+    // and that is precisely where every fault has been: two different texts
+    // printed on top of each other at the same anchor.
+    const lyrics = [
+      { t: now + 0.6, text: "ALPHA BRAVO CHARLIE" },
+      { t: now + 3.0, text: "DELTA ECHO FOXTROT" },
+      { t: now + 5.4, text: "GOLF HOTEL INDIA" },
+    ];
     s.set({
       playlists: s.playlists.map((pl) => ({ ...pl, tracks: pl.tracks.map((tr) => ({ ...tr, lyrics })) })),
       lyricsOn: true, lyricStyle: st, lyricFxs: [],
@@ -135,85 +143,36 @@ for (const style of STYLES) {
   }, style);
 
   const series = [];
-  for (let i = 0; i < 30; i++) {
-    // Wall clock, not the playhead: playback is real time, so elapsed wall time
-    // between samples is exact, while the playhead the store publishes advances
-    // in steps of a few hundred ms and aliased the whole fade into three points.
+  for (let i = 0; i < 46; i++) {
     series.push({ ...(await sample()), wall: Date.now() });
     await page.waitForTimeout(120);
   }
 
-  // Everything below looks only at frames where an outgoing line exists. A
-  // style's live line may have an outro of its own — SLIDE moves its line 80px
-  // to the right as it ends — and measuring across that boundary attributes the
-  // live animation to the fade. The next line is empty, so in these frames the
-  // outgoing line is the only thing drawn.
-  // Centred styles (they draw the outgoing and incoming line in the same spot)
-  // use a deliberately quicker crossfade, so what counts as "smooth" differs:
-  // sampled every ~140ms, a 0.5s fade *must* lose about half its ink between
-  // consecutive samples, and that is the curve rather than a step. Expectations
-  // are derived from the style's own fade length instead of one flat number.
-  const fadeSecs = CENTRED.has(style) ? 0.5 : 1.1;
-  const dt = 0.14;
-  const expectedLoss = 1 - Math.pow(Math.max(0, (fadeSecs - dt) / fadeSecs), 1.6);
-  const allowedLoss = Math.min(0.85, expectedLoss * 1.8);
-  const minFrames = Math.max(2, Math.round(fadeSecs / 0.25));
+  const inks = series.map((s) => s.ink);
+  const lit = inks.filter((v) => v > 0).sort((a, b) => a - b);
+  const typical = lit.length ? lit[Math.floor(lit.length / 2)] : 0;
+  const peak = Math.max(...inks);
+  check("a line is drawn at all", typical > 80, `typical ink ${typical}`);
+  if (!typical) continue;
 
-  const live = Math.max(...series.map((s) => s.ink));
-  const fading = series.filter((s) => s.ghosts >= 1 && s.ink > 0);
-  check("the line is drawn at all", live > 100, `peak ink ${live}`);
-  check("an outgoing line is kept at all", fading.length >= minFrames,
-    `${fading.length} frames of fade over ${fadeSecs}s — 0 means it was dropped the instant the next line arrived`);
-  if (!fading.length) continue;
+  // Two lines at once shows up as roughly double the ink of one. This is the
+  // check that the empty-second-line fixture could never make.
+  check("never two lines at once", peak <= typical * 1.5,
+    `peak ${peak} against a typical line's ${typical}`);
 
-  // No step: while it is still bright, no single frame may lose most of it.
-  const top = Math.max(...fading.map((s) => s.ink));
-  let worst = 0;
-  for (let i = 1; i < fading.length; i++) {
-    if (fading[i - 1].ink < top * 0.35) break; // the tail is alpha cutoff and 8-bit noise
-    worst = Math.max(worst, (fading[i - 1].ink - fading[i].ink) / fading[i - 1].ink);
-  }
-  check("it fades rather than stepping", worst < allowedLoss,
-    `largest single-frame loss ${(worst * 100).toFixed(0)}%, allowed ${(allowedLoss * 100).toFixed(0)}% for a ${fadeSecs}s fade`);
+  // And the screen genuinely clears between them: a line that merely dims to a
+  // ghost still sits under the next one.
+  const gaps = series.filter((s) => s.ink < typical * 0.06).length;
+  check("the screen clears between lines", gaps >= 1,
+    gaps ? `${gaps} clear frames` : "never empty — a line is still up when the next arrives");
 
-  // It must start dimming *at once*. A smoothstep passes every check above and
-  // still reads as popping, because it holds 93% opacity for the first 200ms
-  // and then falls off a cliff — the eye sees a line that sits there and then
-  // goes. This is the property that was missing, so it is the one asserted.
-  // The property that was missing, so the one worth asserting: a smoothstep
-  // passes every other check here and still reads as popping, because it holds
-  // 93% opacity for 200ms and then falls off a cliff.
-  const first = fading[0];
-  const at = fading.find((s) => s.wall - first.wall >= 220);
-  if (!at) {
-    console.log("  – it starts dimming immediately — the fade was over before a second sample landed");
-  } else {
-    const early = at.ink / first.ink;
-    if (PERSIST.has(style)) {
-      console.log(`  – it starts dimming immediately — not asserted: this style settles earlier lines into a stack rather than fading them out (${(early * 100).toFixed(0)}%)`);
-    } else
-    check("it starts dimming immediately", early <= 0.8,
-      `${(early * 100).toFixed(0)}% of its opacity still there ${at.wall - first.wall}ms in`);
-  }
-
-  // One outgoing line, not a pile of them: each replays the live line at full
-  // size, so several at once is a wall of text rather than a fade.
-  const most = Math.max(...series.map((s) => s.ghosts));
-  check("only one line fades at a time", most <= 1, `${most} at once`);
-
-  // Only opacity changes. The box contracts as dim pixels fall under the
-  // threshold — that is what a fading halo does — so the centre is what says
-  // whether the text itself moved.
-  const cx = fading.map((s) => (s.box[0] + s.box[2]) / 2);
-  const cy = fading.map((s) => (s.box[1] + s.box[3]) / 2);
-  const dx = Math.max(...cx) - Math.min(...cx);
-  const dy = Math.max(...cy) - Math.min(...cy);
-  check("it holds its position and size", dx <= 4 && dy <= 4, `centre moved ${dx.toFixed(1)}x${dy.toFixed(1)}px`);
-
-  if (PERSIST.has(style)) {
-    console.log("  – it fades all the way out — not asserted: this style keeps earlier lines up by design");
-  } else {
-    check("it fades all the way out", series[series.length - 1].ink === 0, `ends at ${series[series.length - 1].ink}`);
+  // The line that is up holds still and holds its size: no drifting or shrinking
+  // away, which is what reads as being replaced rather than fading.
+  const boxes = series.filter((s) => s.box && s.ink > typical * 0.5);
+  if (boxes.length > 2) {
+    const cy = boxes.map((s) => (s.box[1] + s.box[3]) / 2);
+    const dy = Math.max(...cy) - Math.min(...cy);
+    check("the line holds its place while it is up", dy <= 6, `centre moved ${dy.toFixed(1)}px`);
   }
 }
 
