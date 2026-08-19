@@ -37,6 +37,8 @@ export interface StyleArg {
   enter: number;
   /** 0→1 as the line leaves */
   exit: number;
+  /** beat punch envelope, 0..1 — only WAVE uses it, deliberately */
+  beat: number;
 }
 
 export interface CharMotion {
@@ -60,6 +62,8 @@ export interface LineMotion {
   dy?: number;
   rot?: number;
   scale?: number;
+  /** shadow blur in px, when a style wants its own rather than the default */
+  glow?: number;
 }
 
 export interface LyricStyleDef {
@@ -94,17 +98,30 @@ const wash = (k: number, i: number, n: number, spread = 0.55): number => {
 
 export const LYRIC_STYLE_DEFS: LyricStyleDef[] = [
   {
-    // The original, restored: the wave's own sine both lifts each character and
-    // picks its colour, and the swell grows in with the line rather than the
-    // letters flying in from anywhere. Deliberately has no travelling entrance
-    // or exit — this one is liked for what it does while it sits there.
+    // The original, recovered from git rather than rebuilt: a fast travelling
+    // sine that both lifts each character and picks its colour, swelling on the
+    // beat. Every number here is the one it shipped with — 4.8 rad/s (the old
+    // frame-counter speed at 60fps), a swell of 0.1em rising to 0.5 on a beat,
+    // and a glow that punches with it.
+    //
+    // Two of those were removed earlier at the same person's request — it was
+    // "super fast" and shouldn't "follow the beat" — and putting them back is
+    // what "go back further" turned out to mean. Both are one number if either
+    // wants dialling back again.
     id: "WAVE",
-    blurb: "letters ride a travelling wave of colour",
-    char: ({ i, flow, enter }) => {
-      const s = Math.sin(flow * 1.7 - i * 0.5);
-      return { dy: s * 0.13 * ease(enter), tint: (s + 1) * 0.5 };
+    blurb: "letters ride a fast wave of colour, swelling on the beat",
+    char: ({ i, flow, enter, exit, beat }) => {
+      const s = Math.sin(flow * 4.8 - i * 0.5);
+      return {
+        dy: s * (0.1 + beat * 0.4) * ease(enter) - ease(exit) * 1.2,
+        tint: (s + 1) * 0.5,
+      };
     },
-    line: ({ enter }) => ({ scale: 0.97 + ease(enter) * 0.03 }),
+    // The one deviation from the original, and it is deliberate: the outgoing
+    // line lifts away instead of sitting on the incoming one. The original left
+    // the old line stacked on the new at the same anchor, which is the thing
+    // that has been called horrible more than anything else here.
+    line: ({ enter, beat }) => ({ scale: 0.97 + ease(enter) * 0.03 + beat * 0.03, glow: 14 + beat * 20 }),
   },
   {
     id: "RIPPLE",

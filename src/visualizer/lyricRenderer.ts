@@ -169,7 +169,7 @@ interface BlockOpts {
   /** the style's continuous per-character motion, if it has one */
   motion?: (a: StyleArg) => CharMotion;
   /** the arguments a motion needs that the block itself doesn't know */
-  motionArg?: { flow: number; frac: number; age: number; enter: number; exit: number };
+  motionArg?: { flow: number; frac: number; age: number; enter: number; exit: number; beat: number };
   /** 0..1 of the line that has been sung, for the styles that light up as they go */
   fill?: number;
   /** maps a style's per-character tint onto the active palette */
@@ -307,7 +307,7 @@ function drawBlockLetters(
           ? o.motion({
             i: seen, n: Math.max(1, total), row: ri, rows: m.rows.length,
             flow: o.motionArg.flow, frac: o.motionArg.frac, age: o.motionArg.age,
-            enter: o.motionArg.enter, exit: o.motionArg.exit,
+            enter: o.motionArg.enter, exit: o.motionArg.exit, beat: o.motionArg.beat,
           })
           : null;
         const arg = base
@@ -446,7 +446,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
 
   const drawUnit = (text: string, age: number, frac: number, alpha: number, enter: number, exit: number): void => {
     if (!text || alpha <= 0.02) return;
-    const lm = def.line?.({ i: 0, n: 1, row: 0, rows: 1, flow, frac, age, enter, exit }) ?? {};
+    const lm = def.line?.({ i: 0, n: 1, row: 0, rows: 1, flow, frac, age, enter, exit, beat: beatE }) ?? {};
     drawBlock(c, text, {
       x: w / 2 + (lm.dx ?? 0) * size,
       y: anchorY + (lm.dy ?? 0) * size,
@@ -457,11 +457,11 @@ export function drawLyricOverlay(x: LyricCtx): void {
       size,
       // the halo fades with the letters. A constant blur radius leaves a wide
       // bright cloud hanging around text that is nearly gone.
-      glowAmt: 16 * alpha,
+      glowAmt: (lm.glow ?? 16) * alpha,
       glowColor: C1(alpha),
       fxFrac: frac,
       motion: def.char,
-      motionArg: { flow, frac, age, enter, exit },
+      motionArg: { flow, frac, age, enter, exit, beat: beatE },
       fill: def.fill ? frac : undefined,
       tintFor: (t) => CMix(t, 1, 54 + t * 26),
     }, w);
