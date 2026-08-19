@@ -14,7 +14,8 @@
     "spotify:live": "node scripts/spotify-check.mjs",
     "discover": "node scripts/discover-e2e.mjs",
     "catalogue": "node scripts/catalogue-check.mjs",
-    "drops": "node scripts/drop-check.mjs"
+    "drops": "node scripts/drop-check.mjs",
+    "lyricfade": "node scripts/lyric-fade-check.mjs"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",

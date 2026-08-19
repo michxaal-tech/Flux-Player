@@ -222,8 +222,22 @@ let letterCtx: {
   glowColor: string;
 } | null = null;
 
+/**
+ * The last block drawn this frame, so an outgoing line can be replayed exactly
+ * as it last appeared. Every style lays its line out differently — its own
+ * position, its own maxW, its own scale — and a fade that re-derives the layout
+ * gets a different block: the ghost used to pass `maxW: w * 0.52` against the
+ * live line's `w * 0.62`, which pushed `layoutBlock` down a size step, and it
+ * positioned by `posFor` while most styles centre the line. So it faded a
+ * smaller line in a different place, which reads as a swap however smooth the
+ * alpha ramp is. Ghosts draw before the live line, so by frame end this holds
+ * the live one.
+ */
+let lastBlock: (BlockOpts & { text: string }) | null = null;
+
 function drawBlock(c: CanvasRenderingContext2D, text: string, o: BlockOpts, w: number): void {
   if (o.alpha <= 0.01 || !text) return;
+  lastBlock = { ...o, text };
   const m = blockMetrics(c, text, o, w);
   c.save();
   c.translate(m.x, o.y);
@@ -361,13 +375,16 @@ function drawBlockLetters(
 /** reusable colour ramp for the per-character WAVE style (filled each frame) */
 const WAVE_PAL: string[] = new Array<string>(9).fill("");
 
-/** A line that has already gone, still fading out on its own clock. */
-interface Ghost { text: string; unit: number; t0: number }
+/** A line that has already gone, still fading out on its own clock. `block` is
+ * how it was last drawn, so the fade replays that rather than laying it out
+ * again from scratch. */
+interface Ghost { text: string; unit: number; t0: number; block: (BlockOpts & { text: string }) | null }
 interface GhostState { last: number; items: Ghost[] }
 
-/** how long an outgoing line takes to fade, and how bright it starts */
-const GHOST_SECS = 1.0;
-const GHOST_ALPHA = 0.85;
+/** How long an outgoing line takes to fade to nothing. It starts at full
+ * opacity rather than stepping down first — a step at the handover is visible
+ * as a flicker, and a fade that begins with a flicker is not a fade. */
+const GHOST_SECS = 1.2;
 
 /** deterministic 0..1 hash — stable jitter without per-frame allocation */
 const hash01 = (n: number): number => {
@@ -403,25 +420,61 @@ export function drawLyricOverlay(x: LyricCtx): void {
     },
   };
 
+  const cur = halved(raw);
+
+  // Outgoing lines carry their own fade clock.
+  //
+  // The ghost used to be re-derived from the live line every frame, which meant
+  // it was destroyed the instant the *next* line arrived — on densely timed
+  // lyrics that is well before its fade has finished, so the line vanished
+  // rather than faded. Each outgoing unit now records when it left and finishes
+  // its own fade regardless of what arrives after it, and several can overlap
+  // while fast lines stack up.
+  //
+  // This sits above the style branches because several of them return before
+  // reaching the shared drawing below. KARAOKE did, which is why lines under it
+  // disappeared in a single frame no matter what the shared fade did — measured
+  // at 362 ink to 0 with no ghost ever recorded. Styles that draw their own
+  // history (SCATTER, CASCADE) simply never read these.
+  const G = (L.scratch.lyrGhosts ??= { last: -1, items: [] as Ghost[] }) as GhostState;
+  if (cur.index !== G.last) {
+    // `lastBlock` still holds the previous frame's live line, which is exactly
+    // the line that has just gone
+    if (G.last >= 0 && cur.prev) {
+      const block = lastBlock && lastBlock.text === cur.prev ? lastBlock : null;
+      G.items.push({ text: cur.prev, unit: G.last, t0: time, block });
+    }
+    G.last = cur.index;
+    if (G.items.length > 3) G.items.splice(0, G.items.length - 3);
+  }
+  for (let i = G.items.length - 1; i >= 0; i--) {
+    const a = time - G.items[i].t0;
+    // the second test catches a seek backwards, which would otherwise strand a
+    // ghost with a start time in the future
+    if (a > GHOST_SECS || a < 0) G.items.splice(i, 1);
+  }
+
   if (style === "KARAOKE") {
-    const cur = halved(raw);
-    if (cur.text) {
+    // Subtitle layout: centred, fixed height, its own two-pass fill. An
+    // outgoing line is the same thing drawn dimmer and fully sung, so it fades
+    // where it sat rather than being replaced.
+    const karaokeLine = (text: string, frac: number, a: number) => {
       c.font = `700 ${Math.floor(size)}px 'Space Grotesk', sans-serif`;
-      const block = layoutBlock(c, cur.text, size, w * 0.84);
+      const block = layoutBlock(c, text, size, w * 0.84);
       const sizePx = size * block.scale;
       const lineH = sizePx * 1.16;
       const y = h * 0.68;
       c.font = `700 ${Math.floor(sizePx)}px 'Space Grotesk', sans-serif`;
       c.textAlign = "center";
       c.textBaseline = "middle";
-      const totalChars = block.rows.reduce((a, r) => a + r.length, 0);
-      let sung = Math.floor(cur.frac * totalChars);
+      const totalChars = block.rows.reduce((acc, r) => acc + r.length, 0);
+      let sung = Math.floor(frac * totalChars);
       block.rows.forEach((row, i) => {
         const ry = y + (i - (block.rows.length - 1) / 2) * lineH;
         const rw = c.measureText(row).width;
-        c.shadowBlur = 12;
-        c.shadowColor = "rgba(0,0,0,0.8)";
-        c.fillStyle = "rgba(255,255,255,0.35)";
+        c.shadowBlur = 12 * a;
+        c.shadowColor = `rgba(0,0,0,${0.8 * a})`;
+        c.fillStyle = `rgba(255,255,255,${0.35 * a})`;
         c.fillText(row, w / 2, ry);
         const rowFrac = Math.min(1, Math.max(0, sung / row.length));
         sung -= row.length;
@@ -430,14 +483,20 @@ export function drawLyricOverlay(x: LyricCtx): void {
           c.beginPath();
           c.rect(w / 2 - rw / 2, ry - lineH / 2, rw * rowFrac, lineH);
           c.clip();
-          c.shadowBlur = 18 + beatE * 18;
-          c.shadowColor = C1();
-          c.fillStyle = C1(1, 70);
+          c.shadowBlur = (18 + beatE * 18) * a;
+          c.shadowColor = C1(a);
+          c.fillStyle = C1(a, 70);
           c.fillText(row, w / 2, ry);
           c.restore();
         }
       });
+    };
+    for (const g of G.items) {
+      const ga = 1 - smooth((time - g.t0) / GHOST_SECS);
+      // the line is over, so it fades fully sung rather than half-filled
+      if (ga > 0.02) karaokeLine(g.text, 1, ga);
     }
+    if (cur.text) karaokeLine(cur.text, cur.frac, 1);
     c.restore();
     return;
   }
@@ -476,29 +535,6 @@ export function drawLyricOverlay(x: LyricCtx): void {
     }
     c.restore();
     return;
-  }
-
-  const cur = halved(raw);
-
-  // Outgoing lines carry their own fade clock.
-  //
-  // The ghost used to be re-derived from the live line every frame, which meant
-  // it was destroyed the instant the *next* line arrived — on densely timed
-  // lyrics that is well before its fade has finished, so the line vanished
-  // rather than faded. Each outgoing unit now records when it left and finishes
-  // its own fade regardless of what arrives after it, and several can overlap
-  // while fast lines stack up.
-  const G = (L.scratch.lyrGhosts ??= { last: -1, items: [] as Ghost[] }) as GhostState;
-  if (cur.index !== G.last) {
-    if (G.last >= 0 && cur.prev) G.items.push({ text: cur.prev, unit: G.last, t0: time });
-    G.last = cur.index;
-    if (G.items.length > 3) G.items.splice(0, G.items.length - 3);
-  }
-  for (let i = G.items.length - 1; i >= 0; i--) {
-    const a = time - G.items[i].t0;
-    // the second test catches a seek backwards, which would otherwise strand a
-    // ghost with a start time in the future
-    if (a > GHOST_SECS || a < 0) G.items.splice(i, 1);
   }
 
   if (style === "SCATTER") {
@@ -566,26 +602,39 @@ export function drawLyricOverlay(x: LyricCtx): void {
     return;
   }
 
-  // Lines that have gone, fading out *where they were*.
+  // Lines that have gone: the same line, in the same place, at the same size,
+  // losing opacity until it is not there.
   //
-  // They used to be swapped instantly for a small dim ghost at 72% of the size
-  // — measured across a transition, the ink on the lyric canvas fell from 68 to
-  // 32 in a single step. That is why it read as vanishing rather than fading:
-  // the full-size line disappeared and something much smaller appeared in its
-  // place. Now a line keeps its own size and position and simply fades, easing
-  // down to the small-ghost look as it goes, so the handover is continuous.
+  // It has taken two goes to get this right and both failures were the same
+  // mistake — the line was being *replaced* by something rather than fading.
+  // First it was swapped instantly for a small dim ghost at 72% of the size
+  // (measured across a transition, the ink on the lyric canvas fell from 68 to
+  // 32 in one step, which is why it read as vanishing). Then it kept its size
+  // but still drifted up 26px and shrank a fifth on the way out, so it read as
+  // leaving rather than fading. Anything that moves or resizes reads as motion,
+  // and motion is not a fade. Nothing here changes but alpha.
   for (const g of G.items) {
     const age = time - g.t0;
-    const gone = smooth(age / GHOST_SECS);
-    const ga = GHOST_ALPHA * (1 - gone) ** 1.4;
+    const ga = 1 - smooth(age / GHOST_SECS);
     if (ga < 0.02) continue;
+    if (g.block) {
+      // the same block, in the same place, at the same size — only dimmer
+      drawBlock(c, g.text, {
+        ...g.block,
+        alpha: g.block.alpha * ga,
+        // the halo goes with it, or it outlives the letters it belongs to
+        glowAmt: g.block.glowAmt * ga,
+        // the line is over, so effects that key off progress see it as finished
+        fxFrac: 1,
+      }, w);
+      continue;
+    }
+    // nothing was captured (the line was never drawn, e.g. a seek landed past
+    // it): fall back to laying it out where the scatter would have put it
     const [px, py] = posFor(g.unit, w, h);
     drawBlock(c, g.text, {
-      x: px, y: py - gone * 26,
-      alpha: ga,
-      scale: 1 - gone * 0.18,
-      maxW: w * 0.52, size: size * (1 - gone * 0.24),
-      glowAmt: 10 * (1 - gone), glowColor: C2(), fxFrac: 1,
+      x: px, y: py, alpha: ga, scale: 1, maxW: w * 0.62, size,
+      glowAmt: (16 + beatE * 20) * ga, glowColor: C2(), fxFrac: 1,
     }, w);
   }
 

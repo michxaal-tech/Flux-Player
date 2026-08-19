@@ -17,6 +17,7 @@ node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
 npm run spotify          # Spotify import, network stubbed (after build)
 npm run spotify:live     # same, against the live service — needs the internet
 npm run drops            # drop escalation over a whole track (after build)
+npm run lyricfade        # an outgoing lyric line fades rather than being replaced
 npm run discover         # Internet Archive source, network stubbed (after build)
 npm run catalogue        # every Discover source, against the live services
 ```
@@ -98,7 +99,15 @@ npm run catalogue        # every Discover source, against the live services
   scoring, auto-search per track, .lrc import, and a manual "wrong lyrics?"
   search so a mismatched file can be corrected by picking the right song
   yourself. 20 line animations × 44 per-letter effects, drawn on a dedicated
-  canvas layer.
+  canvas layer. An outgoing line **fades in place**: the same block, the same
+  position, the same size, losing only opacity. That is harder than it sounds
+  because every style lays its line out differently, so the fade replays the
+  block the line was last drawn as rather than laying it out again — three
+  earlier attempts each failed by *replacing* the line with something (a smaller
+  ghost, then one that drifted and shrank), which reads as a swap however smooth
+  the alpha ramp is. `npm run lyricfade` measures the ink and the bounding-box
+  centre across a handover, since a still frame of a dim line looks the same
+  either way.
 - **Recorder** — captures the master output (FX, stutters, ambience included)
   via MediaRecorder; takes are stored and downloadable.
 - **Offline export** — renders a whole track through the FX graph with

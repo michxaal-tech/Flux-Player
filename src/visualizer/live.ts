@@ -142,3 +142,8 @@ export const canvasRefs = {
   bpm: new Set<HTMLElement>(),
   level: null as HTMLDivElement | null,
 };
+
+// Companion debug handle to `__flux`. The lyric layer is a bare canvas among
+// several stacked ones, so a test that wants to measure what the lyrics drew —
+// separately from the theme behind them — has no way to pick it out of the DOM.
+if (typeof window !== "undefined") (window as any).__fluxCanvases = canvasRefs;
