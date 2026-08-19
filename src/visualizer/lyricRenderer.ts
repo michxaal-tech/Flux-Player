@@ -172,6 +172,8 @@ interface BlockOpts {
   motionArg?: { flow: number; frac: number; age: number; enter: number; exit: number };
   /** 0..1 of the line that has been sung, for the styles that light up as they go */
   fill?: number;
+  /** maps a style's per-character tint onto the active palette */
+  tintFor?: (t: number) => string;
 }
 
 /** geometry of a laid-out block, exactly as drawBlock would place it. Leaves
@@ -381,7 +383,11 @@ function drawBlockLetters(
             c.strokeText(ch, -adv / 2, 0);
           }
           if (!st.hollow) {
-            c.fillStyle = st.color ?? o.color ?? "#fff";
+            // a letter effect's colour wins; otherwise the style's own tint;
+            // otherwise the block's. Opacity is already on globalAlpha, so the
+            // tint is asked for at full strength.
+            const tint = mo?.tint !== undefined && o.tintFor ? o.tintFor(mo.tint) : undefined;
+            c.fillStyle = st.color ?? tint ?? o.color ?? "#fff";
             c.fillText(ch, -adv / 2, 0);
           }
           c.restore();
@@ -457,6 +463,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
       motion: def.char,
       motionArg: { flow, frac, age, enter, exit },
       fill: def.fill ? frac : undefined,
+      tintFor: (t) => CMix(t, 1, 54 + t * 26),
     }, w);
   };
 

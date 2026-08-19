@@ -45,6 +45,14 @@ export interface CharMotion {
   rot?: number;
   scale?: number;
   alpha?: number;
+  /**
+   * 0..1 along the palette, for styles that colour each character by where it
+   * is in their motion rather than leaving it white. This is most of what WAVE
+   * is: the same sine that lifts a letter also picks its colour, so the line
+   * carries a travelling gradient. Rebuilding WAVE without it kept the movement
+   * and lost the look.
+   */
+  tint?: number;
 }
 
 export interface LineMotion {
@@ -86,16 +94,17 @@ const wash = (k: number, i: number, n: number, spread = 0.55): number => {
 
 export const LYRIC_STYLE_DEFS: LyricStyleDef[] = [
   {
+    // The original, restored: the wave's own sine both lifts each character and
+    // picks its colour, and the swell grows in with the line rather than the
+    // letters flying in from anywhere. Deliberately has no travelling entrance
+    // or exit — this one is liked for what it does while it sits there.
     id: "WAVE",
-    blurb: "letters ride a travelling wave, rising into it and lifting away",
-    char: ({ i, n, flow, enter, exit }) => {
-      const e = wash(enter, i, n);
-      const o = wash(exit, i, n);
-      return {
-        dy: Math.sin(flow * 1.7 - i * 0.5) * 0.18 + (1 - e) * 1.1 - o * 1.3,
-        scale: 0.6 + e * 0.4,
-      };
+    blurb: "letters ride a travelling wave of colour",
+    char: ({ i, flow, enter }) => {
+      const s = Math.sin(flow * 1.7 - i * 0.5);
+      return { dy: s * 0.13 * ease(enter), tint: (s + 1) * 0.5 };
     },
+    line: ({ enter }) => ({ scale: 0.97 + ease(enter) * 0.03 }),
   },
   {
     id: "RIPPLE",
