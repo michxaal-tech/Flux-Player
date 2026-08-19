@@ -111,23 +111,29 @@ npm run catalogue        # every Discover source, against the live services
   each frame is a smooth function of (time, character index), so there is
   nothing to jump. The rest arrived somewhere, sat, and were replaced — and
   twenty branches meant twenty handovers to get right, which they were not.
-  **One line is on screen at a time.** Every line sits at the same place, so
-  anything that crossfades one into the next prints two different texts on top
-  of each other for the length of the fade — unreadable, and what a handover
-  between an outgoing and an incoming line always produced here however the fade
-  was shaped. There is no handover: a line knows how long it has from the gap to
-  the next one, so it fades *itself* out in its final moments and is gone before
-  the next starts, which then fades up onto a clear screen. A line also gives up
-  after 5.5s, since an instrumental break would otherwise leave the last words
-  hanging for the length of the break.
+  **The change from one line to the next is an animation.** Fading one out and
+  the next in at the same anchor prints two texts on top of each other; fading
+  one out *before* the next arrives is readable but dead — a blink of empty
+  screen where the transition should be. Neither is a transition. So a style
+  gets `enter` and `exit` (0→1) alongside the clock and carries the line on and
+  off with the same motion that defines it: WAVE's letters rise into the wave
+  and lift away, GLIDE slides in one side and out the other, SPIRAL unwinds.
+  The line leaving and the line arriving overlap in time but not in space. A
+  line also gives up after 5.5s, on the same exit motion, since its span is the
+  gap to the next one and an instrumental break would otherwise leave the last
+  words hanging.
 
   `npm run lyricfade` walks all twenty against **two real consecutive lines** and
-  measures, for each: that a line is drawn, that the ink never reaches what two
-  lines would (which is what catches them overlapping), that the screen actually
-  clears between them, and that a line holds its place while it is up. Every
-  earlier version of this check made the second line empty so the first could be
-  measured alone — so it never once measured what happens when one line follows
-  another, which is exactly where every fault was.
+  measures, for each: that a line is drawn, that the screen is never empty
+  between lines, that the ink never reaches what two stacked lines would, and
+  that it **visibly animates** — travel, size change or a brightness swing.
+
+  That last one used to assert the opposite. It rewarded a line for holding
+  still, so every amplitude got tuned down until the styles did nothing worth
+  watching; a check that measures the wrong thing does not just miss faults, it
+  causes them. An earlier version also made the second line empty so the first
+  could be measured alone, and so never once measured what happens when one line
+  follows another — which is exactly where every fault lived.
 
 - **Recorder** — captures the master output (FX, stutters, ambience included)
   via MediaRecorder; takes are stored and downloadable.

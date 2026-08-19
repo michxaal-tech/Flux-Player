@@ -169,7 +169,7 @@ interface BlockOpts {
   /** the style's continuous per-character motion, if it has one */
   motion?: (a: StyleArg) => CharMotion;
   /** the arguments a motion needs that the block itself doesn't know */
-  motionArg?: { flow: number; frac: number; age: number };
+  motionArg?: { flow: number; frac: number; age: number; enter: number; exit: number };
   /** 0..1 of the line that has been sung, for the styles that light up as they go */
   fill?: number;
 }
@@ -305,6 +305,7 @@ function drawBlockLetters(
           ? o.motion({
             i: seen, n: Math.max(1, total), row: ri, rows: m.rows.length,
             flow: o.motionArg.flow, frac: o.motionArg.frac, age: o.motionArg.age,
+            enter: o.motionArg.enter, exit: o.motionArg.exit,
           })
           : null;
         const arg = base
@@ -395,6 +396,10 @@ function drawBlockLetters(
 
 /** reusable colour ramp for the per-character WAVE style (filled each frame) */
 
+/** how long a line's entrance and its exit take, in seconds */
+const IN_SECS = 0.5;
+const OUT_SECS = 0.5;
+
 /** how long a line may hold the screen before it fades on its own, in seconds */
 const MAX_DWELL = 5.5;
 
@@ -433,9 +438,9 @@ export function drawLyricOverlay(x: LyricCtx): void {
   const anchorY = h * (def.anchorY ?? 0.45);
   const maxW = w * (def.anchorY ? 0.84 : 0.62);
 
-  const drawUnit = (text: string, age: number, frac: number, alpha: number): void => {
+  const drawUnit = (text: string, age: number, frac: number, alpha: number, enter: number, exit: number): void => {
     if (!text || alpha <= 0.02) return;
-    const lm = def.line?.({ i: 0, n: 1, row: 0, rows: 1, flow, frac, age }) ?? {};
+    const lm = def.line?.({ i: 0, n: 1, row: 0, rows: 1, flow, frac, age, enter, exit }) ?? {};
     drawBlock(c, text, {
       x: w / 2 + (lm.dx ?? 0) * size,
       y: anchorY + (lm.dy ?? 0) * size,
@@ -450,34 +455,37 @@ export function drawLyricOverlay(x: LyricCtx): void {
       glowColor: C1(alpha),
       fxFrac: frac,
       motion: def.char,
-      motionArg: { flow, frac, age },
+      motionArg: { flow, frac, age, enter, exit },
       fill: def.fill ? frac : undefined,
     }, w);
   };
 
-  // One line on screen, ever.
+  // The change from one line to the next is an animation, not a dissolve.
   //
-  // Every line sits at the same place, so anything that crossfades one line
-  // into the next prints two different texts on top of each other for the
-  // length of the fade — which is unreadable, and is what a "handover" between
-  // an outgoing and an incoming line always produced here no matter how the
-  // fade itself was shaped. There is no handover now: a line knows how long it
-  // has, so it fades *itself* out in its final moments and is gone before the
-  // next one starts. The next line then fades up from nothing onto a clear
-  // screen.
-  //
-  // `span` comes from the gap to the next line, which is what the timing file
-  // gives us, so the exit is anchored to when the words actually stop rather
-  // than to a fixed delay after they began.
-  const span = cur.frac > 0.02 ? cur.age / Math.max(0.02, cur.frac) : 3;
-  const inSecs = Math.min(0.32, span * 0.22);
-  const outSecs = Math.min(0.4, span * 0.28);
-  const appear = smooth(cur.age / Math.max(0.08, inSecs));
-  const leaving = smooth((cur.age - (span - outSecs)) / Math.max(0.08, outSecs));
+  // Fading one line out and the next in at the same anchor prints two texts on
+  // top of each other; fading one out *before* the next arrives is readable but
+  // dead — a blink of empty screen where the transition should be. Neither is a
+  // transition. So the line leaving is carried away by its own style's exit
+  // motion while the next is carried in by the same style's entrance: they
+  // overlap in time but not in space, which is what makes the change read as
+  // one line becoming the next.
+  const G = (L.scratch.lyrOut ??= { last: -1, text: "", t0: -99 }) as { last: number; text: string; t0: number };
+  if (cur.index !== G.last) {
+    if (G.last >= 0 && cur.prev) { G.text = cur.prev; G.t0 = time; }
+    G.last = cur.index;
+  }
+
+  const outK = (time - G.t0) / OUT_SECS;
+  if (G.text && outK >= 0 && outK < 1) {
+    drawUnit(G.text, 3, 1, 1 - smooth(outK), 1, outK);
+  }
+
   // a line's span is the gap to the next one, so an instrumental break would
-  // otherwise leave the last words hanging for the length of the break
+  // otherwise leave the last words hanging for the length of the break; when it
+  // times out it leaves on the same exit motion rather than just dimming
   const overstay = smooth((cur.age - MAX_DWELL) / 0.9);
-  drawUnit(cur.text, cur.age, cur.frac, appear * (1 - leaving) * (1 - overstay));
+  const appear = smooth(cur.age / 0.26);
+  drawUnit(cur.text, cur.age, cur.frac, appear * (1 - overstay), cur.age / IN_SECS, overstay);
 
   c.restore();
   letterCtx = null;

@@ -151,28 +151,47 @@ for (const style of STYLES) {
   const inks = series.map((s) => s.ink);
   const lit = inks.filter((v) => v > 0).sort((a, b) => a - b);
   const typical = lit.length ? lit[Math.floor(lit.length / 2)] : 0;
-  const peak = Math.max(...inks);
   check("a line is drawn at all", typical > 80, `typical ink ${typical}`);
   if (!typical) continue;
 
-  // Two lines at once shows up as roughly double the ink of one. This is the
-  // check that the empty-second-line fixture could never make.
-  check("never two lines at once", peak <= typical * 1.5,
+  // Only the stretch where lyrics are actually running: before the first line
+  // and after the last, an empty screen is correct.
+  const first = inks.findIndex((v) => v > typical * 0.2);
+  let last = inks.length - 1;
+  while (last > first && inks[last] < typical * 0.2) last--;
+  const run = series.slice(first, last + 1);
+
+  // The transition is an animation, not a dissolve and not a gap. A frame with
+  // nothing on it between two lines is the blink that "fades out, then the next
+  // fades in" produces, and it reads as dead air.
+  const blank = run.filter((s) => s.ink < typical * 0.08).length;
+  check("no empty screen between lines", blank === 0,
+    blank ? `${blank} frames with nothing on them` : "continuous");
+
+  // ...but the overlap must stay legible. Two lines both at full strength in the
+  // same place is roughly double the ink; a line being carried away while the
+  // next arrives is well under that.
+  const peak = Math.max(...run.map((s) => s.ink));
+  check("lines never pile up", peak <= typical * 1.75,
     `peak ${peak} against a typical line's ${typical}`);
 
-  // And the screen genuinely clears between them: a line that merely dims to a
-  // ghost still sits under the next one.
-  const gaps = series.filter((s) => s.ink < typical * 0.06).length;
-  check("the screen clears between lines", gaps >= 1,
-    gaps ? `${gaps} clear frames` : "never empty — a line is still up when the next arrives");
-
-  // The line that is up holds still and holds its size: no drifting or shrinking
-  // away, which is what reads as being replaced rather than fading.
-  const boxes = series.filter((s) => s.box && s.ink > typical * 0.5);
-  if (boxes.length > 2) {
+  // And it has to actually move. This is the check that used to demand the
+  // opposite — it rewarded a line for holding still, so every motion got tuned
+  // down until the styles did nothing worth looking at.
+  if (style === "STILL") {
+    console.log("  – it visibly animates — not asserted: STILL is the one that shouldn't");
+  } else {
+    const boxes = run.filter((s) => s.box && s.ink > typical * 0.35);
+    const cx = boxes.map((s) => (s.box[0] + s.box[2]) / 2);
     const cy = boxes.map((s) => (s.box[1] + s.box[3]) / 2);
-    const dy = Math.max(...cy) - Math.min(...cy);
-    check("the line holds its place while it is up", dy <= 6, `centre moved ${dy.toFixed(1)}px`);
+    const wide = boxes.map((s) => s.box[2] - s.box[0]);
+    const tall = boxes.map((s) => s.box[3] - s.box[1]);
+    const spread = (v) => (v.length ? Math.max(...v) - Math.min(...v) : 0);
+    // any of: it travels, it changes size, or its brightness moves through it
+    const move = Math.max(spread(cx), spread(cy), spread(wide), spread(tall));
+    const inkSwing = spread(boxes.map((s) => s.ink)) / typical;
+    check("it visibly animates", move >= 4 || inkSwing >= 0.25,
+      `${move.toFixed(1)}px of travel or size change, ${(inkSwing * 100).toFixed(0)}% brightness swing`);
   }
 }
 
