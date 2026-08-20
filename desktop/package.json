@@ -1,0 +1,45 @@
+{
+  "name": "flux-player-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Desktop shell around the FLUX Player build",
+  "author": "michxaal-tech",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --publish never"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "tech.michxaal.fluxplayer",
+    "productName": "FLUX Player",
+    "directories": {
+      "output": "out",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "app/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "FLUX-Player-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "FLUX-Player-${version}-portable.${ext}"
+    }
+  }
+}

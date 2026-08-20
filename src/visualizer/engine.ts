@@ -18,6 +18,18 @@ import { bloomFrame } from "./bloom";
 
 const SIG_SET = new Set<string>(SIGNATURE_IMPACTS);
 
+/**
+ * Longest edge of the visualizer's backing store, in device pixels.
+ *
+ * The browser build has to assume a phone or a tablet, where more pixels is
+ * how you turn a smooth theme into a slideshow. The desktop shell says so on
+ * the way in (see desktop/preload.cjs), and a laptop or desktop GPU can afford
+ * a good deal more — so it gets a sharper picture rather than a bigger one.
+ * The adaptive quality signal still scales this down if the machine turns out
+ * not to keep up, so raising the ceiling cannot cost frames, only sharpness.
+ */
+const MAX_EDGE = typeof window !== "undefined" && (window as any).__fluxDesktop ? 2560 : 1800;
+
 // Which themes actually ask for glow, learned the first time each one draws.
 const glowThemes: Record<string, boolean> = {};
 
@@ -829,7 +841,7 @@ export function startRenderLoop(): void {
       const offscreen = use3d || glowThemes[L.visTheme] !== false;
       // The visible canvas is then only ever a blit target, so it must not carry
       // the trail — preserve-on-resize moves to the scene buffer instead.
-      const [w, h] = sizeCanvas(vc, 1800 * resScale, !offscreen);
+      const [w, h] = sizeCanvas(vc, MAX_EDGE * resScale, !offscreen);
       // The scene buffer mirrors vc's backing store and transform so themes see
       // exactly the geometry they'd see drawing straight to the screen.
       let c = vc.getContext("2d")!;
@@ -1415,7 +1427,7 @@ export function startRenderLoop(): void {
       const lc = canvasRefs.lyr;
       const lyricActive = !!(L.lyricsOn && L.lyricLines && !LYRIC_NATIVE_THEMES.has(TH));
       if (lc && (lyricActive || lyricWasActive)) {
-        const [lw2, lh2] = sizeCanvas(lc, 1800 * resScale);
+        const [lw2, lh2] = sizeCanvas(lc, MAX_EDGE * resScale);
         const c2 = lc.getContext("2d")!;
         c2.clearRect(0, 0, lw2, lh2);
         if (lyricActive) {

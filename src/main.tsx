@@ -57,8 +57,12 @@ createRoot(document.getElementById("root")!).render(
   </StrictMode>
 );
 
-// PWA: offline app shell
-if ("serviceWorker" in navigator && import.meta.env.PROD) {
+// PWA: offline app shell.
+//
+// Not in the desktop shell: the build is already on disk there, so the worker
+// would only add a second copy of every asset and a cache that can serve a
+// stale one after an update.
+if ("serviceWorker" in navigator && import.meta.env.PROD && !(window as any).__fluxDesktop) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {});
   });

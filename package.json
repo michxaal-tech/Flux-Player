@@ -15,7 +15,9 @@
     "discover": "node scripts/discover-e2e.mjs",
     "catalogue": "node scripts/catalogue-check.mjs",
     "drops": "node scripts/drop-check.mjs",
-    "lyricfade": "node scripts/lyric-fade-check.mjs"
+    "lyricfade": "node scripts/lyric-fade-check.mjs",
+    "perf": "node scripts/perf-probe.mjs",
+    "looks": "node scripts/look-shot.mjs"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",

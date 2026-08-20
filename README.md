@@ -20,6 +20,38 @@ npm run drops            # drop escalation over a whole track (after build)
 npm run lyricfade        # an outgoing lyric line fades rather than being replaced
 npm run discover         # Internet Archive source, network stubbed (after build)
 npm run catalogue        # every Discover source, against the live services
+npm run perf             # where a frame goes, per theme, one knob at a time
+npm run looks            # one frame per theme, for comparing two builds
+```
+
+## Desktop build
+
+`desktop/` is a window around the same build the web version ships — not a
+second implementation, so a fix lands in both. What it adds is the two things
+a web page is not allowed to do for itself:
+
+- **Chromium's GPU flags.** `ignore-gpu-blocklist` and `enable-gpu-rasterization`.
+  Chromium blocklists GPU rasterisation on a lot of ordinary laptop graphics
+  drivers, and the visual engine is entirely canvas rasterisation — so on the
+  machines most likely to stutter, the browser is doing all of it on the CPU
+  and cannot be argued out of it.
+- **A higher pixel ceiling.** The backing store cap goes from 1800px to
+  2560px (`MAX_EDGE`), because the browser build has to assume a phone. The
+  adaptive quality signal still scales it back if the machine can't hold
+  60fps, so raising the ceiling costs sharpness at worst, never frames.
+
+It loads the build over a `flux://` scheme of its own rather than `file://`,
+which would render the markup and break IndexedDB — where the library lives —
+along with workers and every secure-context API.
+
+The **Desktop build (Windows)** workflow builds it on GitHub's runners and
+attaches the installer to the `desktop-latest` release, so it needs no
+toolchain locally. To build it by hand instead:
+
+```bash
+npm run build
+mkdir -p desktop/app && cp -r dist/* desktop/app/
+cd desktop && npm install && npm start      # or: npx electron-builder --win
 ```
 
 ## Features
