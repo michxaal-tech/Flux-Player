@@ -37,11 +37,21 @@ jobs:
           New-Item -ItemType Directory -Force -Path desktop/app | Out-Null
           Copy-Item -Recurse -Force dist/* desktop/app/
 
+      - name: Install the shell's dependencies
+        working-directory: desktop
+        run: npm install
+
+      # Packaging succeeding proves nothing about whether the window loads —
+      # the first build published an installer that opened a blank window,
+      # because a bad API call threw before loadURL ever ran. This boots the
+      # real shell and checks it renders.
+      - name: Check it actually launches
+        working-directory: desktop
+        run: npx electron launch-check.cjs
+
       - name: Package
         working-directory: desktop
-        run: |
-          npm install
-          npx electron-builder --win --publish never
+        run: npx electron-builder --win --publish never
 
       # Always kept, so a run that cannot publish still leaves something
       # downloadable.

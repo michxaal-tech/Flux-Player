@@ -53,7 +53,7 @@ function createWindow() {
   });
   // Anything the app opens externally — a lyrics source, a track page — goes
   // to the real browser rather than opening a second chrome-less window.
-  win.setWindowOpenHandler(({ url }) => {
+  win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) shell.openExternal(url);
     return { action: "deny" };
   });

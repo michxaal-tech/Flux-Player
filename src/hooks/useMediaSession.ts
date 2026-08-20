@@ -33,10 +33,16 @@ export function useMediaSession(): void {
           title: tr?.name ?? "FLUX PRO",
           artist: "FLUX PRO",
           album: getPlayingList(s).name,
-          artwork: [
-            { src: `${import.meta.env.BASE_URL}icons/icon-192.png`, sizes: "192x192", type: "image/png" },
-            { src: `${import.meta.env.BASE_URL}icons/icon-512.png`, sizes: "512x512", type: "image/png" },
-          ],
+          // Chromium only accepts a MediaImage served over http/https/data/blob.
+          // The desktop shell serves the build over a scheme of its own, so
+          // there the artwork is left off — the OS media controls lose the
+          // icon rather than the app throwing on every track change.
+          artwork: location.protocol.startsWith("http")
+            ? [
+                { src: `${import.meta.env.BASE_URL}icons/icon-192.png`, sizes: "192x192", type: "image/png" },
+                { src: `${import.meta.env.BASE_URL}icons/icon-512.png`, sizes: "512x512", type: "image/png" },
+              ]
+            : [],
         });
       },
       { fireImmediately: true }
