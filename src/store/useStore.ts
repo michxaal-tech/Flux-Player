@@ -103,6 +103,8 @@ export interface StoreState {
   coverRev: number;
   /** drive visuals from a pre-computed timeline instead of live FFT */
   analyzedMode: boolean;
+  /** run the slow, triple-checked analysis on every track automatically */
+  deepAnalyze: boolean;
   analyzeStatus: string;
   /** why the mini player didn't open, shown in ME → PLAYBACK */
   miniStatus: string;
@@ -231,6 +233,7 @@ export const useStore = create<StoreState>()(
         radioMode: "off",
         miniPlayer: true,
         analyzedMode: true,
+        deepAnalyze: false,
         analyzeStatus: "",
         miniStatus: "",
         melodyStatus: "",
@@ -468,6 +471,7 @@ export const useStore = create<StoreState>()(
           radioMode: s.radioMode,
           miniPlayer: s.miniPlayer,
           analyzedMode: s.analyzedMode,
+          deepAnalyze: s.deepAnalyze,
           aiProvider: s.aiProvider,
           aiModel: s.aiModel,
           aiBaseUrl: s.aiBaseUrl,

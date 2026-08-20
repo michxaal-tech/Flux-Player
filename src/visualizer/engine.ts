@@ -199,7 +199,9 @@ function syncLive(): void {
     live.analBeat = 0;
     live.analHit = 0;
     import("../audio/analysis").then(({ ensureAnalysis }) =>
-      ensureAnalysis(tr.fileId).then((a) => {
+      // AUTO DEEP applies from the moment a track starts, so the better timing
+      // is there for the first play rather than only after someone asks for it
+      ensureAnalysis(tr.fileId, false, useStore.getState().deepAnalyze).then((a) => {
         const now = getCurrentTrack(useStore.getState());
         if (a && now?.fileId === tr.fileId && useStore.getState().analyzedMode) {
           live.anal = a;
@@ -643,12 +645,27 @@ export function startRenderLoop(): void {
           if (cfg.fastBeats && hit) beat = true; // drive the main pulse from hits too
           L.bpm = A.bpm;
 
-          // drop envelope: ramp up over the 1.5s before, decay over 3s after
+          // Drop envelope: swell into it, decay out of it.
+          //
+          // The 1.5s of build and 3s of decay below are what a drop gets when
+          // nothing better is known, and they are a guess — right for a dance
+          // record and wrong for everything else. A deep analysis measures both
+          // per drop, so a long build swells for as long as it actually builds
+          // and a drop that stops dead stops dead instead of glowing for three
+          // seconds over the silence that was the point of it.
           let de = 0;
-          for (const d of A.drops) {
+          const shapes = A.deep?.shapes;
+          for (let k = 0; k < A.drops.length; k++) {
+            const d = A.drops[k];
+            const sh = shapes?.[k];
+            const lead = sh?.lead ?? 1.5;
+            const decay = sh?.decay ?? 3;
             const dt = media - d;
-            if (dt < -1.5 || dt > 3) continue;
-            de = Math.max(de, dt < 0 ? (1.5 + dt) / 1.5 * 0.8 : 1 - dt / 3);
+            if (dt < -lead || dt > decay) continue;
+            // strength scales the whole envelope, so a modest lift reads as a
+            // modest one rather than as every drop being the biggest
+            const amp = sh ? 0.55 + sh.strength * 0.45 : 1;
+            de = Math.max(de, (dt < 0 ? ((lead + dt) / lead) * 0.8 : 1 - dt / decay) * amp);
           }
           L.dropE = de;
           if (de > 0.05) L.energy = Math.max(L.energy, 0.55 + de * 0.45);

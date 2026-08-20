@@ -24,6 +24,8 @@ npm run perf             # where a frame goes, per theme, one knob at a time
 npm run fps              # proves a theme's motion is frame-rate independent
 npm run seekbar          # scrubbing, and drop markers landing before their drops
 npm run impacts          # every beat impact does something, and nothing whites out
+npm run deepbeats        # the beat tracker against pulses with known times (no browser)
+npm run deep             # deep vs fast analysis on real audio, error in ms
 npm run looks            # one frame per theme, for comparing two builds
 ```
 

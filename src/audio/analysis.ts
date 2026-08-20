@@ -10,7 +10,7 @@
 // and made playback crackle — badly so with reverb, which is expensive on its
 // own — because hundreds of milliseconds of FFT sat between yields.
 import { blobStore, getUrl } from "../store/blobStore";
-import { useStore } from "../store/useStore";
+import { getCurrentTrack, useStore } from "../store/useStore";
 import type { AnalysisResult } from "./analysisWorker";
 
 export interface Analysis extends AnalysisResult {
@@ -19,7 +19,7 @@ export interface Analysis extends AnalysisResult {
 }
 
 const KEY = (fileId: string) => `anal-${fileId}`;
-const VERSION = 5; // bump invalidates cached analyses after a detector change
+const VERSION = 6; // bump invalidates cached analyses after a detector change
 
 export async function loadAnalysis(fileId: string): Promise<Analysis | null> {
   try {
@@ -37,7 +37,7 @@ export async function clearAnalysis(fileId: string): Promise<void> {
 }
 
 /** Decodes the audio and hands the samples to the worker. */
-async function runAnalysis(fileId: string, onProgress: (msg: string) => void): Promise<Analysis | null> {
+async function runAnalysis(fileId: string, onProgress: (msg: string) => void, deep = false): Promise<Analysis | null> {
   const url = await getUrl(fileId);
   if (!url) return null;
   onProgress("decoding…");
@@ -64,18 +64,18 @@ async function runAnalysis(fileId: string, onProgress: (msg: string) => void): P
   if (audio.numberOfChannels > 1) for (let i = 0; i < n; i++) mono[i] /= audio.numberOfChannels;
   ac.close();
 
-  onProgress("analysing… 0%");
+  onProgress(deep ? "deep analysing… 0%" : "analysing… 0%");
   const worker = new Worker(new URL("./analysisWorker.ts", import.meta.url), { type: "module" });
   const result = await new Promise<AnalysisResult | null>((resolve) => {
     worker.onmessage = (e: MessageEvent<{ type: string; value?: number; result?: AnalysisResult }>) => {
       const d = e.data;
-      if (d.type === "progress") onProgress(`analysing… ${Math.round((d.value ?? 0) * 100)}%`);
+      if (d.type === "progress") onProgress(`${deep ? "deep " : ""}analysing… ${Math.round((d.value ?? 0) * 100)}%`);
       else if (d.type === "done") resolve(d.result ?? null);
       else resolve(null);
     };
     worker.onerror = () => resolve(null);
     // transfer the samples so nothing is copied
-    worker.postMessage({ mono: mono.buffer, rate }, [mono.buffer]);
+    worker.postMessage({ mono: mono.buffer, rate, deep }, [mono.buffer]);
   });
   worker.terminate();
   if (!result) return null;
@@ -87,12 +87,19 @@ async function runAnalysis(fileId: string, onProgress: (msg: string) => void): P
 
 const inFlight = new Map<string, Promise<Analysis | null>>();
 
-/** Analyses a track if it isn't already cached. `force` re-runs it. */
-export async function ensureAnalysis(fileId: string, force = false): Promise<Analysis | null> {
+/**
+ * Analyses a track if it isn't already cached. `force` re-runs it.
+ *
+ * A cached *fast* analysis does not satisfy a request for a deep one — the
+ * whole point of asking is to get the better timing — so a deep request
+ * re-runs unless what is cached is already deep.
+ */
+export async function ensureAnalysis(fileId: string, force = false, deep = false): Promise<Analysis | null> {
   if (force) await clearAnalysis(fileId);
   else {
     const cached = await loadAnalysis(fileId);
-    if (cached) return cached;
+    if (cached && (!deep || cached.deep)) return cached;
+    if (cached) await clearAnalysis(fileId);
   }
   const existing = inFlight.get(fileId);
   if (existing) return existing;
@@ -100,7 +107,7 @@ export async function ensureAnalysis(fileId: string, force = false): Promise<Ana
   const job = (async () => {
     useStore.setState({ analyzeStatus: "decoding…" });
     try {
-      const a = await runAnalysis(fileId, (msg) => useStore.setState({ analyzeStatus: msg }));
+      const a = await runAnalysis(fileId, (msg) => useStore.setState({ analyzeStatus: msg }), deep);
       useStore.setState({ analyzeStatus: a ? "" : "couldn't analyse that file" });
       if (!a) setTimeout(() => useStore.setState({ analyzeStatus: "" }), 4000);
       return a;
@@ -114,4 +121,15 @@ export async function ensureAnalysis(fileId: string, force = false): Promise<Ana
   })();
   inFlight.set(fileId, job);
   return job;
+}
+
+// Debug handle, companion to `__flux` and `__fluxThemes`: analyses whatever is
+// playing and hands back the result. A test cannot reach the module graph of a
+// production bundle, and the alternative — running these checks against the dev
+// server — would be testing a different build from the one that ships.
+if (typeof window !== "undefined") {
+  (window as unknown as Record<string, unknown>).__fluxAnalyse = (deep: boolean) => {
+    const tr = getCurrentTrack(useStore.getState());
+    return tr ? ensureAnalysis(tr.fileId, true, deep) : Promise.resolve(null);
+  };
 }

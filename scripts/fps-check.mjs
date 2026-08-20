@@ -121,8 +121,8 @@ if (!all.length) {
  * was, and a full-resolution readback every frame would itself become the
  * bottleneck and change what it is measuring.
  */
-async function motionOver(page, theme, fsPin, frames) {
-  await page.evaluate(({ theme, fsPin }) => {
+async function motionOver(page, theme, fsPin, frames, idle) {
+  await page.evaluate(({ theme, fsPin, idle }) => {
     const L = window.__flux;
     L.visTheme = theme;
     // Draw on every rAF tick: the gate must never skip one, or the frame
@@ -130,12 +130,16 @@ async function motionOver(page, theme, fsPin, frames) {
     window.__fpsPin = 1;
     window.__fsPin = fsPin;
     L.cfg.quality = "MAX";
+    // On the idle path the render loop is told the audio is not playing, so
+    // every theme falls back to its own time-based stand-in for the spectrum
+    // instead of reading the analyser. See the two-mode note below.
+    if (idle) L.playing = false;
     // the theme's own motion is what is under test, not the beat layer
     // Particles are the engine's own layer, not the theme's, and they respawn
     // at random — that randomness is per-frame noise, so twice the frames is
     // twice as much of it, which reads as motion that is not there.
     Object.assign(L.cfg, { impacts: [], flash: false, shake: false, mirror: false, vis3d: "OFF", particles: 0 });
-  }, { theme, fsPin });
+  }, { theme, fsPin, idle });
   await page.waitForTimeout(1500); // let trails and particle counts settle
   return page.evaluate((frames) => new Promise((res) => {
     const src = window.__fluxCanvases.vis;
@@ -170,18 +174,44 @@ async function motionOver(page, theme, fsPin, frames) {
 
 let failed = 0;
 const rows = [];
-console.log(`\nmotion over the same logical time, split into ${FRAMES} frames and into ${FRAMES * 2}\n`);
-console.log("theme".padEnd(14) + "fs=1".padStart(12) + "fs=0.5".padStart(12) + "  ratio");
+console.log(`\nratio of motion over the same logical time, split into ${FRAMES} frames and into ${FRAMES * 2}\n`);
+console.log("theme".padEnd(14) + "playing".padStart(12) + "idle".padStart(12) + "  worst");
+
+/**
+ * One mode's verdict. `null` when the theme barely moved in that mode, which
+ * is not a pass and not a failure — there was nothing to measure.
+ */
+async function verdict(page, theme, idle) {
+  const one = await motionOver(page, theme, 1, FRAMES, idle);
+  const half = await motionOver(page, theme, 0.5, FRAMES * 2, idle);
+  if (one < 8) return null;
+  return half / one;
+}
 
 for (const theme of all) {
-  const one = await motionOver(page, theme, 1, FRAMES);
-  const half = await motionOver(page, theme, 0.5, FRAMES * 2);
-  // A theme that measured no motion is not a theme that passed. The first cut
-  // of this scored a ratio of 1.00 for WAVES and called it correct, when what
-  // had actually happened was that making `t` a float broke its `t % 3 === 0`
-  // spawn test and it had stopped animating entirely.
-  const dead = one < 8;
-  const ratio = dead ? 0 : half / one;
+  // Two independent measurements, and a theme has to survive both.
+  //
+  // Neither mode is trustworthy alone, which took a while to accept. With the
+  // track playing, spectrum-driven detail is sampled across different spans of
+  // the music in the two runs — the runs take different amounts of wall clock
+  // by construction — and that shows up as motion which is not motion. On the
+  // idle path that confound is gone, but the themes that draw the spectrum
+  // and little else have almost nothing left to draw, so they measure noise.
+  // A theme that comes out frame-rate independent under both is independent;
+  // one that disagrees with itself is not something to ship at double speed on
+  // the strength of whichever answer I preferred.
+  const live = await verdict(page, theme, false);
+  const idle = await verdict(page, theme, true);
+  const seen = [live, idle].filter((v) => v !== null);
+  const worst = seen.length
+    ? seen.reduce((a, b) => (Math.abs(Math.log(b)) > Math.abs(Math.log(a)) ? b : a))
+    : null;
+  // A theme that measured no motion in either mode is not a theme that passed.
+  // The first cut of this scored a ratio of 1.00 for WAVES and called it
+  // correct, when what had actually happened was that making `t` a float broke
+  // its `t % 3 === 0` spawn test and it had stopped animating entirely.
+  const dead = worst === null;
+  const ratio = dead ? 0 : worst;
   // Two-sided. Running slow is as wrong as running fast, and the first cut of
   // this only bounded the top — so WAVES, which had gone to a fifth speed,
   // scored 0.21 and was reported as correct.
@@ -190,8 +220,8 @@ for (const theme of all) {
   rows.push({ theme, ratio, ok, dead });
   console.log(
     theme.padEnd(14) +
-    one.toFixed(1).padStart(12) +
-    half.toFixed(1).padStart(12) +
+    (live === null ? "—" : live.toFixed(2)).padStart(12) +
+    (idle === null ? "—" : idle.toFixed(2)).padStart(12) +
     (dead ? "     — barely moves at all" : `  ${ratio.toFixed(2)} ${ok ? "\u2713" : ratio > 1 ? "\u2717 runs fast" : "\u2717 runs slow"}`)
   );
 }

@@ -133,8 +133,8 @@ export const TIME_NORMALISED = new Set<string>([
   "ECLIPSE", "FIREFLIES", "FISSION", "GALAXY", "GRAVITY", "GRID",
   "GYROSCOPE", "HELIX", "JELLY", "LIQUID", "MARQUEE", "NOVA",
   "ORB", "ORIGAMI", "ORRERY", "PRISM", "REACTOR", "RING",
-  "SCOPE", "SERPENT", "SILK", "SINGULARITY", "SPIRAL", "STRATA",
-  "TESSERACT", "WAVES",
+  "SCOPE", "SERPENT", "SINGULARITY", "SPIRAL", "STRATA",
+  "TESSERACT",
   // converted by hand and re-verified; LASERS, CITY, TUNNEL and LANTERNS were
   // converted in the same pass and still fail, so they are deliberately absent
   "CRYSTAL", "HALO", "KALEIDO", "STARFIELD",

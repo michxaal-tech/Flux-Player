@@ -152,6 +152,7 @@ export function VisualizerOverlay() {
   const visChaos = useStore((s) => s.visChaos);
   const aiReady = useStore((s) => s.aiReady);
   const analyzedMode = useStore((s) => s.analyzedMode);
+  const deepAnalyze = useStore((s) => s.deepAnalyze);
   const analyzeStatus = useStore((s) => s.analyzeStatus);
   const vidState = useStore((s) => s.vidState);
   const vidTime = useStore((s) => s.vidTime);
@@ -712,6 +713,16 @@ export function VisualizerOverlay() {
                 style={{ ...chip(false), padding: "6px 11px", fontSize: 9.5 }}
               >⟳ REANALYZE</button>
             )}
+            {analyzedMode && track && (
+              <button
+                onClick={async () => {
+                  const { ensureAnalysis } = await import("../audio/analysis");
+                  const a = await ensureAnalysis(track.fileId, true, true);
+                  if (a) { live.anal = a; live.analBeat = 0; live.analHit = 0; }
+                }}
+                style={{ ...chip(!!live.anal?.deep, MAG), padding: "6px 11px", fontSize: 9.5 }}
+              >◆ DEEP<NewTag /></button>
+            )}
             {!!analyzeStatus && <span style={{ fontSize: 10, color: MAG }}>{analyzeStatus}</span>}
           </div>
           <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, margin: "5px 0 4px" }}>
@@ -720,6 +731,30 @@ export function VisualizerOverlay() {
             thread, so it never interrupts playback. Cached per track — REANALYZE rebuilds it if
             the timing ever looks wrong. FAST BEATS also flashes on drum fills and double-time
             passages instead of only the tempo grid.
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 4 }}>
+            <Toggle label="AUTO DEEP" on={deepAnalyze} onChange={(v) => set({ deepAnalyze: v })} color={MAG} />
+            {live.anal?.deep && (
+              <span style={{ fontSize: 9.5, color: "rgba(255,255,255,0.5)" }}>
+                this track:{" "}
+                <span style={{ color: live.anal.deep.confidence > 0.72 ? CYAN : live.anal.deep.confidence > 0.5 ? "#FFD166" : "#FF6B6B" }}>
+                  {Math.round(live.anal.deep.confidence * 100)}% confident
+                </span>
+                {live.anal.deep.tempoCurve.length > 4 && (() => {
+                  const c = live.anal.deep.tempoCurve;
+                  const lo = Math.min(...c), hi = Math.max(...c);
+                  return hi - lo > 4 ? <> · tempo moves {Math.round(lo)}–{Math.round(hi)}</> : null;
+                })()}
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, margin: "2px 0 4px" }}>
+            <b style={{ color: "rgba(255,255,255,0.55)" }}>DEEP</b> hops four times as finely, tracks the beat
+            with a search that can follow a tempo that <i>moves</i> instead of assuming one, fits each beat
+            between frames, and then checks itself: it runs a second tracker on the low end alone and compares.
+            Where the two agree the pulse is real, and where they don't it tells you rather than picking the
+            prettier answer. It also measures each drop's build and decay instead of assuming 1.5s and 3s.
+            Slower — a few seconds a track — so it's opt-in, or turn on AUTO DEEP and every track gets it.
           </div>
 
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "10px 0 8px" }}>IMPACT</div>
