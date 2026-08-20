@@ -3,7 +3,7 @@ import type React from "react";
 import { BG, BORDER, CYAN, LEVELS, MAG, MONO, PALETTES, PLAYER_THEMES, TAGS } from "../constants";
 import { nextTrack, prevTrack, playAt, seek, setInstMode, togglePlay } from "../audio/transport";
 import { getCurrentTrack, getFavCount, getPlayingList, useStore } from "../store/useStore";
-import { canvasRefs } from "../visualizer/live";
+import { canvasRefs, live } from "../visualizer/live";
 import { mix } from "../theme";
 import { stopsOf, swatchCss } from "../palette";
 import { fmt } from "../utils";
@@ -11,6 +11,86 @@ import { PresetRow } from "./PresetRow";
 import { Revoice } from "./Revoice";
 import { chip, Module, NextIcon, PauseIcon, playBtn, PlayIcon, PrevIcon, skipBtn, Toggle } from "./ui";
 import { Cover } from "./ai/Cover";
+
+
+/**
+ * Drop markers along the seek bar.
+ *
+ * The analyser already knows where every drop in the track is — that timeline
+ * is what places the escalation layers — but until now it was only ever
+ * expressed as things happening on screen. On the bar it becomes navigation:
+ * the shape of the track at a glance, and a way to jump straight to the part
+ * you actually want to hear.
+ *
+ * Each marker sits slightly *before* its drop rather than on it. Seeking to the
+ * exact moment of a drop means the drop has already happened by the time the
+ * audio starts — you land in the aftermath and the thing you clicked for is
+ * behind you. Starting a beat and a half early gives it a run-up, so it lands.
+ *
+ * Polled rather than subscribed: the analysis is written onto the render-loop
+ * state when the worker finishes, which is not a React store update.
+ */
+const DROP_LEAD = 1.4;
+
+function DropMarkers({ duration, onSeek }: { duration: number; onSeek: (t: number) => void }) {
+  const [drops, setDrops] = useState<number[]>([]);
+  useEffect(() => {
+    const read = () => {
+      const d = live.anal?.drops;
+      setDrops((prev) => {
+        const next = d && live.analOn ? d : [];
+        return prev.length === next.length && prev.every((v, i) => v === next[i]) ? prev : [...next];
+      });
+    };
+    read();
+    const id = window.setInterval(read, 700);
+    return () => window.clearInterval(id);
+  }, []);
+  if (!duration || !drops.length) return null;
+  return (
+    <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+      {drops.map((d, i) => {
+        const at = Math.max(0, d - DROP_LEAD);
+        const left = (at / duration) * 100;
+        if (left < 0 || left > 100) return null;
+        return (
+          <button
+            key={i}
+            title={`drop at ${fmt(d)}`}
+            onMouseDown={(e) => { e.stopPropagation(); onSeek(at); }}
+            onTouchStart={(e) => { e.stopPropagation(); onSeek(at); }}
+            style={{
+              position: "absolute",
+              left: `${left}%`,
+              top: 0,
+              bottom: 0,
+              // a hair wide to look at, but wide enough to hit with a thumb —
+              // the visible line is the child, this is the target
+              width: 14,
+              marginLeft: -7,
+              padding: 0,
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              pointerEvents: "auto",
+              display: "flex",
+              justifyContent: "center",
+            }}
+          >
+            <span
+              style={{
+                width: 1.5,
+                height: "100%",
+                background: `linear-gradient(180deg, transparent, ${mix(MAG, 55)} 22%, ${mix(MAG, 55)} 78%, transparent)`,
+                borderRadius: 1,
+              }}
+            />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export function PlayerTab() {
   const aiReady = useStore((s) => s.aiReady);
@@ -64,13 +144,36 @@ export function PlayerTab() {
     };
   }, []);
 
-  const waveSeek = (e: React.MouseEvent | React.TouchEvent) => {
+  // Scrub, not just jump.
+  //
+  // The bar used to seek on press and then let go of you, so finding a moment
+  // meant a series of guesses. Tracking the pointer until release makes it a
+  // scrub: the listener drags along the waveform and hears where they are.
+  // The move and release listeners go on the window rather than the canvas,
+  // because a drag that leaves the bar — which every drag does, it is 50px
+  // tall — would otherwise stop dead and strand the pointer in a dragging
+  // state that never ends.
+  const seekAtClientX = (clientX: number) => {
     const wv = waveRef.current;
     if (!wv || !duration) return;
     const rect = wv.getBoundingClientRect();
-    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
-    const tt = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * duration;
-    seek(tt);
+    seek(Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * duration);
+  };
+
+  const waveSeek = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!duration) return;
+    const touch = "touches" in e;
+    seekAtClientX(touch ? e.touches[0].clientX : e.clientX);
+    const move = (ev: MouseEvent | TouchEvent) =>
+      seekAtClientX("touches" in ev ? ev.touches[0].clientX : (ev as MouseEvent).clientX);
+    const up = () => {
+      window.removeEventListener(touch ? "touchmove" : "mousemove", move as EventListener);
+      window.removeEventListener(touch ? "touchend" : "mouseup", up);
+      window.removeEventListener("touchcancel", up);
+    };
+    window.addEventListener(touch ? "touchmove" : "mousemove", move as EventListener);
+    window.addEventListener(touch ? "touchend" : "mouseup", up);
+    window.addEventListener("touchcancel", up);
   };
 
   const minutes = Math.floor(stats.seconds / 60);
@@ -244,7 +347,10 @@ export function PlayerTab() {
         </div>
 
         <div style={{ width: "100%", maxWidth: 620 }}>
-          <canvas ref={waveRef} onMouseDown={waveSeek} onTouchStart={waveSeek} style={{ width: "100%", height: 50, cursor: "pointer", display: "block" }} />
+          <div style={{ position: "relative" }}>
+            <canvas ref={waveRef} data-seekbar onMouseDown={waveSeek} onTouchStart={waveSeek} style={{ width: "100%", height: 50, cursor: "ew-resize", display: "block", touchAction: "none" }} />
+            <DropMarkers duration={duration} onSeek={seek} />
+          </div>
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3 }}>
             <span style={{ fontFamily: MONO, fontSize: 10.5, color: "rgba(255,255,255,0.5)" }}>{fmt(progress)}</span>
             <span style={{ fontFamily: MONO, fontSize: 10.5, color: "rgba(255,255,255,0.5)" }}>{fmt(duration)}</span>

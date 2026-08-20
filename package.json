@@ -18,7 +18,8 @@
     "lyricfade": "node scripts/lyric-fade-check.mjs",
     "perf": "node scripts/perf-probe.mjs",
     "looks": "node scripts/look-shot.mjs",
-    "fps": "node scripts/fps-check.mjs"
+    "fps": "node scripts/fps-check.mjs",
+    "seekbar": "node scripts/seekbar-check.mjs"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
