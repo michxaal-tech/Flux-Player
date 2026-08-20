@@ -124,13 +124,13 @@ export const LYRIC_STYLE_DEFS: LyricStyleDef[] = [
     tintLight: 78,
     tintAlpha: 0.95,
     tintGlow: true,
-    char: ({ i, n, flow, enter, exit, beat }) => ({
-      dy: Math.sin(flow * 7.2 + i * 0.55) * (0.046 + beat * 0.083) * ease(enter) - ease(exit) * 1.2,
+    char: ({ i, n, flow, enter, beat }) => ({
+      dy: Math.sin(flow * 7.2 + i * 0.55) * (0.046 + beat * 0.083) * ease(enter),
       tint: ((i / Math.max(1, n - 1)) + flow * 0.24) % 1,
     }),
-    // The one deviation, deliberate: the outgoing line lifts away rather than
-    // sitting on the incoming one. The original left them stacked at the same
-    // anchor, which is the complaint that has come back more than any other.
+    // No fly-away on the way out. That was mine, not the original's, and it
+    // read as the words launching off the screen. The line simply goes; the
+    // renderer staggers the two fades so they don't stack instead.
     line: ({ beat }) => ({ glow: 14 + beat * 12 }),
   },
   {

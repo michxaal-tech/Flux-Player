@@ -406,9 +406,19 @@ function drawBlockLetters(
 
 /** reusable colour ramp for the per-character WAVE style (filled each frame) */
 
-/** how long a line's entrance and its exit take, in seconds */
+/**
+ * How long a line's entrance and its exit take, and how long the incoming one
+ * waits before it starts showing.
+ *
+ * The stagger is what keeps a plain fade from stacking two readable lines at the
+ * same anchor: by the time the arriving line is legible the leaving one is
+ * nearly gone. A seventh of a second is not perceptible against the music, and
+ * it means a style does not need to throw its words off the screen to get out
+ * of the way.
+ */
 const IN_SECS = 0.5;
-const OUT_SECS = 0.5;
+const OUT_SECS = 0.34;
+const IN_DELAY = 0.15;
 
 /** how long a line may hold the screen before it fades on its own, in seconds */
 const MAX_DWELL = 5.5;
@@ -496,7 +506,7 @@ export function drawLyricOverlay(x: LyricCtx): void {
   // otherwise leave the last words hanging for the length of the break; when it
   // times out it leaves on the same exit motion rather than just dimming
   const overstay = smooth((cur.age - MAX_DWELL) / 0.9);
-  const appear = smooth(cur.age / 0.26);
+  const appear = smooth((cur.age - IN_DELAY) / 0.26);
   drawUnit(cur.text, cur.age, cur.frac, appear * (1 - overstay), cur.age / IN_SECS, overstay);
 
   c.restore();
