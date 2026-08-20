@@ -63,6 +63,9 @@ await page.waitForTimeout(300);
 
 // turn on the impact layer + analyzed sync
 await page.click("button:has-text('⚙ TUNE')");
+// SYNC MODE lives on the BEAT tab and the panel opens on LOOK, so it has to be
+// navigated to rather than waited for
+await page.click('button[data-ptab="BEAT"]');
 await page.waitForSelector("text=SYNC MODE");
 for (const label of ["ANALYZED"]) {
   const t = await page.$(`button:has-text('${label}')`);

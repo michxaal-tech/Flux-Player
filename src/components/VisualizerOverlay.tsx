@@ -674,10 +674,10 @@ export function VisualizerOverlay() {
           </div>
           <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, marginBottom: 4 }}>
             {(visCfg.quality ?? "AUTO") === "MAX"
-              ? "Full resolution and full glow, whatever it costs. Best on a desktop GPU."
+              ? "Full resolution, full bloom, whatever it costs. Best on a desktop GPU."
               : (visCfg.quality ?? "AUTO") === "FAST"
-                ? "Pinned low: smaller backing canvas, tight glow, fewer particles. Use this on a laptop or an older machine that stutters — it takes effect immediately rather than after the adaptive ramp."
-                : "Follows the measured frame rate: drops resolution, glow radius and particle count when the device can't keep up, and creeps back when it can. Check COST below to see where it settled."}
+                ? "Pinned low: smaller backing canvas, no bloom pass, fewer particles. Use this on a laptop or an older machine that stutters — it takes effect immediately rather than after the adaptive ramp."
+                : "Follows the measured frame rate: drops resolution, the bloom pass and particle count when the device can't keep up, and creeps back when it can. Check COST below to see where it settled."}
           </div>
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 4px" }}>BEAT SYNC</div>
           <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, marginBottom: 6 }}>

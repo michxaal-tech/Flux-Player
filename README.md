@@ -84,14 +84,19 @@ npm run catalogue        # every Discover source, against the live services
   TRAILS — which is why it was always the centre, where themes put the thing
   that sits still. One masked pass compresses only what is above ~83% luminance,
   so it fixes every theme at once instead of retuning eighty of them.
-  Adaptive **quality** keeps full-screen rendering at 60fps on any device: one
-  measured signal drives backing resolution, glow radius and particle count
-  together. Glow is what actually costs — WAVES renders 6× faster with it off
-  and RING 2.4×, while particle count barely registers — so capping blur radius
-  degrades far more gracefully than shrinking the canvas, and trading only
-  resolution left the heavy themes stuck at 290ms/frame. QUALITY in the TUNE
-  panel pins it high (MAX) or low (FAST) if you'd rather not let it adapt; the
-  COST readout shows where it settled. Themes also read a smoothed musical
+  The halo is **one bloom pass over the finished frame**, not a shadow under
+  every stroke. Canvas `shadowBlur` is priced per draw call, and capping the
+  radius does not help — the price is the extra layer allocated and blurred
+  each call. Measured at 1440×900 with everything up, it was 78% of RING's
+  frame and 71% of WAVES', for eight and twelve strokes; blooming the frame
+  instead costs the same whatever the theme drew, and took RING from 207ms to
+  52ms. The same reasoning covers the impact stack: eight impacts that copy the
+  frame back over itself were making the browser snapshot the canvas fifteen
+  times a frame, and now share one snapshot. Adaptive **quality** keeps
+  full-screen rendering at 60fps on any device: one measured signal drives
+  backing resolution, the bloom pass and particle count together. QUALITY in
+  the TUNE panel pins it high (MAX) or low (FAST) if you'd rather not let it
+  adapt; the COST readout shows where it settled. Themes also read a smoothed musical
   "energy" signal, so they move differently in a song's calm and driving parts.
   Analysis is delayed to compensate for audio output latency, so beats land on
   the sound rather than ahead of it (with a BEAT SYNC offset for Bluetooth).

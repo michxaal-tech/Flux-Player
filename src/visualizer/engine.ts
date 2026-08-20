@@ -14,8 +14,18 @@ import { project3d, type Mode3D } from "./project3d";
 import { drawDropLayers, stepDropLayers, MAX_SLOTS } from "./dropLayers";
 import { DRIFT_FRAMES, hueRamp, lighting, rampPos, stopsOf } from "../palette";
 import { drawSignatureImpacts, impactsNeedHistory, stepImpactHistory, SIGNATURE_IMPACTS } from "./impactFx";
+import { bloomFrame } from "./bloom";
 
 const SIG_SET = new Set<string>(SIGNATURE_IMPACTS);
+
+// Which themes actually ask for glow, learned the first time each one draws.
+const glowThemes: Record<string, boolean> = {};
+
+// Impacts that copy the frame back over itself. Each of these used to pass the
+// visible canvas as its own source, which is a read-write hazard the browser
+// resolves by silently snapshotting the whole canvas — once per call, and
+// SLICE alone makes seven. One shared snapshot below covers all of them.
+const SELF_READ = new Set(["CHROMA", "ZOOM", "TILT", "SLICE", "PIXELATE", "TWIST", "SMEAR", "EDGE"]);
 
 // Snapshot the signature impacts read from. They redraw the picture, so
 // sampling the canvas they draw into would compound frame over frame.
@@ -26,16 +36,15 @@ const impSnapCv = document.createElement("canvas");
 // applied once per frame instead of compounding into the trail.
 const sceneCv = document.createElement("canvas");
 
+// Scene buffer for the player-page backdrop: it carries that layer's trail,
+// so the blur can be applied on the way out instead of compounding into it.
+const pbgCv = document.createElement("canvas");
+
 // tiny buffer for the PIXELATE impact (downscale, then blit back unsmoothed)
 const pixCv = document.createElement("canvas");
 
 // Pre-rasterised vignette, rebuilt only when the canvas size changes.
 const vigCv = document.createElement("canvas");
-
-// Half-scale copy of the finished scene, blurred and added back for the WAVE
-// light treatment. Half scale because the result is blurred anyway, so the
-// missing detail is invisible and the blur costs a quarter as much.
-const bloomCv = document.createElement("canvas");
 
 /** Shapes MIXED draws from. Kept out of P_SHAPES' "MIXED"/"DOT" entries so the
  * pool is all *distinct* silhouettes. */
@@ -318,11 +327,30 @@ export function startRenderLoop(): void {
   let frameEma = 16.7;
   let lastResChange = 0;
 
+  // The display's refresh period, learned from the gaps between rAF callbacks.
+  // A running minimum, because jitter only ever makes a gap longer: whatever
+  // the shortest gap seen is, the panel is at least that fast. It relaxes
+  // upward slowly so moving the window to a slower monitor is picked up.
+  let rafPeriod = 16.7;
+  let lastRaf = 0;
+
   const draw = () => {
-    // cap at ~60fps: animation constants are tuned per-frame, so 120Hz
-    // displays (iPad Pro) would otherwise run everything double speed
+    // Cap at ~60fps: animation constants are tuned per-frame, so 120Hz
+    // displays (iPad Pro) would otherwise run everything at double speed.
+    //
+    // The gate has to be derived from the actual refresh period, not fixed.
+    // It used to be a flat 14ms, which is fine on a 120Hz panel and quietly
+    // awful on a 60Hz one: a tick arriving 13.9ms after the last drawn frame
+    // — well within normal jitter — was skipped, and the next one landed 30ms
+    // later. That is a dropped frame and a visible hitch, on the machines
+    // least able to afford one, caused by the frame limiter rather than by
+    // anything being slow. Half a period of slack puts the threshold between
+    // "one tick" and "two ticks" at any refresh rate.
     const nowMs = performance.now();
-    if (nowMs - lastFrame < 14) {
+    const raf = nowMs - lastRaf;
+    lastRaf = nowMs;
+    if (raf > 3 && raf < 60) rafPeriod = raf < rafPeriod ? raf : rafPeriod + (raf - rafPeriod) * 0.01;
+    if (nowMs - lastFrame < 16.7 - rafPeriod * 0.5) {
       requestAnimationFrame(draw);
       return;
     }
@@ -703,13 +731,30 @@ export function startRenderLoop(): void {
     }
 
     // ── player-page ambient backdrop ──
-    // The same theme engine, rendered tiny and CSS-blurred behind the glass
-    // UI. Deliberately ~1/9th the pixels of the fullscreen path: the blur
-    // hides the resolution completely, so it costs almost nothing.
+    // The same theme engine, rendered tiny and blurred to a haze behind the
+    // glass UI. Deliberately ~1/9th the pixels of the fullscreen path.
+    //
+    // The blur used to be a CSS `filter: blur(40px)` on the element, which is
+    // a full-viewport compositor blur redone every frame — on the page the
+    // player sits on the whole time, for a layer that is deliberately out of
+    // focus. Doing it here instead means the same softness is applied to the
+    // 460px backing store rather than to two million device pixels.
+    //
+    // It needs its own buffer for the same reason the visualizer does: this
+    // layer keeps a trail, and blurring it in place would blur the blur, so
+    // the picture would dissolve over a few seconds.
     const pb = canvasRefs.pbg;
     if (pb && !L.visOpen && L.playerBgOn) {
-      const [pw, ph] = sizeCanvas(pb, 460, true);
-      const pc = pb.getContext("2d")!;
+      // no preserve-on-resize: this canvas is now only a blit target, rewritten
+      // whole every frame, so there is nothing in it worth carrying across
+      const [pw, ph] = sizeCanvas(pb, 460);
+      if (pbgCv.width !== pb.width || pbgCv.height !== pb.height) {
+        pbgCv.width = pb.width;
+        pbgCv.height = pb.height;
+      }
+      const pc = pbgCv.getContext("2d")!;
+      // match pb's transform so the theme sees the same CSS-px geometry
+      pc.setTransform(pb.width / Math.max(1, pw), 0, 0, pb.width / Math.max(1, pw), 0, 0);
       const ppal = PALETTES.find((p) => p.id === cfg.palette) || PALETTES[0];
       const pRamp = hueRamp(stopsOf(ppal, cfg.h1, cfg.h2));
       const pPos = rampPos(pRamp, (L.vt / DRIFT_FRAMES) % 1);
@@ -744,11 +789,25 @@ export function startRenderLoop(): void {
         bassV: Math.min(1, bass * pI), midV: Math.min(1, mid * pI), trebV: Math.min(1, treb * pI),
         beat, beatE: L.beatE, energy: L.energy, dropE: L.dropE, hit, hitE: L.hitE, section: L.section, cfg, I: pI, TK: cfg.thick,
         C1: pC1, C2: pC2, CMix: pCMix,
-        glow: (blur, color) => { pc.shadowBlur = Math.min(blur * cfg.glow * 1.6, 4 + quality * 28); pc.shadowColor = color; },
+        // This layer is 460px wide and blurred to a haze, so a wide shadow
+        // radius buys a softness the blur applies anyway — full price for an
+        // invisible effect, on the page the player sits on all the time.
+        glow: (blur, color) => { pc.shadowBlur = Math.min(blur * cfg.glow * 1.6, 4); pc.shadowColor = color; },
         noGlow: () => { pc.shadowBlur = 0; },
         L, trackName: L.trackName,
       });
       pc.restore();
+      // out to the visible canvas, blurred. The radius is in backing-store
+      // pixels, so it is converted from the ~40 CSS px this layer has always
+      // been softened by — otherwise a wide window would be sharper than a
+      // narrow one.
+      const vis = pb.getContext("2d")!;
+      vis.setTransform(1, 0, 0, 1, 0, 0);
+      vis.globalCompositeOperation = "copy";
+      vis.filter = `blur(${Math.max(2, (40 * pb.width) / Math.max(1, pw)).toFixed(1)}px)`;
+      vis.drawImage(pbgCv, 0, 0);
+      vis.filter = "none";
+      vis.globalCompositeOperation = "source-over";
     }
 
     // ── fullscreen visual engine ──
@@ -756,13 +815,18 @@ export function startRenderLoop(): void {
     if (vc && L.visOpen) {
       const mode3d = (cfg.vis3d ?? "OFF") as Mode3D;
       const use3d = mode3d !== "OFF";
-      // The bloom adds the frame to itself. If the theme drew straight onto the
-      // visible canvas, that sum would be inside the trail buffer and the next
-      // frame would bloom the bloom — the picture ramps to white in about a
-      // second. Rendering offscreen keeps the trail free of it, so the bloom is
-      // a one-shot overlay on the way to the screen. 3D already worked this way.
-      const wantBloom = (cfg.lightFx ?? "NORMAL") === "WAVE";
-      const offscreen = use3d || wantBloom;
+      // Blooming a frame means rendering it offscreen: the bloom adds the
+      // frame to itself, and if that sum landed in the canvas carrying the
+      // trail, the next frame would bloom the bloom and the picture would ramp
+      // to white in about a second.
+      //
+      // Themes that light themselves with pre-rendered sprites never call
+      // glow() and so never bloom, and making them pay for an offscreen buffer
+      // and a blit is pure loss. Which ones those are is only known after a
+      // theme has drawn once, so it is remembered per theme and assumed true
+      // for one not seen yet — the conservative way round, since the cost of
+      // guessing wrong is one blit rather than a white screen.
+      const offscreen = use3d || glowThemes[L.visTheme] !== false;
       // The visible canvas is then only ever a blit target, so it must not carry
       // the trail — preserve-on-resize moves to the scene buffer instead.
       const [w, h] = sizeCanvas(vc, 1800 * resScale, !offscreen);
@@ -807,15 +871,27 @@ export function startRenderLoop(): void {
       const GLOW = cfg.glow;
       const TK = cfg.thick;
       // Blur radius is the single most expensive thing the visualizer does, and
-      // its cost is superlinear in the radius. Capping it degrades far more
-      // gracefully than dropping resolution: the bloom gets tighter rather than
-      // the whole picture getting soft.
-      const glowCap = 4 + quality * 28;
-      const glow = (blur: number, color: string) => {
-        c.shadowBlur = Math.min(blur * GLOW * 1.6, glowCap);
-        c.shadowColor = color;
+      // its cost is superlinear in the radius *and* charged per draw call.
+      // Measured at 1440x900 with everything turned up, it was 78% of RING's
+      // frame and 71% of WAVES' — for eight and twelve strokes respectively.
+      //
+      // Capping the radius does not help. Capped at 7px instead of 32, RING
+      // measured *the same* — the price is the shadow pass itself, one extra
+      // layer allocated, drawn and blurred per call, and the radius barely
+      // moves it. So this sets no shadow at all.
+      //
+      // The halo comes from one bloom pass over the finished frame instead
+      // (see bloom.ts), which costs the same whatever the theme drew. Themes
+      // still ask for the glow they always asked for; the widest radius asked
+      // for is what sets the bloom's strength and spread for the frame, so a
+      // theme that strokes with glow(36) still gets a bigger halo than one
+      // asking for glow(6).
+      let glowWant = 0; // the widest radius any draw call asked for this frame
+      const glow = (blur: number, _color: string) => {
+        const want = blur * GLOW * 1.6;
+        if (want > glowWant) glowWant = want;
       };
-      const noGlow = () => { c.shadowBlur = 0; };
+      const noGlow = () => {};
 
       const I = cfg.intensity;
       const bassV = Math.min(1, bass * I), midV = Math.min(1, mid * I), trebV = Math.min(1, treb * I);
@@ -1043,56 +1119,71 @@ export function startRenderLoop(): void {
       }
 
       // ── bloom ──
-      // The halo half of the WAVE light treatment. The colour side pushed the
-      // strokes toward white; this puts the saturated colour back around them by
-      // adding a blurred copy of the finished frame over itself. One pass, so it
-      // costs the same on a theme that strokes six paths and one that strokes
-      // six hundred — a shadow floor under every primitive was tried first and
-      // tripled the frame time.
+      // Where the halo comes from now: one thresholded, blurred copy of the
+      // finished frame, added back over itself. It costs the same on a theme
+      // that strokes six paths and one that strokes six hundred, which is the
+      // whole point — the per-shape shadow it replaces was priced per call.
       //
       // Reads and writes the visible canvas, which is safe only because
       // everything above rewrote it whole this frame; it never carries over.
-      if (lit.bloom > 0) {
-        const bw = Math.max(1, vc.width >> 1);
-        const bh = Math.max(1, vc.height >> 1);
-        if (bloomCv.width !== bw || bloomCv.height !== bh) {
-          bloomCv.width = bw;
-          bloomCv.height = bh;
+      //
+      // Strength follows the GLOW slider, which is what that slider has always
+      // meant, plus however wide a radius the theme actually asked for: a
+      // theme that strokes with glow(36) wants a bigger halo than one that
+      // asks for glow(6), and that difference used to be carried by the shadow
+      // radius. The WAVE light treatment adds its own on top, as before.
+      // A theme that never called glow() does not get a halo it never had —
+      // the sprite-lit themes (CROWN, SYNAPSE, LEVIATHAN and the rest that
+      // blit a pre-rendered falloff) already carry their own light, and
+      // blooming them would be both a look they were never given and a cost
+      // they were not paying.
+      // Sticky: a theme that glows only on the beat would otherwise flip
+      // between rendering offscreen and rendering direct, and the trail lives
+      // in whichever buffer that is — so it would flicker on every beat.
+      glowThemes[TH] = glowThemes[TH] || glowWant > 0.01;
+      if (offscreen && (glowWant > 0.01 || lit.bloom > 0)) {
+        const asked = Math.min(1, glowWant / 34);
+        // The halo is still the first thing to go on a machine that cannot
+        // keep up — the same bargain the old glow cap made, one step further
+        // along: rather than tightening the radius, the pass stops entirely
+        // below a third of full quality and fades back in above it.
+        const qGate = quality <= 0.3 ? 0 : Math.min(1, (quality - 0.3) / 0.25);
+        const strength = Math.min(1.25, (0.2 + GLOW * 0.75) * (0.45 + asked * 0.75) + lit.bloom * 0.03) * qGate;
+        bloomFrame(c, vc, w, h, {
+          strength,
+          spread: Math.min(0.9, 0.3 + asked * 0.45),
+          knee: 0.5,
+        });
+      }
+
+      // ── the frame the impacts copy from ──
+      // Eight of the impacts work by drawing the frame back over itself offset,
+      // scaled or rotated. Passing the visible canvas as its own source is a
+      // read-write hazard, and the browser resolves it by snapshotting the
+      // whole canvas — per call, not per frame. With a full stack up that was
+      // fifteen-plus full-frame copies every frame, and the impact layer
+      // measured at a third of the frame on every theme tested.
+      //
+      // One snapshot here serves all of them, including the signature set that
+      // already worked this way. The visible difference is that a copy no
+      // longer includes the impacts drawn before it, so they layer instead of
+      // compounding — which is also what keeps a deep stack from ramping the
+      // picture toward white.
+      let wantSig = false;
+      for (const k of IMP) if (SIG_SET.has(k)) { wantSig = true; break; }
+      let wantSnap = wantSig;
+      if (!wantSnap) for (const k of IMP) if (SELF_READ.has(k)) { wantSnap = true; break; }
+      const snap = impSnapCv;
+      if (wantSnap) {
+        if (snap.width !== vc.width || snap.height !== vc.height) {
+          snap.width = vc.width;
+          snap.height = vc.height;
         }
-        const bc = bloomCv.getContext("2d")!;
-        bc.setTransform(1, 0, 0, 1, 0, 0);
-        // The copy has to be thresholded, or adding a whole frame back just
-        // lifts the mid-tones and washes the picture out. But the threshold has
-        // to be on *luminance*, and `contrast()` works per channel: a saturated
-        // magenta has two channels at full, so it survives a contrast threshold
-        // exactly as if it were white. That is what turned this into a
-        // full-screen fog — the entire coloured frame was blooming, not its
-        // highlights.
-        //
-        // So: the colour frame first, then multiplied by a greyscale mask of
-        // itself. The mask is near 0 below the knee and near 1 above, so only
-        // genuinely bright pixels keep their colour and everything else goes to
-        // black and contributes nothing.
-        bc.globalCompositeOperation = "copy";
-        bc.filter = "none";
-        bc.drawImage(vc, 0, 0, bw, bh);
-        bc.globalCompositeOperation = "multiply";
-        bc.filter = "grayscale(1) brightness(0.62) contrast(7)";
-        bc.drawImage(vc, 0, 0, bw, bh);
-        bc.filter = "none";
-        bc.globalCompositeOperation = "source-over";
-        c.save();
-        c.globalCompositeOperation = "lighter";
-        // the copy is half scale, so the blur radius halves with it
-        c.filter = `blur(${Math.max(1, (lit.bloom * w) / 2600)}px)`;
-        // GLOW drives the strength. A dense bright theme (RING) blooms into a
-        // solid disc at full strength while a sparse one (STARFIELD) wants all
-        // of it, and no single constant suits both — so it stays on the slider
-        // that already means exactly this.
-        c.globalAlpha = 0.42 * (0.25 + GLOW * 0.75);
-        c.drawImage(bloomCv, 0, 0, bw, bh, 0, 0, w, h);
-        c.filter = "none";
-        c.restore();
+        const ic = snap.getContext("2d")!;
+        ic.setTransform(1, 0, 0, 1, 0, 0);
+        ic.globalCompositeOperation = "copy";
+        ic.drawImage(vc, 0, 0);
+        ic.globalCompositeOperation = "source-over";
       }
 
       // ── per-beat impact layer ──
@@ -1102,8 +1193,8 @@ export function startRenderLoop(): void {
         c.save();
         c.globalCompositeOperation = "lighter";
         c.globalAlpha = 0.4 * L.beatE;
-        c.drawImage(vc, -off, 0, w, h);
-        c.drawImage(vc, off, 0, w, h);
+        c.drawImage(snap, -off, 0, w, h);
+        c.drawImage(snap, off, 0, w, h);
         c.restore();
       }
       if (IMP.has("BLOOM") && L.beatE > 0.02) {
@@ -1165,7 +1256,7 @@ export function startRenderLoop(): void {
         c.globalCompositeOperation = "lighter";
         c.globalAlpha = 0.3 * BE;
         const z = 1 + BE * 0.16;
-        c.drawImage(vc, 0, 0, vc.width, vc.height, (w - w * z) / 2, (h - h * z) / 2, w * z, h * z);
+        c.drawImage(snap, 0, 0, snap.width, snap.height, (w - w * z) / 2, (h - h * z) / 2, w * z, h * z);
         c.restore();
       }
       if (IMP.has("TILT") && BE > 0.02) {
@@ -1174,7 +1265,7 @@ export function startRenderLoop(): void {
         c.globalAlpha = 0.26 * BE;
         c.translate(cx, cy);
         c.rotate(BE * 0.05 * (L.beats.length % 2 ? 1 : -1));
-        c.drawImage(vc, 0, 0, vc.width, vc.height, -cx, -cy, w, h);
+        c.drawImage(snap, 0, 0, snap.width, snap.height, -cx, -cy, w, h);
         c.restore();
       }
       if (IMP.has("SLICE") && BE > 0.25) {
@@ -1185,7 +1276,7 @@ export function startRenderLoop(): void {
           const by = (i / bands) * h;
           const bh = h / bands;
           const off = (Math.random() - 0.5) * BE * R * 0.12;
-          c.drawImage(vc, 0, (by / h) * vc.height, vc.width, (bh / h) * vc.height, off, by, w, bh);
+          c.drawImage(snap, 0, (by / h) * snap.height, snap.width, (bh / h) * snap.height, off, by, w, bh);
         }
         c.restore();
       }
@@ -1196,7 +1287,7 @@ export function startRenderLoop(): void {
         pixCv.height = Math.max(4, Math.round(px * (h / w)));
         const pc = pixCv.getContext("2d")!;
         pc.clearRect(0, 0, pixCv.width, pixCv.height);
-        pc.drawImage(vc, 0, 0, pixCv.width, pixCv.height);
+        pc.drawImage(snap, 0, 0, pixCv.width, pixCv.height);
         c.save();
         c.imageSmoothingEnabled = false;
         c.globalAlpha = Math.min(1, BE * 1.4);
@@ -1235,7 +1326,7 @@ export function startRenderLoop(): void {
           c.translate(cx, cy);
           c.rotate(BE * 0.28 * k);
           c.scale(1 - k * 0.12, 1 - k * 0.12);
-          c.drawImage(vc, 0, 0, vc.width, vc.height, -cx, -cy, w, h);
+          c.drawImage(snap, 0, 0, snap.width, snap.height, -cx, -cy, w, h);
           c.restore();
         }
         c.restore();
@@ -1275,7 +1366,7 @@ export function startRenderLoop(): void {
         const dir = Math.cos(vt * 0.01), dy2 = Math.sin(vt * 0.01);
         for (let i = 1; i <= 3; i++) {
           c.globalAlpha = 0.14 * BE / i;
-          c.drawImage(vc, 0, 0, vc.width, vc.height, dir * i * BE * 16, dy2 * i * BE * 16, w, h);
+          c.drawImage(snap, 0, 0, snap.width, snap.height, dir * i * BE * 16, dy2 * i * BE * 16, w, h);
         }
         c.restore();
       }
@@ -1296,26 +1387,16 @@ export function startRenderLoop(): void {
         c.globalCompositeOperation = "lighter";
         c.globalAlpha = 0.3 * BE;
         const e = 1 + 0.012 + BE * 0.01;
-        c.drawImage(vc, 0, 0, vc.width, vc.height, (w - w * e) / 2, (h - h * e) / 2, w * e, h * e);
+        c.drawImage(snap, 0, 0, snap.width, snap.height, (w - w * e) / 2, (h - h * e) / 2, w * e, h * e);
         c.restore();
       }
 
       // ── signature impacts ──
       // The ones with real machinery behind them (displacement fields, a frame
       // history, dot screens) live in impactFx.ts.
-      let wantSig = false;
-      for (const k of IMP) if (SIG_SET.has(k)) { wantSig = true; break; }
       if (wantSig) {
-        if (impSnapCv.width !== vc.width || impSnapCv.height !== vc.height) {
-          impSnapCv.width = vc.width;
-          impSnapCv.height = vc.height;
-        }
-        const ic = impSnapCv.getContext("2d")!;
-        ic.setTransform(1, 0, 0, 1, 0, 0);
-        ic.clearRect(0, 0, impSnapCv.width, impSnapCv.height);
-        ic.drawImage(vc, 0, 0);
         const ictx = {
-          c, src: impSnapCv, sw: impSnapCv.width, sh: impSnapCv.height, w, h, R, TK,
+          c, src: snap, sw: snap.width, sh: snap.height, w, h, R, TK,
           beatE: L.beatE, hitE: L.hitE, beat, flow: L.flow, t,
           C1, C2, CMix,
         };

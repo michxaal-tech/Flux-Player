@@ -116,7 +116,9 @@ export default function App() {
         style={{
           position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none",
           opacity: tab === "player" && playerBgOn && !visOpen ? 0.6 : 0,
-          filter: "blur(40px) saturate(1.4)",
+          // The blur itself is applied in the canvas now, at its own 460px
+          // scale, rather than here across the whole viewport every frame.
+          filter: "saturate(1.4)",
           transition: "opacity 0.55s var(--ease-soft)",
         }}
       />
