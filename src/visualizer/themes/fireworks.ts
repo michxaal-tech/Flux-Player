@@ -10,7 +10,7 @@ interface Spark {
 // Fireworks show. Every beat launches rockets that climb with sparkling
 // trails and burst into peony shells at the top; quiet passages get small
 // ambient launches so the sky never goes dead.
-export const FIREWORKS: ThemeDraw = ({ c, w, h, t, vt, beat, beatE, bassV, trebV, TK, CMix, glow, noGlow, L }) => {
+export const FIREWORKS: ThemeDraw = ({ c, w, h, t, vt, every, beat, beatE, bassV, trebV, TK, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.fireworks ??= { rockets: [] as Rocket[], sparks: [] as Spark[] });
 
   const launch = (big: boolean) => {
@@ -26,13 +26,13 @@ export const FIREWORKS: ThemeDraw = ({ c, w, h, t, vt, beat, beatE, bassV, trebV
     launch(true);
     if (bassV > 0.45) launch(true);
   }
-  if (!S.rockets.length && S.sparks.length < 12 && t % 100 === 0) launch(false);
+  if (!S.rockets.length && S.sparks.length < 12 && every(100)) launch(false);
 
   // rockets climb, dropping a sparkle trail
   for (let i = S.rockets.length - 1; i >= 0; i--) {
     const r = S.rockets[i];
     r.y += r.vy;
-    if (t % 2 === 0)
+    if (every(2))
       S.sparks.push({
         x: r.x + (Math.random() - 0.5) * 3, y: r.y, vx: (Math.random() - 0.5) * 0.4,
         vy: h * 0.001, a: 0.5, hue: r.hue, tw: Math.random() * 9, sz: 0.9, white: true,

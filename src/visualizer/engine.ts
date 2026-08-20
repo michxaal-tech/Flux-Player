@@ -7,7 +7,8 @@ import { getCurrentTrack, useStore } from "../store/useStore";
 import { shallow } from "zustand/shallow";
 import { ac1, ac2 } from "../theme";
 import { canvasRefs, live } from "./live";
-import { themes } from "./themes";
+import { themes, TIME_NORMALISED } from "./themes";
+import { ak } from "./rate";
 import type { ThemeCtx } from "./themeTypes";
 import { drawLyricOverlay } from "./lyricRenderer";
 import { project3d, type Mode3D } from "./project3d";
@@ -334,10 +335,16 @@ export function startRenderLoop(): void {
   // refresh interval (16.7ms, or 25ms on a 120Hz panel), so judging single
   // frames misreads one dropped tick as jank — hence the smoothed frame time.
   const MIN_RES = 0.32;
+  // Below this the picture reads as soft rather than merely small — which is
+  // a different kind of broken from "fewer sparks", and a worse one. So it is
+  // the last thing given up rather than the first; see the ladder in `draw`.
+  const SHARP_RES = typeof window !== "undefined" && (window as any).__fluxDesktop ? 0.62 : 0.5;
   let quality = 1;
   let resScale = 1;
   let frameEma = 16.7;
   let lastResChange = 0;
+  /** when the engine first ran out of things to give up, 0 while it has some */
+  let starvedSince = 0;
 
   // The display's refresh period, learned from the gaps between rAF callbacks.
   // A running minimum, because jitter only ever makes a gap longer: whatever
@@ -346,10 +353,28 @@ export function startRenderLoop(): void {
   let rafPeriod = 16.7;
   let lastRaf = 0;
 
+  // Frame-rate governor.
+  //
+  // The engine draws at the panel's own rate where it can — 120Hz on the
+  // machines that have it — and at 60 where it cannot. Which of those applies
+  // cannot be measured while it is capped at 60: the gap between frames is
+  // 16.7ms whether the frame took 2ms of work or 16, because that is simply
+  // what vsync hands out. So it is settled the only honest way available, by
+  // trying it and watching whether ticks are actually missed.
+  //
+  // Timing the work inside draw() would be the obvious alternative and is the
+  // wrong one. Canvas commands are queued and rasterised after the callback
+  // returns: a profile of the heavy themes put 57% of the time in
+  // rasterisation and under 2% in JS, so the JS clock cheerfully reads "1ms,
+  // plenty of room" on a frame that takes two hundred.
+  let targetPeriod = 16.7;
+  let lastRateChange = 0;
+  /** how many times the panel rate has been tried and lost, for the backoff */
+  let fastFails = 0;
+  /** don't try the panel rate again before this timestamp */
+  let fastCooldown = 0;
+
   const draw = () => {
-    // Cap at ~60fps: animation constants are tuned per-frame, so 120Hz
-    // displays (iPad Pro) would otherwise run everything at double speed.
-    //
     // The gate has to be derived from the actual refresh period, not fixed.
     // It used to be a flat 14ms, which is fine on a 120Hz panel and quietly
     // awful on a 60Hz one: a tick arriving 13.9ms after the last drawn frame
@@ -362,13 +387,32 @@ export function startRenderLoop(): void {
     const raf = nowMs - lastRaf;
     lastRaf = nowMs;
     if (raf > 3 && raf < 60) rafPeriod = raf < rafPeriod ? raf : rafPeriod + (raf - rafPeriod) * 0.01;
-    if (nowMs - lastFrame < 16.7 - rafPeriod * 0.5) {
+    if (nowMs - lastFrame < targetPeriod - rafPeriod * 0.5) {
       requestAnimationFrame(draw);
       return;
     }
     const delta = nowMs - lastFrame;
     lastFrame = nowMs;
-    t++;
+
+    // How much of a 60Hz frame this one covered.
+    //
+    // Everything that accumulates per frame is multiplied by this, so a thing
+    // moves at the same speed whether the panel delivers 60 frames a second
+    // or 120. Clamped at both ends: a tab left in the background comes back
+    // with a delta of several seconds, and teleporting every particle to
+    // where it "should" be is not a smoother result than dropping the time.
+    // Test hook: force the frame factor, so the invariant can be checked
+    // without the machine having to actually deliver 120fps — 400 frames at
+    // fs=1 and 800 at fs=0.5 cover the same logical time and must therefore
+    // produce the same amount of motion (scripts/fps-check.mjs). Only the
+    // per-frame factor is pinned; the musical clock below stays on real time.
+    const fs = ((window as any).__fsPin as number | undefined) ?? Math.min(3, Math.max(0.05, delta / 16.7));
+    t += fs;
+    live.fs = fs;
+    // Frame-rate-independent `t % n === 0`. Stateless: it asks whether the
+    // frame just drawn carried `t` across a multiple of n, so it fires once
+    // per n 60Hz-equivalent frames however many real frames that took.
+    const every = (n: number) => Math.floor(t / n) !== Math.floor((t - fs) / n);
 
     // ignore giant deltas (tab was hidden — rAF stops, that isn't slowness)
     if (delta < 250) frameEma += (delta - frameEma) * 0.05;
@@ -388,17 +432,63 @@ export function startRenderLoop(): void {
     } else {
       // Proportional, so being 10x over budget is corrected in a few frames
       // rather than a few seconds. Recovery is a slow creep: a machine that
-      // just barely copes should settle, not hunt.
-      const over = frameEma / 16.7;
+      // just barely copes should settle, not hunt. Measured against whatever
+      // the engine is currently aiming at, not a fixed 16.7 — at the panel
+      // rate on a 120Hz display, 16.7ms a frame *is* over budget.
+      const over = frameEma / targetPeriod;
       if (over > 1.25) quality = Math.max(0, quality - Math.min(0.2, (over - 1) * 0.09));
       else if (over < 1.06) quality = Math.min(1, quality + 0.008);
     }
     live.quality = quality;
+
+    // ── the frame-rate governor ──
+    //
+    // Only themes that have been converted to time-based motion may run above
+    // 60: the rest still accumulate per frame and would simply animate at
+    // double speed (see TIME_NORMALISED in themes/index.ts).
+    const panel = Math.max(rafPeriod, 1000 / 120);
+    const wantFast = panel < 13 && TIME_NORMALISED.has(live.visTheme) && (live.cfg.hiFps ?? true);
+    // Test hook: pin the rate so a theme's motion can be measured at 60 and at
+    // the panel rate without the governor moving the goalposts mid-measurement,
+    // and without the opt-in list deciding the answer in advance — the whole
+    // point is to measure themes that are not on it yet (scripts/fps-check.mjs).
+    const pin = (window as any).__fpsPin as number | undefined;
+    if (pin) {
+      targetPeriod = pin;
+    } else if (nowMs - lastRateChange > 1500) {
+      const atPanel = targetPeriod < 16.6;
+      if (!atPanel && wantFast && nowMs > fastCooldown && frameEma < 17.8) {
+        // holding 60 comfortably, so there is room to go and find out
+        targetPeriod = panel;
+        frameEma = panel;
+        lastRateChange = nowMs;
+      } else if (atPanel && (!wantFast || frameEma > panel * 1.35)) {
+        // ticks are being missed at the panel rate. Back to 60, and wait
+        // longer each time before asking again, so a machine that cannot do
+        // it does not spend the whole track oscillating between the two.
+        targetPeriod = 16.7;
+        frameEma = 16.7;
+        lastRateChange = nowMs;
+        if (wantFast) fastCooldown = nowMs + Math.min(60000, 8000 * ++fastFails);
+      }
+    }
+    live.targetFps = Math.round(1000 / targetPeriod);
+
     // Resolution is the one term that cannot follow `quality` directly:
     // resizing the backing store costs a frame and drops the trail with it. So
     // it is quantized and rate-limited, while the glow cap and particle count
     // — both free to change — track quality every frame.
-    const wantRes = Math.round((MIN_RES + (1 - MIN_RES) * quality) / 0.06) * 0.06;
+    //
+    // It is also the last thing given up rather than the first. Shedding glow
+    // and particles makes a frame simpler; shedding resolution makes it soft,
+    // and a soft picture reads as broken in a way a sparser one never does.
+    // So the floor holds at SHARP_RES until the engine has run out of
+    // everything else — quality pinned at the bottom and still over budget for
+    // a couple of seconds — and only then goes down to the emergency floor.
+    if (quality > 0.06 || frameEma < targetPeriod * 1.2) starvedSince = 0;
+    else if (!starvedSince) starvedSince = nowMs;
+    const resFloor = starvedSince && nowMs - starvedSince > 2000 ? MIN_RES : SHARP_RES;
+    const wantRes = Math.round((resFloor + (1 - resFloor) * quality) / 0.06) * 0.06;
     if (Math.abs(wantRes - resScale) > 0.03 && nowMs - lastResChange > 900) {
       resScale = Math.min(1, Math.max(MIN_RES, wantRes));
       lastResChange = nowMs;
@@ -406,6 +496,15 @@ export function startRenderLoop(): void {
     const n = engine.nodes;
     const L = live;
     const cfg = L.cfg;
+    // HUE SPIN turns the whole palette around the colour wheel.
+    //
+    // A multi-stop palette already slides its sample window along its own
+    // stops; this is a different thing, and it applies to every palette
+    // including the two-stop ones, whose ramp is otherwise fixed. At 0 — the
+    // default — nothing moves and every existing look is exactly what it was.
+    const spinDeg = (cfg.hueSpin ?? 0) > 0 ? ((L.vt * (cfg.hueSpin ?? 0)) / DRIFT_FRAMES) * 360 : 0;
+    const spun = (st: number[]) => (spinDeg ? st.map((hh) => hh + spinDeg) : st);
+
     let bass = 0.08 + Math.sin(t * 0.01) * 0.03, mid = bass * 0.8, treb = bass * 0.5;
     let liveAudio = false, rms = 0, beat = false, hit = false;
 
@@ -710,7 +809,7 @@ export function startRenderLoop(): void {
 
     // ── spinning disc ──
     if (canvasRefs.disc) {
-      if (L.playing) L.rot += 0.7 * L.speed;
+      if (L.playing) L.rot += 0.7 * L.speed * fs;
       canvasRefs.disc.style.transform = `rotate(${L.rot}deg) scale(${1 + bass * 0.05})`;
       canvasRefs.disc.style.boxShadow = `0 0 ${30 + bass * 70}px ${ac1(0.15 + bass * 0.4)}`;
     }
@@ -768,12 +867,12 @@ export function startRenderLoop(): void {
       // match pb's transform so the theme sees the same CSS-px geometry
       pc.setTransform(pb.width / Math.max(1, pw), 0, 0, pb.width / Math.max(1, pw), 0, 0);
       const ppal = PALETTES.find((p) => p.id === cfg.palette) || PALETTES[0];
-      const pRamp = hueRamp(stopsOf(ppal, cfg.h1, cfg.h2));
+      const pRamp = hueRamp(spun(stopsOf(ppal, cfg.h1, cfg.h2)));
       const pPos = rampPos(pRamp, (L.vt / DRIFT_FRAMES) % 1);
       const pLit = lighting(pRamp, pPos, ppal.s, cfg.lightFx ?? "NORMAL");
       const { C1: pC1, C2: pC2, CMix: pCMix } = pLit;
       pc.globalCompositeOperation = "source-over";
-      pc.fillStyle = "rgba(5,6,10,0.22)"; // trail fade
+      pc.fillStyle = `rgba(5,6,10,${ak(0.22, fs)})`; // trail fade
       pc.fillRect(0, 0, pw, ph);
       // Full-bleed colour wash. Most themes only paint their subject (a flock,
       // an orb, a wave) and leave the rest of the canvas bare, which showed up
@@ -796,7 +895,7 @@ export function startRenderLoop(): void {
       const pI = cfg.intensity;
       themes[L.playerTheme]?.({
         c: pc, w: pw, h: ph, cx: pw / 2, cy: ph / 2, R: Math.min(pw, ph),
-        t, vt: L.vt, freq, wave, liveAudio,
+        t, vt: L.vt, fs, every, freq, wave, liveAudio,
         bass, mid, treb,
         bassV: Math.min(1, bass * pI), midV: Math.min(1, mid * pI), trebV: Math.min(1, treb * pI),
         beat, beatE: L.beatE, energy: L.energy, dropE: L.dropE, hit, hitE: L.hitE, section: L.section, cfg, I: pI, TK: cfg.thick,
@@ -870,7 +969,7 @@ export function startRenderLoop(): void {
       // A multi-stop palette slides its sample window round the ramp, so the
       // whole spectrum reaches themes that only ever ask for C1 and C2. Two-stop
       // palettes get the identity and are byte-for-byte what they always were.
-      const ramp = hueRamp(stopsOf(pal, cfg.h1, cfg.h2));
+      const ramp = hueRamp(spun(stopsOf(pal, cfg.h1, cfg.h2)));
       const pos = rampPos(ramp, (L.vt / DRIFT_FRAMES) % 1);
       const h1 = ramp.at(pos(0));
       const h2 = ramp.at(pos(1));
@@ -907,7 +1006,7 @@ export function startRenderLoop(): void {
 
       const I = cfg.intensity;
       const bassV = Math.min(1, bass * I), midV = Math.min(1, mid * I), trebV = Math.min(1, treb * I);
-      L.vt += cfg.speed;
+      L.vt += cfg.speed * fs;
       const vt = L.vt;
 
       // Effects are draw calls, and the quality signal has to be able to reach
@@ -952,7 +1051,10 @@ export function startRenderLoop(): void {
       }
 
       // trail fade + bg wash
-      const fade = 0.06 + (1 - cfg.trail) * 0.34;
+      // A fade is a fraction of what is on screen removed per frame, so at
+      // twice the frame rate an unscaled one removes twice as much per second
+      // and the trail comes out half as long.
+      const fade = ak(0.06 + (1 - cfg.trail) * 0.34, fs);
       if (use3d) {
         // In 3D the scene is a *texture*, and it has to keep an alpha channel:
         // fading toward opaque black would make every projected layer a solid
@@ -988,7 +1090,7 @@ export function startRenderLoop(): void {
       c.globalCompositeOperation = "lighter";
 
       const themeCtx: ThemeCtx = {
-        c, w, h, cx, cy, R, t, vt, freq, wave, liveAudio,
+        c, w, h, cx, cy, R, t, vt, fs, every, freq, wave, liveAudio,
         bass, mid, treb, bassV, midV, trebV, beat, beatE: L.beatE, energy: L.energy,
         dropE: L.dropE, hit, hitE: L.hitE, section: L.section, cfg, I, TK,
         C1, C2, CMix, glow, noGlow, L, trackName: L.trackName,
@@ -1014,6 +1116,13 @@ export function startRenderLoop(): void {
       for (const p of L.vparts) {
         const st = cfg.pStyle;
         const sp = cfg.speed;
+        // Every drift below is written as a displacement per frame, so rather
+        // than scaling twenty-odd cases by hand the step is taken whole and
+        // then scaled to the frame's share of a 60Hz tick. Large jumps are
+        // left alone: those are respawns, not travel, and dragging a particle
+        // a fraction of the way to its new home would just respawn it again
+        // next frame.
+        const px0 = p.x, py0 = p.y;
         switch (st) {
           case "RISE": p.y -= p.sp * (1 + bassV * 8) * sp; p.x += Math.sin(vt * 0.01 + p.ph) * 0.0006; break;
           case "SNOW": p.y += p.sp * (0.8 + midV * 3) * sp; p.x += Math.sin(vt * 0.02 + p.ph) * 0.0012; break;
@@ -1041,7 +1150,11 @@ export function startRenderLoop(): void {
           case "METEOR": p.x -= p.sp * (5 + bassV * 6) * sp; p.y += p.sp * (3.4 + bassV * 4) * sp; break;
           case "POLLEN": p.x += Math.sin(vt * 0.004 + p.ph) * 0.0006; p.y += Math.sin(vt * 0.0032 + p.ph * 1.7) * 0.0006; break;
           case "GLITTER": p.y += p.sp * 0.9 * sp; p.x += Math.sin(vt * 0.11 + p.ph * 5) * 0.0012; break;
-          case "STATIC": if ((t + Math.floor(p.ph * 97)) % 7 === 0) { p.x = Math.random(); p.y = Math.random(); } break;
+          case "STATIC": if (every(7 + Math.floor(p.ph * 97) % 7)) { p.x = Math.random(); p.y = Math.random(); } break;
+        }
+        if (fs !== 1) {
+          const mx = p.x - px0, my = p.y - py0;
+          if (Math.abs(mx) < 0.05 && Math.abs(my) < 0.05) { p.x = px0 + mx * fs; p.y = py0 + my * fs; }
         }
         if (p.y < -0.02) { p.y = 1.02; p.x = Math.random(); }
         if (p.y > 1.02) { p.y = -0.02; p.x = Math.random(); }

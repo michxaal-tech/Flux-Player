@@ -105,3 +105,34 @@ export const themes: Record<string, ThemeDraw> = {
   MONOLITH, ORRERY, CANYON, GYROSCOPE, SINGULARITY,
   STRATA, CROWN, CASCADE, FISSION, PARALLAX,
 };
+
+/**
+ * Themes whose motion is a function of time rather than of frames, and which
+ * may therefore be drawn at the panel's full rate.
+ *
+ * The engine caps everything else at 60 (see the governor in engine.ts),
+ * because a theme that does `p.x += p.vx` once per frame travels twice as far
+ * per second when the frames arrive twice as often — it does not look
+ * smoother, it looks fast-forwarded. Converting a theme means scaling what it
+ * accumulates by `fs` and its decays by `dk(k, fs)`, then proving it with
+ * `npm run fps`, which measures motion per second of wall clock at 60Hz and
+ * unthrottled and fails the theme if the two disagree.
+ *
+ * A name is added here only once that check passes for it.
+ */
+export const TIME_NORMALISED = new Set<string>([
+  "AURORA", "BARS", "CANYON", "CASCADE", "COMETS", "DOTGRID",
+  "ECLIPSE", "FIREFLIES", "FISSION", "GALAXY", "GRAVITY", "GRID",
+  "GYROSCOPE", "HELIX", "JELLY", "LIQUID", "MARQUEE", "NOVA",
+  "ORB", "ORIGAMI", "ORRERY", "PRISM", "REACTOR", "RING",
+  "SCOPE", "SERPENT", "SILK", "SINGULARITY", "SPIRAL", "STRATA",
+  "TESSERACT", "WAVES",
+  // converted by hand and re-verified; LASERS, CITY, TUNNEL and LANTERNS were
+  // converted in the same pass and still fail, so they are deliberately absent
+  "CRYSTAL", "HALO", "KALEIDO", "STARFIELD",
+]);
+
+// Debug handle, companion to `__flux`: lets a test enumerate the theme list
+// rather than carrying its own copy of it, which would silently skip any
+// theme added after the test was written.
+if (typeof window !== "undefined") (window as any).__fluxThemes = themes;

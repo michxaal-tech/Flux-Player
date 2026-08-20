@@ -21,6 +21,7 @@ npm run lyricfade        # an outgoing lyric line fades rather than being replac
 npm run discover         # Internet Archive source, network stubbed (after build)
 npm run catalogue        # every Discover source, against the live services
 npm run perf             # where a frame goes, per theme, one knob at a time
+npm run fps              # proves a theme's motion is frame-rate independent
 npm run looks            # one frame per theme, for comparing two builds
 ```
 

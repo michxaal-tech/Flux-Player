@@ -130,6 +130,25 @@ export const PALETTES: Palette[] = [
   { id: "SLICK", h: [228, 276, 324, 24, 88, 168], s: 64 },
   { id: "CITRUS", h: [58, 36, 12, 96], s: 90 },
 
+  // Three-stop palettes. Two colours can only ever be a gradient; three is the
+  // smallest number that reads as a *scheme*, and being cyclic they rotate
+  // through all three rather than sitting on a single blend.
+  { id: "RGB", h: [0, 120, 240], s: 100 },
+  { id: "TRIAD", h: [186, 306, 66], s: 92 },
+  { id: "DUSK", h: [268, 328, 22], s: 84 },
+  { id: "LAGOON", h: [168, 196, 262], s: 80 },
+  { id: "FORGE", h: [10, 40, 318], s: 94 },
+  { id: "POISON", h: [88, 152, 286], s: 90 },
+  { id: "CORAL", h: [348, 18, 192], s: 86 },
+  { id: "IRIS", h: [232, 284, 172], s: 76 },
+
+  { id: "BRUISE", h: [280, 340], s: 78 },
+  { id: "SAGE", h: [96, 172], s: 55 },
+  { id: "COPPER", h: [24, 200], s: 76 },
+  { id: "ORCHID", h: [292, 200], s: 82 },
+  { id: "MAGMA", h: [352, 40], s: 98 },
+  { id: "STEEL", h: [206, 240], s: 38 },
+
   { id: "CUSTOM", h: null, s: 100 },
 ];
 
@@ -189,7 +208,7 @@ export const DEFAULT_VIS_CFG: VisCfg = {
   palette: "NEON", h1: 187, h2: 317,
   glow: 0.7, trail: 0.55, particles: 0.35, pStyle: "RISE", pShape: "MIXED", pSize: "VARIED", pScale: 1,
   speed: 1, intensity: 1, zoom: 1, spinV: 0, bgWash: 0.3, thick: 1,
-  mirror: false, shake: false, flash: true, impacts: [], autoMode: "off", hiRes: false, quality: "AUTO", fastBeats: true, syncMs: 0,
+  mirror: false, shake: false, flash: true, impacts: [], autoMode: "off", hiRes: false, quality: "AUTO", hiFps: true, hueSpin: 0, fastBeats: true, syncMs: 0,
   vis3d: "OFF", vis3dAmt: 0.5, dropFx: 1, lightFx: "NORMAL",
 };
 

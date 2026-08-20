@@ -25,14 +25,87 @@ import { AiPrompt } from "./ai/AiBits";
  * Polled rather than subscribed: these change every frame, and re-rendering the
  * panel at 60fps to display a number would itself cost more than it measures.
  */
-function PerfReadout() {
-  const [s, setS] = useState({ ms: 16.7, res: 1, q: 1 });
+/**
+ * Live meters for what the engine is actually hearing.
+ *
+ * Every one of these already drives the visuals — the beat envelope, the
+ * energy the themes branch on, the percussive-hit envelope, the drop swell —
+ * but until now the only way to tell whether one was firing correctly was to
+ * watch a theme and infer it. A flat PUNCH meter on a busy drum track says the
+ * onset detector is the problem, which no amount of staring at a theme does.
+ *
+ * Polled at 20Hz rather than subscribed: these change every frame, and
+ * re-rendering the panel that often to move a bar would cost more than the
+ * thing it is measuring.
+ */
+const METERS: { key: "beatE" | "energy" | "hitE" | "dropE"; label: string; blurb: string }[] = [
+  { key: "beatE", label: "BEAT", blurb: "the tempo grid — one pulse per beat" },
+  { key: "energy", label: "BREATH", blurb: "how hard the passage is driving, over seconds" },
+  { key: "hitE", label: "PUNCH", blurb: "every percussive onset, fills and all" },
+  { key: "dropE", label: "DROP", blurb: "swells into a drop and decays out of it" },
+];
+
+function BeatMeters() {
+  const [v, setV] = useState({ beatE: 0, energy: 0, hitE: 0, dropE: 0, bpm: 0 });
   useEffect(() => {
-    const id = window.setInterval(() => setS({ ms: live.frameMs, res: live.resScale, q: live.quality }), 400);
+    const id = window.setInterval(
+      () => setV({ beatE: live.beatE, energy: live.energy, hitE: live.hitE, dropE: live.dropE, bpm: live.bpm }),
+      50
+    );
     return () => window.clearInterval(id);
   }, []);
-  const fps = s.ms > 0 ? Math.min(60, Math.round(1000 / s.ms)) : 60;
-  const good = fps >= 50, ok = fps >= 34;
+  return (
+    <>
+      <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 6px" }}>
+        INTENSITY <NewTag />
+        {v.bpm > 0 && <span style={{ float: "right", color: MAG, letterSpacing: "0.1em" }}>{Math.round(v.bpm)} BPM</span>}
+      </div>
+      <div style={{ display: "grid", gap: 5, marginBottom: 6 }}>
+        {METERS.map((m) => {
+          const amt = Math.max(0, Math.min(1, v[m.key]));
+          return (
+            <div key={m.key} style={{ display: "flex", alignItems: "center", gap: 8 }} title={m.blurb}>
+              <span style={{ fontSize: 9, letterSpacing: "0.14em", color: "rgba(255,255,255,0.45)", width: 52 }}>{m.label}</span>
+              <div style={{ flex: 1, height: 5, borderRadius: 3, background: "rgba(255,255,255,0.07)", overflow: "hidden" }}>
+                <div
+                  style={{
+                    width: `${amt * 100}%`,
+                    height: "100%",
+                    borderRadius: 3,
+                    background: `linear-gradient(90deg, ${CYAN}, ${MAG})`,
+                    // no CSS transition: these are sampled at 20Hz and a
+                    // transition would smear a sharp hit into a slow swell,
+                    // showing something the engine never did
+                    opacity: 0.5 + amt * 0.5,
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, marginBottom: 4 }}>
+        What the engine is hearing right now, and what every beat effect below is driven by.
+        BREATH moves over seconds rather than beats — it is how a theme knows a quiet passage
+        from a driving one.
+      </div>
+    </>
+  );
+}
+
+function PerfReadout() {
+  const [s, setS] = useState({ ms: 16.7, res: 1, q: 1, target: 60 });
+  useEffect(() => {
+    const id = window.setInterval(() => setS({ ms: live.frameMs, res: live.resScale, q: live.quality, target: live.targetFps }), 400);
+    return () => window.clearInterval(id);
+  }, []);
+  // Not clamped to 60 any more: the engine draws at the panel's rate where it
+  // can, and a readout that could never say more than 60 would be reporting
+  // the old cap rather than what is happening.
+  const fps = s.ms > 0 ? Math.min(144, Math.round(1000 / s.ms)) : 60;
+  // Judged against what the engine is aiming at, not against 60 — 60fps on a
+  // 120Hz panel is half the frames, and green would be the wrong colour for it.
+  const good = fps >= s.target * 0.86, ok = fps >= s.target * 0.6;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, paddingTop: 10, borderTop: BORDER, fontSize: 9.5 }}>
       <span style={{ letterSpacing: "0.18em", color: "rgba(255,255,255,0.4)" }}>COST</span>
@@ -40,6 +113,7 @@ function PerfReadout() {
         {fps} fps
       </span>
       <span style={{ color: "rgba(255,255,255,0.4)" }}>{s.ms.toFixed(1)}ms</span>
+      {s.target > 70 && <span style={{ color: MAG }}>{s.target}Hz</span>}
       <span style={{ color: "rgba(255,255,255,0.4)" }}>
         {s.res >= 0.999 ? "full res" : `res ${Math.round(s.res * 100)}%`}
       </span>
@@ -464,6 +538,17 @@ export function VisualizerOverlay() {
             </div>
           )}
 
+          <Slider
+            label="HUE SPIN" value={visCfg.hueSpin ?? 0} min={0} max={4} step={0.1}
+            format={(v) => (v < 0.05 ? "OFF" : `${(36 / v).toFixed(0)}s / turn`)}
+            onChange={(v) => setV("hueSpin", v)} color={MAG}
+          />
+          <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, margin: "2px 0 6px" }}>
+            Turns the whole palette around the colour wheel, so any palette cycles through every
+            colour instead of sitting on one pairing. Works on the two-colour palettes too, not
+            just the multi-stop ones. <NewTag />
+          </div>
+
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "10px 0 8px" }}>LIGHT</div>
           <div style={{ display: "flex", gap: 5, marginBottom: 8 }}>
             {LIGHT_FX.map((f) => (
@@ -612,6 +697,7 @@ export function VisualizerOverlay() {
           </>)}
 
           {panelTab === "BEAT" && (<>
+          <BeatMeters />
           <div style={{ fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.5)", margin: "12px 0 6px" }}>SYNC MODE</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             <Toggle label="ANALYZED" on={analyzedMode} onChange={(v) => set({ analyzedMode: v })} color={MAG} />
@@ -671,6 +757,17 @@ export function VisualizerOverlay() {
                 style={{ ...chip((visCfg.quality ?? "AUTO") === q, MAG), flex: 1, padding: "8px 6px", fontSize: 10 }}
               >{q}</button>
             ))}
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "2px 0 6px" }}>
+            <Toggle label="120 FPS" on={visCfg.hiFps ?? true} onChange={(v) => setV("hiFps", v)} color={MAG} />
+          </div>
+          <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, marginBottom: 6 }}>
+            Draws at your display's own refresh rate instead of capping at 60, on the displays that
+            have one. It is tried and dropped on evidence: if frames start being missed it falls
+            back to 60 rather than stuttering at 120, and waits longer each time before asking
+            again. Only themes whose motion is written against the clock rather than the frame
+            count are eligible — the rest stay at 60, because they would animate at double speed
+            rather than look smoother.
           </div>
           <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, marginBottom: 4 }}>
             {(visCfg.quality ?? "AUTO") === "MAX"

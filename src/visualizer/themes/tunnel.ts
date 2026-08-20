@@ -1,12 +1,12 @@
 import type { ThemeDraw } from "../themeTypes";
 
 // Hex tunnel. Beat: warp-speed kick and a white-hot ring slams down the tunnel.
-export const TUNNEL: ThemeDraw = ({ c, cx, cy, R, t, vt, beat, beatE, cfg, bassV, TK, C1, C2, glow, noGlow, L }) => {
-  if (t % 7 === 0) L.tunnel.push({ z: 1, rot: vt * 0.01, hot: false });
+export const TUNNEL: ThemeDraw = ({ c, cx, cy, R, fs, every, vt, beat, beatE, cfg, bassV, TK, C1, C2, glow, noGlow, L }) => {
+  if (every(7)) L.tunnel.push({ z: 1, rot: vt * 0.01, hot: false });
   if (beat) L.tunnel.push({ z: 1, rot: vt * 0.01, hot: true });
   for (let i = L.tunnel.length - 1; i >= 0; i--) {
     const r = L.tunnel[i];
-    r.z -= (0.006 + bassV * 0.028) * (1 + beatE * 1.8) * cfg.speed;
+    r.z -= (0.006 + bassV * 0.028) * (1 + beatE * 1.8) * cfg.speed * fs;
     if (r.z <= 0.03) { L.tunnel.splice(i, 1); continue; }
     const rad = ((R * 0.75) / r.z) * 0.14;
     c.save();

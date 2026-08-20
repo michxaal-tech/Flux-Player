@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Lantern {
   x: number; y: number; sway: number; sz: number; sp: number; hue: number;
@@ -7,7 +8,7 @@ interface Lantern {
 // Festival night: glowing paper lanterns drift up over still water carrying
 // their reflections. The whole scene is painted opaque every frame (sky +
 // water), so nothing accumulates in the trail buffer; only light is additive.
-export const LANTERNS: ThemeDraw = ({ c, w, h, vt, beat, beatE, cfg, bassV, midV, trebV, TK, C1, CMix, glow, noGlow, L }) => {
+export const LANTERNS: ThemeDraw = ({ c, w, h, fs, vt, beat, beatE, cfg, bassV, midV, trebV, TK, C1, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.lanterns ??= {
     l: Array.from({ length: 14 }, (_, i) => ({
       x: (i * 0.37 + 0.05) % 1,
@@ -114,7 +115,7 @@ export const LANTERNS: ThemeDraw = ({ c, w, h, vt, beat, beatE, cfg, bassV, midV
     const e = S.embers[i];
     e.x += e.vx;
     e.y += e.vy;
-    e.a *= 0.97;
+    e.a *= dk(0.97, fs);
     if (e.a < 0.05) { S.embers.splice(i, 1); continue; }
     c.fillStyle = C1(e.a, 75);
     c.beginPath();

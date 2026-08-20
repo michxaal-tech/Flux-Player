@@ -91,6 +91,12 @@ export interface LiveState {
    * be read on the actual device rather than inferred. */
   frameMs: number;
   resScale: number;
+  /** frames a second the engine is currently aiming at — 60, or the panel's
+   * own rate where the machine and the theme can both hold it */
+  targetFps: number;
+  /** how much of a 60Hz frame the last frame covered; per-frame motion is
+   * multiplied by it so speed is the same at any refresh rate */
+  fs: number;
   /** 0..1 adaptive quality: drives resolution, glow radius and particle count */
   quality: number;
   /** Musical time, in beats. Advances with the detected tempo rather than with
@@ -123,7 +129,7 @@ export const live: LiveState = {
   flies: [], vort: [], cityH: [], shakeVal: 0,
   beatAvg: 0, prevBass: 0, fluxAvg: 0, fluxDev: 0, lastBeatAt: 0, beats: [], bpm: 0, flashVal: 0, cycleT: 0,
   beatE: 0, energy: 0.35, anal: null, analOn: false, analBeat: 0, dropE: 0, prevBassSlow: 0, dropHold: 0, hitE: 0, section: 0, analHit: 0, impRings: [], impScan: -1, impShock: [], syncMs: 0, playerTheme: "AURORA", playerBgOn: true, scratch: {},
-  frameMs: 16.7, resScale: 1, quality: 1, flow: 0, lastDropAt: -9999, dropIdx: 0, dropNew: false, dropSlots: 0, dropAmts: [], dropBloom: 0,
+  frameMs: 16.7, resScale: 1, targetFps: 60, fs: 1, quality: 1, flow: 0, lastDropAt: -9999, dropIdx: 0, dropNew: false, dropSlots: 0, dropAmts: [], dropBloom: 0,
 };
 
 // Debug handle: inspect the render-loop state from the console (window.__flux).

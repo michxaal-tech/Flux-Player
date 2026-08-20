@@ -1,11 +1,12 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 // Rotating beam fan. Beat: the whole rig jolts around its axis, beams double
 // in reach and a white core detonates.
-export const LASERS: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, beatE, bassV, I, TK, C1, CMix, glow, noGlow, L }) => {
+export const LASERS: ThemeDraw = ({ c, cx, cy, R, fs, freq, liveAudio, vt, beat, beatE, bassV, I, TK, C1, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.lasers ??= { jolt: 0 });
   if (beat) S.jolt += 0.35;
-  S.jolt *= 0.94;
+  S.jolt *= dk(0.94, fs);
   const beams = 14;
   for (let i = 0; i < beams; i++) {
     const fv = liveAudio ? freq[Math.floor((i / beams) * 200)] / 255 : 0.2;

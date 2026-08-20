@@ -1,12 +1,12 @@
 import type { ThemeDraw } from "../themeTypes";
 
 // Star flight. Beat: warp jump — stars streak into hyperspace lines, then settle.
-export const STARFIELD: ThemeDraw = ({ c, cx, cy, cfg, beatE, bassV, TK, C1, C2, L }) => {
+export const STARFIELD: ThemeDraw = ({ c, cx, cy, fs, cfg, beatE, bassV, TK, C1, C2, L }) => {
   if (!L.stars.length)
     L.stars = Array.from({ length: 240 }, () => ({
       x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2, z: Math.random(),
     }));
-  const speed = (0.002 + bassV * 0.03) * (1 + beatE * 5) * cfg.speed;
+  const speed = (0.002 + bassV * 0.03) * (1 + beatE * 5) * cfg.speed * fs;
   for (const s of L.stars) {
     const pz = s.z;
     s.z -= speed;

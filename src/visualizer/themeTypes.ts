@@ -10,10 +10,30 @@ export interface ThemeCtx {
   cy: number;
   /** min(w, h) */
   R: number;
-  /** global frame counter */
+  /**
+   * Global frame counter, in 60Hz-equivalent frames — a float, and it advances
+   * by `fs` rather than by 1, so `Math.sin(t * 0.02)` runs at the same speed
+   * on a 120Hz panel as on a 60Hz one. Being a float it will not land on a
+   * whole number, so `t % 40 === 0` never fires; use `every(40)` for that.
+   */
   t: number;
   /** engine time advanced by cfg.speed each frame */
   vt: number;
+  /**
+   * How much of a 60Hz frame this frame covered: 1 at 60fps, 0.5 at 120fps.
+   *
+   * Anything the theme accumulates itself has to be scaled by it, or the
+   * theme animates at double speed on a fast panel — `p.x += p.vx * fs` for
+   * travel, `p.a *= dk(0.94, fs)` for decay. A theme that only reads `t`,
+   * `vt` and `flow` needs nothing: those already advance with real time.
+   */
+  fs: number;
+  /**
+   * True once per `n` 60Hz-equivalent frames, whatever the refresh rate —
+   * the frame-rate-independent form of `t % n === 0`, which fires twice as
+   * often at 120fps and (since `t` is a float) not at all.
+   */
+  every: (n: number) => boolean;
   freq: Uint8Array;
   wave: Uint8Array;
   liveAudio: boolean;

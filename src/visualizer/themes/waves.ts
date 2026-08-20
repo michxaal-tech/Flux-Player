@@ -2,8 +2,8 @@ import type { ThemeDraw } from "../themeTypes";
 
 // Receding spectrum terrain. Beat: that row is stamped white-hot and stays
 // bright as it recedes into the distance — you can watch the beats march away.
-export const WAVES: ThemeDraw = ({ c, w, h, cx, cy, t, freq, liveAudio, vt, beat, beatE, bassV, I, TK, CMix, glow, noGlow, L }) => {
-  if (t % 3 === 0) {
+export const WAVES: ThemeDraw = ({ c, w, h, cx, cy, every, freq, liveAudio, vt, beat, beatE, bassV, I, TK, CMix, glow, noGlow, L }) => {
+  if (every(3)) {
     const v: number[] = [];
     for (let i = 0; i < 48; i++)
       v.push(liveAudio ? freq[i * 4] / 255 : 0.12 + 0.1 * Math.sin(vt * 0.03 + i * 0.4));

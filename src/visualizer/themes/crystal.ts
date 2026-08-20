@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Shard {
   ang: number; dist: number; sz: number; spin: number; rot: number; band: number;
@@ -8,7 +9,7 @@ interface Glint { x: number; y: number; a: number; sz: number; }
 // Crystal cluster. Translucent shards orbit a radiant heart, each tuned to a
 // frequency band; light beams refract through them, and on the beat the whole
 // formation flashes from within and throws off glints.
-export const CRYSTAL: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, beatE, bassV, TK, C1, CMix, glow, noGlow, L }) => {
+export const CRYSTAL: ThemeDraw = ({ c, cx, cy, R, fs, freq, liveAudio, vt, beat, beatE, bassV, TK, C1, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.crystal ??= {
     shards: Array.from({ length: 10 }, (_, i) => ({
       ang: (i / 10) * Math.PI * 2,
@@ -87,7 +88,7 @@ export const CRYSTAL: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, be
   // four-point star glints
   for (let i = S.glints.length - 1; i >= 0; i--) {
     const g = S.glints[i];
-    g.a *= 0.88;
+    g.a *= dk(0.88, fs);
     if (g.a < 0.05) { S.glints.splice(i, 1); continue; }
     const gs = g.sz * g.a * TK;
     c.strokeStyle = C1(g.a, 90);

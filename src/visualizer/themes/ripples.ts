@@ -1,12 +1,12 @@
 import type { ThemeDraw } from "../themeTypes";
 
 // Water rings. Beat: a double ripple slams outward and the inner rings surge.
-export const RIPPLES: ThemeDraw = ({ c, cx, cy, R, t, freq, liveAudio, beat, beatE, cfg, bassV, I, TK, C1, C2, CMix, glow, noGlow, L }) => {
+export const RIPPLES: ThemeDraw = ({ c, cx, cy, R, every, freq, liveAudio, beat, beatE, cfg, bassV, I, TK, C1, C2, CMix, glow, noGlow, L }) => {
   if (beat) {
     L.ripples.push({ r: R * 0.05, a: 1 });
     L.ripples.push({ r: R * 0.02, a: 0.7 });
   }
-  if (!liveAudio && t % 50 === 0) L.ripples.push({ r: R * 0.05, a: 0.7 });
+  if (!liveAudio && every(50)) L.ripples.push({ r: R * 0.05, a: 0.7 });
   for (let i = L.ripples.length - 1; i >= 0; i--) {
     const rp = L.ripples[i];
     rp.r += R * (0.012 + bassV * 0.01) * cfg.speed;

@@ -1,9 +1,10 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 // Circular spectrum analyzer — the most literal "see the music" theme.
 // Mirrored frequency bars around a ring, live BPM in the center, and an
 // echo ring fired on every beat.
-export const HALO: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, beatE, bassV, I, TK, C1, C2, CMix, glow, noGlow, L }) => {
+export const HALO: ThemeDraw = ({ c, cx, cy, R, fs, freq, liveAudio, vt, beat, beatE, bassV, I, TK, C1, C2, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.halo ??= { echoes: [] as { r: number; a: number }[] });
   const r0 = R * (0.2 + bassV * 0.04 + beatE * 0.03);
 
@@ -11,7 +12,7 @@ export const HALO: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, beatE
   for (let i = S.echoes.length - 1; i >= 0; i--) {
     const e = S.echoes[i];
     e.r += R * 0.018;
-    e.a *= 0.9;
+    e.a *= dk(0.9, fs);
     if (e.a < 0.03) { S.echoes.splice(i, 1); continue; }
     c.beginPath();
     c.arc(cx, cy, e.r, 0, Math.PI * 2);

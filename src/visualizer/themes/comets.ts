@@ -6,7 +6,7 @@ interface Comet {
 
 // Comet shower. Every beat launches blazing comets across the sky with long
 // glowing trails; quiet passages keep a few faint drifters alive.
-export const COMETS: ThemeDraw = ({ c, w, h, t, beat, beatE, cfg, bassV, trebV, TK, C1, CMix, glow, noGlow, L }) => {
+export const COMETS: ThemeDraw = ({ c, w, h, t, every, beat, beatE, cfg, bassV, trebV, TK, C1, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.comets ??= { list: [] as Comet[] });
 
   const spawn = (bright: number) => {
@@ -25,7 +25,7 @@ export const COMETS: ThemeDraw = ({ c, w, h, t, beat, beatE, cfg, bassV, trebV, 
   };
 
   if (beat) for (let k = 0; k < 3; k++) spawn(1);
-  if (S.list.length < 3 && t % 40 === 0) spawn(0.3);
+  if (S.list.length < 3 && every(40)) spawn(0.3);
   if (S.list.length > 40) S.list.splice(0, S.list.length - 40);
 
   for (let i = S.list.length - 1; i >= 0; i--) {

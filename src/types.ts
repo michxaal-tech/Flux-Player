@@ -107,6 +107,12 @@ export interface VisCfg {
   /** AUTO adapts to the measured frame time, MAX pins full quality, FAST pins a
    * low one for machines that cannot keep up (see engine.ts) */
   quality: string;
+  /** draw at the display's own refresh rate where the machine can hold it,
+   * rather than capping at 60 (see the governor in visualizer/engine.ts) */
+  hiFps: boolean;
+  /** turns the whole palette around the colour wheel, in passes per ~36s at
+   * speed 1; 0 leaves every palette where it is (see engine.ts) */
+  hueSpin: number;
   /** flash on every percussive hit, not just the tempo grid (analyzed mode) */
   fastBeats: boolean;
   /** 3D projection applied to whatever the theme drew: OFF renders it flat,

@@ -1,8 +1,9 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 // Skyline equalizer. Beat: random towers slam to full height and every window
 // lights up like the whole city hit the drop at once.
-export const CITY: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, bassV, I, TK, C1, C2, CMix, L }) => {
+export const CITY: ThemeDraw = ({ c, w, h, fs, freq, liveAudio, vt, beat, beatE, bassV, I, TK, C1, C2, CMix, L }) => {
   const N = 26;
   if (!L.cityH.length) L.cityH = new Array(N).fill(0.1);
   if (beat) {
@@ -15,7 +16,7 @@ export const CITY: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, bas
   const bw2 = w / N;
   for (let i = 0; i < N; i++) {
     const fv = liveAudio ? freq[i * 7] / 255 : 0.12 + 0.08 * Math.sin(vt * 0.02 + i);
-    L.cityH[i] = Math.max(L.cityH[i] * 0.93, fv * I);
+    L.cityH[i] = Math.max(L.cityH[i] * dk(0.93, fs), fv * I);
     const bh = L.cityH[i] * h * 0.55;
     c.fillStyle = CMix(i / N, 0.55 + beatE * 0.2, 45 + beatE * 8);
     c.fillRect(i * bw2 + 2, baseY - bh, bw2 - 4, bh);

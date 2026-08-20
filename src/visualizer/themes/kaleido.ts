@@ -1,9 +1,9 @@
 import type { ThemeDraw } from "../themeTypes";
 
 // Mirrored arms. Beat: spin kick, arms flare wide and bright, tips ignite.
-export const KALEIDO: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, beatE, bassV, I, TK, CMix, glow, noGlow, L }) => {
+export const KALEIDO: ThemeDraw = ({ c, cx, cy, R, fs, freq, liveAudio, vt, beat, beatE, bassV, I, TK, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.kaleido ??= { rot: 0 });
-  S.rot += 0.003 + beatE * 0.02;
+  S.rot += (0.003 + beatE * 0.02) * fs;
   const SEG = 10, armLen = R * 0.52 * (1 + beatE * 0.1);
   for (let s = 0; s < SEG; s++) {
     c.save();
