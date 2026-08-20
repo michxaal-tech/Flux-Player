@@ -178,6 +178,7 @@ export const IMPACTS = [
   // signature set — see visualizer/impactFx.ts
   "MELT", "RIPPLE", "GHOST", "DATAMOSH", "HALFTONE",
   "PRISM", "CRT", "STAMP", "SHARDS", "BREATH",
+  "BOUNCE", "BLINDS", "SHUTTER", "WARP", "SPECKS", "LETTERBOX",
 ];
 
 /**
@@ -191,6 +192,7 @@ export const NEW_ITEMS = new Set<string>([
   "RAINBOW", "PRISM", "PLASMA", "MIAMI", "OPAL", "TIEDYE", "BOREALIS", "REEF", "SLICK", "CITRUS",
   "WAVE", "WAVE GLOW", "AUTO", "MAX", "FAST",
   "CAUSTICS", "PLUME", "HORIZON", "FILAMENT", "VEIL",
+  "BOUNCE", "BLINDS", "SHUTTER", "WARP", "SPECKS", "LETTERBOX", "HUE SPIN",
   "RGB", "TRIAD", "DUSK", "LAGOON", "FORGE", "POISON", "CORAL", "IRIS",
   "BRUISE", "SAGE", "COPPER", "ORCHID", "MAGMA", "STEEL",
 ]);

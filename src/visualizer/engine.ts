@@ -1516,6 +1516,124 @@ export function startRenderLoop(): void {
         c.restore();
       }
 
+      if (IMP.has("BOUNCE") && BE > 0.02) {
+        // The frame drops and comes back, like the camera took the hit. A
+        // rebound rather than a fall: the offset overshoots once on the way
+        // back, which is the difference between a bounce and a slide.
+        // A hard doubled image that lurches down and settles, rather than the
+        // frame itself moving. Moving it was tried: this canvas *is* the trail
+        // buffer, so painting over it to displace the picture throws the trail
+        // away — it worked, and took the mean brightness from 40 to 7.
+        //
+        // The offset overshoots once on the way back, which is the difference
+        // between a bounce and a slide, and the copy is drawn strongly enough
+        // to read as a second image rather than as a smear.
+        const off = h * 0.055 * BE * (1 - Math.sin(BE * Math.PI * 1.7) * 0.55);
+        c.save();
+        c.globalCompositeOperation = "lighter";
+        c.globalAlpha = 0.62 * BE;
+        c.drawImage(snap, 0, 0, snap.width, snap.height, 0, off, w, h);
+        c.restore();
+      }
+      if (IMP.has("BLINDS") && BE > 0.06) {
+        // Alternate slats slide opposite ways, so the picture reads as louvred
+        // rather than merely torn — the alternation is the whole effect.
+        const slats = 14;
+        const sh2 = h / slats;
+        c.save();
+        c.globalCompositeOperation = "lighter";
+        c.globalAlpha = 0.3 * BE;
+        for (let i = 0; i < slats; i++) {
+          const dir = i % 2 ? 1 : -1;
+          const sy = i * sh2;
+          c.drawImage(
+            snap,
+            0, (sy / h) * snap.height, snap.width, (sh2 / h) * snap.height,
+            dir * BE * w * 0.05, sy, w, sh2
+          );
+        }
+        c.restore();
+      }
+      if (IMP.has("SHUTTER") && BE > 0.06) {
+        // A hard bar crossing the frame, as if something passed the lens. It
+        // is drawn opaque and thin rather than translucent and wide: a soft
+        // one reads as a glow, and the point is the interruption.
+        // Swept across the whole decay of the beat rather than the top third
+        // of it. At the original threshold the bar was on screen for about
+        // three frames — long enough to register as a flicker, not long enough
+        // to read as something crossing the lens.
+        const p2 = 1 - (BE - 0.06) / 0.94;
+        const barH = h * 0.19;
+        const y2 = -barH + p2 * (h + barH * 2);
+        c.save();
+        c.fillStyle = "rgba(3,4,7,0.92)";
+        c.fillRect(0, y2, w, barH);
+        c.fillStyle = C1(0.5 * BE, 80);
+        c.fillRect(0, y2 + barH, w, 1.5 * TK);
+        c.fillRect(0, y2 - 1.5 * TK, w, 1.5 * TK);
+        c.restore();
+      }
+      if (IMP.has("WARP") && BE > 0.04) {
+        // Fisheye pulse, built from concentric rings of the frame drawn at
+        // increasing scale. A true lens warp needs a per-pixel pass; six
+        // clipped annuli give the same read for the price of six draws.
+        const rings = 6;
+        c.save();
+        c.globalCompositeOperation = "lighter";
+        for (let i = rings; i >= 1; i--) {
+          const f = i / rings;
+          const z = 1 + BE * 0.22 * (1 - f * f);
+          c.save();
+          c.beginPath();
+          c.arc(cx, cy, R * 0.62 * f, 0, Math.PI * 2);
+          c.clip();
+          c.globalAlpha = 0.2 * BE;
+          c.drawImage(snap, 0, 0, snap.width, snap.height, (w - w * z) / 2, (h - h * z) / 2, w * z, h * z);
+          c.restore();
+        }
+        c.restore();
+      }
+      if (IMP.has("SPECKS") && beat) L.impSpecks.push(0);
+      if (IMP.has("SPECKS")) {
+        for (let i = L.impSpecks.length - 1; i >= 0; i--) {
+          const a2 = (L.impSpecks[i] += beatStep * 0.7);
+          if (a2 >= 1) { L.impSpecks.splice(i, 1); continue; }
+          const fade = 1 - a2;
+          c.save();
+          c.globalCompositeOperation = "lighter";
+          // deterministic scatter, so a speck keeps its direction across frames
+          for (let k = 0; k < 110; k++) {
+            const ang = k * 2.3999632 + i;
+            const sp = 0.35 + ((k * 37) % 100) / 140;
+            const d2 = a2 * R * 0.95 * sp;
+            // streaks along their own direction rather than dots: at two
+            // pixels a speck is invisible against a lit theme, which is how
+            // the first version came out measuring as no change at all
+            const len = (2.5 + fade * 7) * TK;
+            c.strokeStyle = CMix((k % 7) / 7, fade * 0.85, 86);
+            c.lineWidth = 1.8 * TK;
+            c.beginPath();
+            c.moveTo(cx + Math.cos(ang) * d2, cy + Math.sin(ang) * d2);
+            c.lineTo(cx + Math.cos(ang) * (d2 + len), cy + Math.sin(ang) * (d2 + len));
+            c.stroke();
+          }
+          c.restore();
+        }
+      }
+      if (IMP.has("LETTERBOX")) {
+        // Cinematic bars that snap in on the beat and ease back out. Opaque,
+        // because the whole point of a letterbox is that it is not the picture.
+        const barH = h * (0.035 + BE * 0.07);
+        c.save();
+        c.fillStyle = "rgba(3,4,7,0.95)";
+        c.fillRect(0, 0, w, barH);
+        c.fillRect(0, h - barH, w, barH);
+        c.fillStyle = C1(0.16 + BE * 0.4, 76);
+        c.fillRect(0, barH, w, 1.2 * TK);
+        c.fillRect(0, h - barH - 1.2 * TK, w, 1.2 * TK);
+        c.restore();
+      }
+
       // ── signature impacts ──
       // The ones with real machinery behind them (displacement fields, a frame
       // history, dot screens) live in impactFx.ts.

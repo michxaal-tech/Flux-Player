@@ -19,7 +19,8 @@
     "perf": "node scripts/perf-probe.mjs",
     "looks": "node scripts/look-shot.mjs",
     "fps": "node scripts/fps-check.mjs",
-    "seekbar": "node scripts/seekbar-check.mjs"
+    "seekbar": "node scripts/seekbar-check.mjs",
+    "impacts": "node scripts/impact-check.mjs"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",

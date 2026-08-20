@@ -82,6 +82,8 @@ export interface LiveState {
   impRings: number[];
   /** expanding SHOCK rings, 0..1 each */
   impShock: number[];
+  /** SPECKS bursts, 0..1 each — one per beat, carrying its own scatter */
+  impSpecks: number[];
   /** sweeping scanline position (IMPACTS "SCANLINE"), -1 when idle */
   impScan: number;
   /** total A/V compensation currently applied, ms (measured + user offset) */
@@ -128,7 +130,7 @@ export const live: LiveState = {
   rot: 0, vt: 0, tunnel: [], stars: [], vparts: [], specHist: [], ripples: [],
   flies: [], vort: [], cityH: [], shakeVal: 0,
   beatAvg: 0, prevBass: 0, fluxAvg: 0, fluxDev: 0, lastBeatAt: 0, beats: [], bpm: 0, flashVal: 0, cycleT: 0,
-  beatE: 0, energy: 0.35, anal: null, analOn: false, analBeat: 0, dropE: 0, prevBassSlow: 0, dropHold: 0, hitE: 0, section: 0, analHit: 0, impRings: [], impScan: -1, impShock: [], syncMs: 0, playerTheme: "AURORA", playerBgOn: true, scratch: {},
+  beatE: 0, energy: 0.35, anal: null, analOn: false, analBeat: 0, dropE: 0, prevBassSlow: 0, dropHold: 0, hitE: 0, section: 0, analHit: 0, impRings: [], impScan: -1, impShock: [], impSpecks: [], syncMs: 0, playerTheme: "AURORA", playerBgOn: true, scratch: {},
   frameMs: 16.7, resScale: 1, targetFps: 60, fs: 1, quality: 1, flow: 0, lastDropAt: -9999, dropIdx: 0, dropNew: false, dropSlots: 0, dropAmts: [], dropBloom: 0,
 };
 
