@@ -78,6 +78,15 @@ export interface LyricStyleDef {
   line?: (a: StyleArg) => LineMotion;
   /** light the line progressively as it is sung, karaoke style */
   fill?: boolean;
+  /**
+   * How a per-character `tint` maps onto the palette. Left out, a tint slides
+   * lightness with the value; a style that wants a flat ramp across the whole
+   * line sets its own.
+   */
+  tintLight?: number;
+  tintAlpha?: number;
+  /** tint the glow to match each character, rather than the line's colour */
+  tintGlow?: boolean;
 }
 
 const clamp01 = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
@@ -98,30 +107,31 @@ const wash = (k: number, i: number, n: number, spread = 0.55): number => {
 
 export const LYRIC_STYLE_DEFS: LyricStyleDef[] = [
   {
-    // The original, recovered from git rather than rebuilt: a fast travelling
-    // sine that both lifts each character and picks its colour, swelling on the
-    // beat. Every number here is the one it shipped with — 4.8 rad/s (the old
-    // frame-counter speed at 60fps), a swell of 0.1em rising to 0.5 on a beat,
-    // and a glow that punches with it.
+    // The first one, recovered from git rather than rebuilt from memory.
     //
-    // Two of those were removed earlier at the same person's request — it was
-    // "super fast" and shouldn't "follow the beat" — and putting them back is
-    // what "go back further" turned out to mean. Both are one number if either
-    // wants dialling back again.
+    // What makes it is the colour, not the movement: a rainbow spanning the
+    // whole line — one hue per character from start to end — that scrolls
+    // along it over time, with each character's glow tinted to match. The
+    // wobble is small and quick underneath that. Every later version replaced
+    // this with colour taken from the sine's height, which loses the ramp and
+    // the scroll, and that is what was missing each time this got "restored".
+    //
+    // The numbers are the originals: 7.2 rad/s of travel (the old frame-counter
+    // speed at 60fps), a hue that walks the palette every ~4 seconds, and a
+    // wobble of about 0.05em rising to 0.13 on a beat.
     id: "WAVE",
-    blurb: "letters ride a fast wave of colour, swelling on the beat",
-    char: ({ i, flow, enter, exit, beat }) => {
-      const s = Math.sin(flow * 4.8 - i * 0.5);
-      return {
-        dy: s * (0.1 + beat * 0.4) * ease(enter) - ease(exit) * 1.2,
-        tint: (s + 1) * 0.5,
-      };
-    },
-    // The one deviation from the original, and it is deliberate: the outgoing
-    // line lifts away instead of sitting on the incoming one. The original left
-    // the old line stacked on the new at the same anchor, which is the thing
-    // that has been called horrible more than anything else here.
-    line: ({ enter, beat }) => ({ scale: 0.97 + ease(enter) * 0.03 + beat * 0.03, glow: 14 + beat * 20 }),
+    blurb: "a rainbow scrolls along the line while the letters wobble",
+    tintLight: 78,
+    tintAlpha: 0.95,
+    tintGlow: true,
+    char: ({ i, n, flow, enter, exit, beat }) => ({
+      dy: Math.sin(flow * 7.2 + i * 0.55) * (0.046 + beat * 0.083) * ease(enter) - ease(exit) * 1.2,
+      tint: ((i / Math.max(1, n - 1)) + flow * 0.24) % 1,
+    }),
+    // The one deviation, deliberate: the outgoing line lifts away rather than
+    // sitting on the incoming one. The original left them stacked at the same
+    // anchor, which is the complaint that has come back more than any other.
+    line: ({ beat }) => ({ glow: 14 + beat * 12 }),
   },
   {
     id: "RIPPLE",

@@ -174,6 +174,8 @@ interface BlockOpts {
   fill?: number;
   /** maps a style's per-character tint onto the active palette */
   tintFor?: (t: number) => string;
+  /** tint each character's glow to match it, rather than the line's colour */
+  tintGlow?: boolean;
 }
 
 /** geometry of a laid-out block, exactly as drawBlock would place it. Leaves
@@ -387,6 +389,8 @@ function drawBlockLetters(
             // otherwise the block's. Opacity is already on globalAlpha, so the
             // tint is asked for at full strength.
             const tint = mo?.tint !== undefined && o.tintFor ? o.tintFor(mo.tint) : undefined;
+            // a glow of the character's own colour, when the style asks for it
+            if (tint && o.tintGlow && st.glowColor === undefined) c.shadowColor = tint;
             c.fillStyle = st.color ?? tint ?? o.color ?? "#fff";
             c.fillText(ch, -adv / 2, 0);
           }
@@ -463,7 +467,8 @@ export function drawLyricOverlay(x: LyricCtx): void {
       motion: def.char,
       motionArg: { flow, frac, age, enter, exit, beat: beatE },
       fill: def.fill ? frac : undefined,
-      tintFor: (t) => CMix(t, 1, 54 + t * 26),
+      tintFor: (t) => CMix(t, def.tintAlpha ?? 1, def.tintLight ?? 54 + t * 26),
+      tintGlow: def.tintGlow,
     }, w);
   };
 
