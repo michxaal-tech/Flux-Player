@@ -59,6 +59,7 @@ export const VIS_THEMES = [
   "VOXEL", "TESSERACT",
   "MONOLITH", "ORRERY", "CANYON", "GYROSCOPE", "SINGULARITY",
   "STRATA", "CROWN", "CASCADE", "FISSION", "PARALLAX",
+  "CAUSTICS", "PLUME", "HORIZON", "FILAMENT", "VEIL",
 ];
 
 /** Staged themes: instead of one look reacting to volume, these build in layers.
@@ -159,7 +160,7 @@ export const PLAYER_THEMES = [
   "ORB", "RIPPLES", "FIREFLIES", "LANTERNS", "JELLY", "COMETS", "STARFIELD",
   "NOVA", "ECLIPSE", "SPIRAL", "HELIX", "WAVES", "KALEIDO", "VORTEX", "TUNNEL",
   "INKFLOW", "MURMUR", "BIOLUME", "AURORAFALL", "LAVALAMP", "CONSTELLATION",
-  "WORMHOLE",
+  "WORMHOLE", "CAUSTICS", "PLUME", "VEIL", "HORIZON",
 ];
 
 export const P_STYLES = [
@@ -189,6 +190,9 @@ export const NEW_ITEMS = new Set<string>([
   "STRATA", "CROWN", "CASCADE", "FISSION", "PARALLAX",
   "RAINBOW", "PRISM", "PLASMA", "MIAMI", "OPAL", "TIEDYE", "BOREALIS", "REEF", "SLICK", "CITRUS",
   "WAVE", "WAVE GLOW", "AUTO", "MAX", "FAST",
+  "CAUSTICS", "PLUME", "HORIZON", "FILAMENT", "VEIL",
+  "RGB", "TRIAD", "DUSK", "LAGOON", "FORGE", "POISON", "CORAL", "IRIS",
+  "BRUISE", "SAGE", "COPPER", "ORCHID", "MAGMA", "STEEL",
 ]);
 
 /** Particle silhouettes. MIXED assigns one per particle, so a single drift can

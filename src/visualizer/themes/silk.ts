@@ -3,12 +3,12 @@ import type { ThemeDraw } from "../themeTypes";
 // Silk ribbons: five translucent bands flowing across the frame like fabric
 // in wind. Each ribbon rides its own frequency band; every beat sends a
 // visible surge travelling left-to-right along the cloth.
-export const SILK: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg, bassV, I, TK, CMix, glow, noGlow, L }) => {
+export const SILK: ThemeDraw = ({ c, w, h, fs, freq, liveAudio, vt, beat, beatE, cfg, bassV, I, TK, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.silk ??= { surges: [] as { x: number; ribbon: number }[] });
   const RIBBONS = 5;
   if (beat) S.surges.push({ x: -0.1, ribbon: Math.floor(Math.random() * RIBBONS) });
   for (let i = S.surges.length - 1; i >= 0; i--) {
-    S.surges[i].x += 0.022 * cfg.speed;
+    S.surges[i].x += 0.022 * cfg.speed * fs;
     if (S.surges[i].x > 1.25) S.surges.splice(i, 1);
   }
 

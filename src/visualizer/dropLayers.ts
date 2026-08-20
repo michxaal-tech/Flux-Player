@@ -798,6 +798,14 @@ export const THEME_LAYERS: Record<string, string[]> = {
   CASCADE: ["RAINFALL", "CAUSTICS", "TIDEWASH", "PLUMES", "DUST", "EMBERS", "HALO"],
   FISSION: ["ORBITS", "SPARKS", "WEB", "SHARDS", "HALO", "PULSE", "RIFT"],
   PARALLAX: ["DUST", "HORIZON", "SCANS", "BEAM", "WEB", "HALO", "VEIL"],
+
+  // beauty-first themes: sets that add depth and light rather than structure,
+  // since these are the ones people leave running
+  CAUSTICS: ["TIDEWASH", "SHAFTS", "CAUSTICS", "DUST", "VEIL", "HALO", "ECHOES"],
+  PLUME: ["EMBERS", "PLUMES", "SPARKS", "SHAFTS", "HALO", "DUST", "ORBITS"],
+  HORIZON: ["HORIZON", "TIDEWASH", "BEAM", "SCANS", "PILLARS", "HALO", "PETALS"],
+  FILAMENT: ["SPARKS", "WEB", "LATTICE", "BEAM", "ORBITS", "HALO", "GLYPHS"],
+  VEIL: ["VEIL", "SHAFTS", "RAINFALL", "DUST", "ECHOES", "HALO", "PETALS"],
 };
 
 /** The layer list for a theme, falling back to a sensible general set. */

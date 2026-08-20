@@ -90,6 +90,13 @@ import { CASCADE } from "./cascade";
 import { FISSION } from "./fission";
 import { PARALLAX } from "./parallax";
 
+// beauty-first themes, written against the clock so they run at the panel rate
+import { CAUSTICS } from "./caustics";
+import { PLUME } from "./plume";
+import { HORIZON } from "./horizon";
+import { FILAMENT } from "./filament";
+import { VEIL } from "./veil";
+
 export const themes: Record<string, ThemeDraw> = {
   RING, KALEIDO, HELIX, WAVES, LASERS, GRID, ORB, RIPPLES, SPIRAL, FIREFLIES,
   CITY, VORTEX, SCOPE, AURORA, DOTGRID, BARS, NEBULA, TUNNEL, STARFIELD,
@@ -104,6 +111,7 @@ export const themes: Record<string, ThemeDraw> = {
   VOXEL, TESSERACT,
   MONOLITH, ORRERY, CANYON, GYROSCOPE, SINGULARITY,
   STRATA, CROWN, CASCADE, FISSION, PARALLAX,
+  CAUSTICS, PLUME, HORIZON, FILAMENT, VEIL,
 };
 
 /**
@@ -130,6 +138,13 @@ export const TIME_NORMALISED = new Set<string>([
   // converted by hand and re-verified; LASERS, CITY, TUNNEL and LANTERNS were
   // converted in the same pass and still fail, so they are deliberately absent
   "CRYSTAL", "HALO", "KALEIDO", "STARFIELD",
+  // Of the five new ones, only these two pass. The other three are audio-
+  // reactive in fine detail, which the check cannot currently separate from
+  // motion — its samples are spaced in logical frames while the audio runs on
+  // the wall clock, so at fs=0.5 twice as much music passes between samples.
+  // They are correct at 60 either way; they stay off this list until the
+  // check can say so honestly rather than because I believe it.
+  "CAUSTICS", "VEIL",
 ]);
 
 // Debug handle, companion to `__flux`: lets a test enumerate the theme list
