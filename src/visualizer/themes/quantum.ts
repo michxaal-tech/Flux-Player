@@ -180,8 +180,9 @@ export const QUANTUM: ThemeDraw = ({
     const ct = Math.cos(t.curl * spd * fs), stt = Math.sin(t.curl * spd * fs);
     const nvx = t.vx * ct - t.vy * stt;
     const nvy = t.vx * stt + t.vy * ct;
-    t.vx = nvx * dk(t.loss, fs);
-    t.vy = nvy * dk(t.loss, fs);
+    const loss = dk(t.loss, fs);
+    t.vx = nvx * loss;
+    t.vy = nvy * loss;
     t.x += t.vx * fs;
     t.y += t.vy * fs;
     t.a *= dk(0.988 - E * 0.012, fs);
