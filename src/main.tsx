@@ -67,3 +67,8 @@ if ("serviceWorker" in navigator && import.meta.env.PROD && !(window as any).__f
     navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {});
   });
 }
+
+// Discord Rich Presence, in the desktop shell only — a browser tab cannot open
+// the local socket it needs. Does nothing at all until an application id is
+// entered (see src/discordPresence.ts).
+import("./discordPresence").then(({ startDiscordPresence }) => startDiscordPresence());

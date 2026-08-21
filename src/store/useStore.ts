@@ -105,6 +105,10 @@ export interface StoreState {
   analyzedMode: boolean;
   /** run the slow, triple-checked analysis on every track automatically */
   deepAnalyze: boolean;
+  /** Discord application id for Rich Presence; empty turns it off entirely.
+   * Not a secret — it identifies a public application, not an account — but it
+   * has to be yours, because the name Discord shows is that application's. */
+  discordAppId: string;
   analyzeStatus: string;
   /** why the mini player didn't open, shown in ME → PLAYBACK */
   miniStatus: string;
@@ -234,6 +238,7 @@ export const useStore = create<StoreState>()(
         miniPlayer: true,
         analyzedMode: true,
         deepAnalyze: false,
+        discordAppId: "",
         analyzeStatus: "",
         miniStatus: "",
         melodyStatus: "",
@@ -472,6 +477,7 @@ export const useStore = create<StoreState>()(
           miniPlayer: s.miniPlayer,
           analyzedMode: s.analyzedMode,
           deepAnalyze: s.deepAnalyze,
+          discordAppId: s.discordAppId,
           aiProvider: s.aiProvider,
           aiModel: s.aiModel,
           aiBaseUrl: s.aiBaseUrl,

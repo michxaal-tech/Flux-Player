@@ -49,6 +49,13 @@ It loads the build over a `flux://` scheme of its own rather than `file://`,
 which would render the markup and break IndexedDB — where the library lives —
 along with workers and every secure-context API.
 
+It also carries **Discord Rich Presence**, which is desktop-only for the same
+reason: it is an IPC conversation over a local socket, and a browser tab cannot
+open one. `desktop/discord.cjs` speaks the protocol directly — a 4-byte opcode,
+a 4-byte length and that much JSON — rather than depending on a library for it.
+It needs a Discord application ID, entered under ME → DISCORD; there is no
+shared one to ship, because the name Discord displays is that application's.
+
 The **Desktop build (Windows)** workflow builds it on GitHub's runners and
 attaches the installer to the `desktop-latest` release, so it needs no
 toolchain locally. To build it by hand instead:

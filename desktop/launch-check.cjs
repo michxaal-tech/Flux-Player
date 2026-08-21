@@ -83,6 +83,18 @@ app.whenReady().then(async () => {
   })`);
   check("the window is painting", fps > 10, `${fps} frames in a second`);
 
+  // Rich Presence: the bridge has to be reachable from the page, and sending
+  // through it with no application id configured must be a no-op rather than
+  // an error — that is the state every install starts in.
+  const presence = await win.webContents.executeJavaScript(`(() => {
+    try {
+      if (typeof window.__fluxPresence !== "function") return "missing";
+      window.__fluxPresence({ clientId: null });
+      return "ok";
+    } catch (e) { return "threw: " + e.message; }
+  })()`);
+  check("the Discord bridge is reachable", presence === "ok", presence);
+
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 
   clearTimeout(deadline);

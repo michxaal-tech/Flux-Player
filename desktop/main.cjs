@@ -4,7 +4,8 @@
 // implementation — so a fix made once shows up in both. What it adds is the
 // two things a web page cannot do for itself: Chromium's GPU flags, and a
 // higher pixel ceiling for the visual engine.
-const { app, BrowserWindow, protocol, net, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, protocol, net, shell } = require("electron");
+const discord = require("./discord.cjs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
@@ -75,6 +76,14 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
+
+// Rich Presence. The renderer sends what is playing; talking to Discord's
+// local socket is the main process's job because a page cannot open one.
+ipcMain.on("flux:presence", (_e, state) => {
+  discord.update(state).catch(() => { /* Discord not running is not an error */ });
+});
+
+app.on("before-quit", () => discord.disconnect());
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

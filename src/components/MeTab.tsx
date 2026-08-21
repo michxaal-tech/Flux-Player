@@ -10,6 +10,7 @@ import { fmt } from "../utils";
 import { bigBtn, chip, Module, Toggle } from "./ui";
 import { miniPlayerSupported, openMiniPlayer } from "../miniPlayer";
 import { AiSettings } from "./ai/AiSettings";
+import { presenceAvailable } from "../discordPresence";
 import { AiStudio } from "./ai/AiStudio";
 
 function TakeRow({ take }: { take: Take }) {
@@ -55,6 +56,7 @@ export function MeTab() {
   const set = useStore((s) => s.set);
   const aiReady = useStore((s) => s.aiReady);
   const miniPlayer = useStore((s) => s.miniPlayer);
+  const discordAppId = useStore((s) => s.discordAppId);
   const [miniSupported] = useState(miniPlayerSupported);
   const miniStatus = useStore((s) => s.miniStatus);
 
@@ -148,6 +150,38 @@ export function MeTab() {
           ) : null;
         })()}
       </Module>
+
+      {/* Only in the desktop app. Rich Presence is a conversation with the
+          Discord client over a local socket, which a browser tab cannot open —
+          and a control that cannot work is worse than no control, because the
+          reader spends their time wondering what they did wrong. */}
+      {presenceAvailable() && (
+        <Module title="◈ DISCORD" extra={<span style={{ fontSize: 9.5, color: "rgba(255,255,255,0.4)" }}>DESKTOP</span>}>
+          <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.4)", lineHeight: 1.55, marginBottom: 8 }}>
+            Puts what you're playing on your Discord profile, the way Spotify does. It needs an
+            <b style={{ color: "rgba(255,255,255,0.6)" }}> application ID</b>, which takes a minute to make:
+            open <span style={{ color: MAG }}>discord.com/developers/applications</span>, hit New Application,
+            name it whatever you want the profile line to say — that name is what people see — and copy the
+            Application ID from General Information. It identifies a public app rather than your account, so
+            it isn't a secret. There's no shared one to use, because the name shown would be someone else's.
+          </div>
+          <input
+            value={discordAppId}
+            onChange={(e) => set({ discordAppId: e.target.value.trim() })}
+            placeholder="application ID (leave empty to turn it off)"
+            spellCheck={false}
+            style={{
+              width: "min(90vw, 340px)", background: "rgba(255,255,255,0.06)", border: BORDER,
+              borderRadius: 10, color: "#fff", padding: "9px 11px", fontSize: 12, fontFamily: MONO,
+            }}
+          />
+          <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.4)", lineHeight: 1.55, marginTop: 6 }}>
+            {discordAppId
+              ? "On. If nothing shows up, check Discord is running and that Settings → Activity Privacy → \u201cShare your detected activities\u201d is on."
+              : "Off. Nothing is sent anywhere until an ID is entered."}
+          </div>
+        </Module>
+      )}
 
       <Module title="⚙ PLAYBACK">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
