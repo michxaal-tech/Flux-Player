@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Swell {
   /** 0 at the edge → 1 at center-screen impact */
@@ -32,7 +33,7 @@ function getFoamSprite(color: string): HTMLCanvasElement {
 // different phases — spawned by the surf itself and extra-large ones by the
 // beat — and each crashes center-screen with a flash and luminous spray.
 // There is no global reset, so the sea never snaps back or loops.
-export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg, bassV, I, TK, C1, C2, CMix, glow, noGlow, L }) => {
+export const TIDE: ThemeDraw = ({ c, fs, w, h, freq, liveAudio, vt, beat, beatE, cfg, bassV, I, TK, C1, C2, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.tide ??= {
     swells: [] as Swell[],
     foam: [] as { x: number; y: number; vx: number; vy: number; a: number; sz: number }[],
@@ -80,7 +81,7 @@ export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg
   const crashY = h * 0.66;
   for (let i = S.swells.length - 1; i >= 0; i--) {
     const sw = S.swells[i];
-    sw.p += (0.007 + bassV * 0.005) * cfg.speed;
+    sw.p += (0.007 + bassV * 0.005) * cfg.speed * fs;
     if (sw.p >= 1) {
       // impact: spray + flash proportional to the swell's size
       S.flash = Math.max(S.flash, 0.5 + sw.amp * 0.5);
@@ -100,7 +101,7 @@ export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg
       S.swells.splice(i, 1);
     }
   }
-  S.flash *= 0.9;
+  S.flash *= dk(0.9, fs);
 
   // crest x for a swell: edge → just past center, easing in from offscreen
   const crestX = (sw: Swell) =>
@@ -175,10 +176,10 @@ export const TIDE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, cfg
   const spr = getFoamSprite(C1(0.85, 80));
   for (let i = S.foam.length - 1; i >= 0; i--) {
     const p = S.foam[i];
-    p.x += p.vx;
-    p.y += p.vy;
-    p.vy += h * 0.00035; // gravity
-    p.a *= 0.965;
+    p.x += p.vx * fs;
+    p.y += p.vy * fs;
+    p.vy += h * 0.00035 * fs; // gravity
+    p.a *= dk(0.965, fs);
     if (p.a < 0.04 || p.y > h) { S.foam.splice(i, 1); continue; }
     const r = p.sz * (1 + beatE * 0.5) * TK * 3; // sprite halo included
     c.globalAlpha = p.a;

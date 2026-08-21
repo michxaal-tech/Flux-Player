@@ -1,7 +1,8 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 // Gas clouds. Beat: the nebula blooms hard and throws off glittering stardust.
-export const NEBULA: ThemeDraw = ({ c, cx, cy, R, vt, beat, beatE, bassV, midV, TK, C1, C2, CMix, L }) => {
+export const NEBULA: ThemeDraw = ({ c, fs, cx, cy, R, vt, beat, beatE, bassV, midV, TK, C1, C2, CMix, L }) => {
   const S = (L.scratch.nebula ??= { sparks: [] as { x: number; y: number; vx: number; vy: number; a: number }[] });
   for (let i = 0; i < 5; i++) {
     const ang = vt * 0.004 + (i / 5) * Math.PI * 2;
@@ -26,9 +27,9 @@ export const NEBULA: ThemeDraw = ({ c, cx, cy, R, vt, beat, beatE, bassV, midV, 
   }
   for (let i = S.sparks.length - 1; i >= 0; i--) {
     const sp = S.sparks[i];
-    sp.x += sp.vx;
-    sp.y += sp.vy;
-    sp.a *= 0.94;
+    sp.x += sp.vx * fs;
+    sp.y += sp.vy * fs;
+    sp.a *= dk(0.94, fs);
     if (sp.a < 0.04) { S.sparks.splice(i, 1); continue; }
     c.fillStyle = CMix(Math.random(), sp.a, 82);
     c.beginPath();

@@ -1,9 +1,10 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 // Supernova. The star core charges up with the music, then every beat
 // detonates it — debris blasts outward with a white shock ring, and the core
 // collapses to start charging again.
-export const NOVA: ThemeDraw = ({ c, cx, cy, R, treb, beat, beatE, bass, bassV, TK, C1, C2, CMix, glow, noGlow, L }) => {
+export const NOVA: ThemeDraw = ({ c, fs, cx, cy, R, treb, beat, beatE, bass, bassV, TK, C1, C2, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.nova ??= {
     charge: 0.25,
     flash: 0,
@@ -20,7 +21,7 @@ export const NOVA: ThemeDraw = ({ c, cx, cy, R, treb, beat, beatE, bass, bassV, 
     S.flash = 1;
     S.charge = 0.15;
   }
-  S.flash *= 0.87;
+  S.flash *= dk(0.87, fs);
 
   // shock ring
   if (S.flash > 0.03) {
@@ -37,11 +38,11 @@ export const NOVA: ThemeDraw = ({ c, cx, cy, R, treb, beat, beatE, bass, bassV, 
   for (let i = S.debris.length - 1; i >= 0; i--) {
     const d = S.debris[i];
     const px = d.x, py = d.y;
-    d.x += d.vx;
-    d.y += d.vy;
-    d.vx *= 0.985;
-    d.vy *= 0.985;
-    d.a *= 0.965;
+    d.x += d.vx * fs;
+    d.y += d.vy * fs;
+    d.vx *= dk(0.985, fs);
+    d.vy *= dk(0.985, fs);
+    d.a *= dk(0.965, fs);
     if (d.a < 0.03) { S.debris.splice(i, 1); continue; }
     c.strokeStyle = CMix(d.hue, d.a * 0.9, 68);
     c.lineWidth = (0.8 + d.a * 2.4) * TK;

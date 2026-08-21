@@ -11,7 +11,7 @@ interface Ring {
 // each beat drops a ripple ring that travels outward, dots rising and
 // brightening as the wavefront passes. Depth fog keeps the horizon soft.
 export const DOTGRID: ThemeDraw = ({
-  c, w, h, freq, liveAudio, vt, beat, beatE, bassV, midV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, fs, freq, liveAudio, vt, beat, beatE, bassV, midV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.dotgrid ??= { rings: [] as Ring[], scroll: 0 });
 
@@ -20,7 +20,7 @@ export const DOTGRID: ThemeDraw = ({
   const horizon = h * 0.34;
   const eye = h * 0.55; // focal length in px
 
-  S.scroll += 0.035 * (1 + bassV * 1.4);
+  S.scroll += 0.035 * (1 + bassV * 1.4) * fs;
   if (S.scroll >= 1) S.scroll -= 1;
 
   if (beat) S.rings.push({ r: 0, amp: 0.7 + bassV * 0.8 });

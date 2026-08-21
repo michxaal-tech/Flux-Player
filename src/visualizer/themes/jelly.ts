@@ -6,7 +6,7 @@ interface Jelly {
 
 // Bioluminescent deep sea. Jellyfish drift in the dark and pulse-swim on
 // every beat — bells contract, glow spikes, plankton lights up around them.
-export const JELLY: ThemeDraw = ({ c, w, h, vt, beat, beatE, cfg, bassV, midV, trebV, TK, CMix, glow, noGlow, L }) => {
+export const JELLY: ThemeDraw = ({ c, fs, w, h, vt, beat, beatE, cfg, bassV, midV, trebV, TK, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.jelly ??= {
     j: Array.from({ length: 6 }, (_, i) => ({
       x: (i * 0.31 + 0.08) % 1,
@@ -35,8 +35,8 @@ export const JELLY: ThemeDraw = ({ c, w, h, vt, beat, beatE, cfg, bassV, midV, t
     if (beat) j.vy -= 0.0016 * j.sz;
     j.vy = j.vy * 0.95 - 0.000012;
     j.vy = Math.max(j.vy, -0.004);
-    j.y += j.vy * cfg.speed;
-    j.x += Math.sin(vt * 0.006 + j.ph) * 0.0004;
+    j.y += j.vy * cfg.speed * fs;
+    j.x += Math.sin(vt * 0.006 + j.ph) * 0.0004 * fs;
     if (j.y < -0.14) { j.y = 1.14; j.x = Math.random(); j.vy = 0; }
     const jx = j.x * w, jy = j.y * h;
     // bell contracts (narrower, taller) at the pulse

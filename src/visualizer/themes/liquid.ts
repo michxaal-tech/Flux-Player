@@ -1,11 +1,12 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Blob2 { orbit: number; ph: number; sz: number; hue: number; kick: number; }
 
 // Liquid light: soft metaball blobs orbit and merge into one glowing fluid
 // mass, colors sweeping through the palette. On the beat the fluid bursts
 // apart, blobs flare white-hot, and specular highlights snap across them.
-export const LIQUID: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, beatE, bassV, midV, I, TK, C1, CMix, L }) => {
+export const LIQUID: ThemeDraw = ({ c, fs, cx, cy, R, freq, liveAudio, vt, beat, beatE, bassV, midV, I, TK, C1, CMix, L }) => {
   const S = (L.scratch.liquid ??= {
     blobs: Array.from({ length: 7 }, (_, i) => ({
       orbit: 0.1 + (i / 7) * 0.24,
@@ -18,7 +19,7 @@ export const LIQUID: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, bea
 
   for (const b of S.blobs) {
     if (beat) b.kick = 1;
-    b.kick *= 0.9;
+    b.kick *= dk(0.9, fs);
     const fv = liveAudio ? freq[Math.floor(b.hue * 180)] / 255 : 0.18;
     const ang = vt * 0.006 * (b.hue > 0.5 ? 1 : -1.3) + b.ph;
     const orbit = R * b.orbit * (1 + b.kick * 0.55 + bassV * 0.12);
@@ -70,11 +71,11 @@ export const LIQUID: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, bea
   }
   for (let i = D.length - 1; i >= 0; i--) {
     const d = D[i];
-    d.x += d.vx;
-    d.y += d.vy;
-    d.vx *= 0.97;
-    d.vy *= 0.97;
-    d.a *= 0.95;
+    d.x += d.vx * fs;
+    d.y += d.vy * fs;
+    d.vx *= dk(0.97, fs);
+    d.vy *= dk(0.97, fs);
+    d.a *= dk(0.95, fs);
     if (d.a < 0.05) { D.splice(i, 1); continue; }
     c.fillStyle = CMix((vt * 0.001 + d.a) % 1, d.a * 0.8, 70);
     c.beginPath();

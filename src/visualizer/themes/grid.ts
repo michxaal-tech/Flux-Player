@@ -1,9 +1,9 @@
 import type { ThemeDraw } from "../themeTypes";
 
 // Retrowave grid. Beat: the sun flares, the grid lurches forward, the horizon flashes.
-export const GRID: ThemeDraw = ({ c, w, h, cx, cy, R, freq, liveAudio, vt, beat, beatE, bassV, midV, I, TK, C1, C2, CMix, glow, noGlow, L }) => {
+export const GRID: ThemeDraw = ({ c, fs, w, h, cx, cy, R, freq, liveAudio, vt, beat, beatE, bassV, midV, I, TK, C1, C2, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.grid ??= { scroll: 0 });
-  S.scroll += 1.5 + bassV * 12 + beatE * 18;
+  S.scroll += (1.5 + bassV * 12 + beatE * 18) * fs;
   const horizon = cy * 1.0;
   const sr = R * (0.14 + bassV * 0.08 + beatE * 0.07);
   const sg = c.createRadialGradient(cx, horizon - sr * 0.5, 0, cx, horizon - sr * 0.5, sr * 2);

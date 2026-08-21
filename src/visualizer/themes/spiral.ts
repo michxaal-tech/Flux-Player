@@ -3,9 +3,9 @@ import type { ThemeDraw } from "../themeTypes";
 // Galaxy spiral, rebuilt for drama: the whole spiral breathes with the bass,
 // spins harder on every beat, and each beat fires a white-hot shockwave that
 // races outward along the spiral arm.
-export const SPIRAL: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, beat, beatE, bassV, I, TK, CMix, glow, noGlow, L }) => {
+export const SPIRAL: ThemeDraw = ({ c, fs, cx, cy, R, freq, liveAudio, beat, beatE, bassV, I, TK, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.spiral ??= { rot: 0, pulses: [] as { p: number }[] });
-  S.rot += 0.012 + beatE * 0.05;
+  S.rot += (0.012 + beatE * 0.05) * fs;
   if (beat) S.pulses.push({ p: 0 });
 
   const breathe = 1 + bassV * 0.25 + beatE * 0.12;
@@ -30,7 +30,7 @@ export const SPIRAL: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, beat, beatE, 
   // shockwaves racing outward along the arm
   for (let k = S.pulses.length - 1; k >= 0; k--) {
     const pulse = S.pulses[k];
-    pulse.p += 0.022 + bassV * 0.012;
+    pulse.p += (0.022 + bassV * 0.012) * fs;
     if (pulse.p >= 1.08) { S.pulses.splice(k, 1); continue; }
     const fade = Math.max(0, 1 - pulse.p * 0.85);
     for (let j = -4; j <= 4; j++) {

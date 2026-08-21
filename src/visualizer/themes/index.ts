@@ -142,7 +142,8 @@ export const themes: Record<string, ThemeDraw> = {
  * animates at double speed for everyone who picks it.
  */
 export const TIME_NORMALISED = new Set<string>([
-  "CITY", "COMETS", "GLITCH", "HELIX", "ORB", "PIXEL", "RING",
+  "CITY", "COMETS", "GLITCH", "GRID", "HELIX", "ORB",
+  "PIXEL", "RING", "SPIRAL", "TIDE",
 ]);
 
 // A limitation worth writing down rather than working around: the check cannot

@@ -3,7 +3,7 @@ import type { ThemeDraw } from "../themeTypes";
 // Blossoming mandala. Layered petal rings counter-rotate and swell with their
 // frequency bands; every beat blooms a fresh ring of petals that expands
 // outward and dissolves, while loose petals drift down around it.
-export const BLOOM: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, beatE, cfg, bassV, midV, trebV, TK, C1, CMix, glow, noGlow, L }) => {
+export const BLOOM: ThemeDraw = ({ c, fs, cx, cy, R, freq, liveAudio, vt, beat, beatE, cfg, bassV, midV, trebV, TK, C1, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.bloom ??= {
     rings: [] as { s: number; hue: number }[],
     petals: Array.from({ length: 14 }, () => ({
@@ -54,7 +54,7 @@ export const BLOOM: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, beat
   if (beat) S.rings.push({ s: 0.1, hue: Math.random() });
   for (let i = S.rings.length - 1; i >= 0; i--) {
     const ring = S.rings[i];
-    ring.s += 0.03 * cfg.speed;
+    ring.s += 0.03 * cfg.speed * fs;
     const fade = Math.max(0, 1 - ring.s);
     if (fade <= 0) { S.rings.splice(i, 1); continue; }
     const n = 11;
@@ -83,9 +83,9 @@ export const BLOOM: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, beat
 
   // loose petals drifting down
   for (const p of S.petals) {
-    p.y += p.sp * (1 + bassV) * cfg.speed;
-    p.x += Math.sin(vt * 0.01 + p.rot) * 0.0008;
-    p.rot += p.vr;
+    p.y += p.sp * (1 + bassV) * cfg.speed * fs;
+    p.x += Math.sin(vt * 0.01 + p.rot) * 0.0008 * fs;
+    p.rot += p.vr * fs;
     if (p.y > 1.05) { p.y = -0.05; p.x = Math.random(); }
     const px = p.x * (cx * 2), py = p.y * (cy * 2);
     c.save();
