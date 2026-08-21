@@ -1,9 +1,10 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 // VHS glitch art: flat color panels and a raw waveform trace, torn apart on
 // every beat by horizontal slice displacement, chromatic offset and static.
 // Hard-edged and analog-broken — the opposite of the glow themes.
-export const GLITCH: ThemeDraw = ({ c, w, h, freq, wave, liveAudio, vt, beat, beatE, bassV, trebV, TK, C1, C2, CMix, L }) => {
+export const GLITCH: ThemeDraw = ({ c, fs, w, h, freq, wave, liveAudio, vt, beat, beatE, bassV, trebV, TK, C1, C2, CMix, L }) => {
   const S = (L.scratch.glitch ??= { tears: [] as { y: number; hgt: number; off: number; life: number }[] });
 
   c.globalCompositeOperation = "source-over";
@@ -50,7 +51,7 @@ export const GLITCH: ThemeDraw = ({ c, w, h, freq, wave, liveAudio, vt, beat, be
   // apply tears: self-copy displaced slices + chromatic ghosts
   for (let i = S.tears.length - 1; i >= 0; i--) {
     const tr = S.tears[i];
-    tr.life *= 0.86;
+    tr.life *= dk(0.86, fs);
     if (tr.life < 0.06) { S.tears.splice(i, 1); continue; }
     const off = tr.off * tr.life;
     const cv = c.canvas;

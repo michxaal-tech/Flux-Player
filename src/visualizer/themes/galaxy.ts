@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface GStar { t: number; arm: number; off: number; sz: number; tw: number; }
 
@@ -13,9 +14,9 @@ const STARS: GStar[] = Array.from({ length: 420 }, () => ({
   tw: Math.random() * 9,
 }));
 
-export const GALAXY: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, beatE, bassV, midV, TK, C1, CMix, glow, noGlow, L }) => {
+export const GALAXY: ThemeDraw = ({ c, fs, cx, cy, R, freq, liveAudio, vt, beat, beatE, bassV, midV, TK, C1, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.galaxy ??= { rot: 0, shots: [] as { x: number; y: number; vx: number; vy: number; a: number }[] });
-  S.rot += 0.0016 * (1 + beatE * 1.2);
+  S.rot += 0.0016 * (1 + beatE * 1.2) * fs;
   const punch = 1 + beatE * 0.055;
 
   const starPos = (s2: GStar) => {
@@ -73,9 +74,9 @@ export const GALAXY: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, bea
   }
   for (let i = S.shots.length - 1; i >= 0; i--) {
     const sh = S.shots[i];
-    sh.x += sh.vx;
-    sh.y += sh.vy;
-    sh.a *= 0.93;
+    sh.x += sh.vx * fs;
+    sh.y += sh.vy * fs;
+    sh.a *= dk(0.93, fs);
     if (sh.a < 0.05) { S.shots.splice(i, 1); continue; }
     c.strokeStyle = C1(sh.a, 88);
     c.lineWidth = 1.6 * TK;

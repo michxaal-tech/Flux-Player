@@ -17,10 +17,10 @@ const MAXP = 9;    // hard cap on planes, whatever the drop count
 interface State { ph: number[]; drift: number }
 
 export const STRATA: ThemeDraw = (x) => {
-  const { c, w, h, cx, cy, R, vt, freq, beatE, energy, dropE, bassV, cfg, TK, C1, C2, CMix, glow, noGlow, L } = x;
+  const { c, w, h, cx, cy, R, vt, fs, freq, beatE, energy, dropE, bassV, cfg, TK, C1, C2, CMix, glow, noGlow, L } = x;
 
   const S = (L.scratch.strata ??= { ph: [], drift: 0 }) as State;
-  S.drift += (0.004 + energy * 0.008) * cfg.speed;
+  S.drift += (0.004 + energy * 0.008) * cfg.speed * fs;
 
   // one base plane always, then one per unlocked drop layer
   const planes = Math.min(MAXP, 1 + L.dropSlots);

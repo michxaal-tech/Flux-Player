@@ -11,7 +11,7 @@ const ROCKET = [
   "X.X.X",
 ];
 
-export const PIXEL: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, bassV, trebV, CMix, L }) => {
+export const PIXEL: ThemeDraw = ({ c, fs, w, h, freq, liveAudio, vt, beat, beatE, bassV, trebV, CMix, L }) => {
   const S = (L.scratch.pixel ??= { jumpV: 0, jumpY: 0 });
 
   c.globalCompositeOperation = "source-over";
@@ -69,7 +69,7 @@ export const PIXEL: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, ba
 
   // pixel rocket that jumps on the beat
   if (beat) S.jumpV = -1.6 - bassV * 1.4;
-  S.jumpV += 0.12;
+  S.jumpV += 0.12 * fs;
   S.jumpY = Math.min(0, S.jumpY + S.jumpV);
   if (S.jumpY === 0) S.jumpV = 0;
   const rx = Math.floor(gw * 0.5 - 2 + Math.sin(vt * 0.01) * gw * 0.3);

@@ -1,15 +1,16 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 // Waveform ring. Beat: the ring kicks outward and fires an expanding echo ring.
-export const RING: ThemeDraw = ({ c, cx, cy, R, wave, beat, beatE, bassV, I, TK, C1, C2, glow, noGlow, L }) => {
+export const RING: ThemeDraw = ({ c, fs, cx, cy, R, wave, beat, beatE, bassV, I, TK, C1, C2, glow, noGlow, L }) => {
   const S = (L.scratch.ring ??= { echoes: [] as { r: number; a: number }[] });
   const base = R * (0.2 + bassV * 0.07) * (1 + beatE * 0.12);
 
   if (beat) S.echoes.push({ r: base, a: 0.85 });
   for (let i = S.echoes.length - 1; i >= 0; i--) {
     const e = S.echoes[i];
-    e.r += R * 0.02;
-    e.a *= 0.9;
+    e.r += R * 0.02 * fs;
+    e.a *= dk(0.9, fs);
     if (e.a < 0.03) { S.echoes.splice(i, 1); continue; }
     c.beginPath();
     c.arc(cx, cy, e.r, 0, Math.PI * 2);

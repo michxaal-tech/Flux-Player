@@ -115,36 +115,34 @@ export const themes: Record<string, ThemeDraw> = {
 };
 
 /**
- * Themes whose motion is a function of time rather than of frames, and which
- * may therefore be drawn at the panel's full rate.
+ * Themes that may be drawn at the panel's full rate.
  *
  * The engine caps everything else at 60 (see the governor in engine.ts),
  * because a theme that does `p.x += p.vx` once per frame travels twice as far
  * per second when the frames arrive twice as often — it does not look
- * smoother, it looks fast-forwarded. Converting a theme means scaling what it
- * accumulates by `fs` and its decays by `dk(k, fs)`, then proving it with
- * `npm run fps`, which measures motion per second of wall clock at 60Hz and
- * unthrottled and fails the theme if the two disagree.
+ * smoother, it looks fast-forwarded.
  *
- * A name is added here only once that check passes for it.
+ * A name goes on this list only when *two* independent things agree.
+ *
+ * `npm run fps` measures the motion, and on its own it is not enough: it
+ * compares whole frames, so it can miss one small element running at double
+ * speed. It passed twenty-three themes, of which eighteen turned out to
+ * contain plainly unscaled per-frame state when the code was read — `e.a *=
+ * 0.9`, `sh.r += R * 0.016`, and so on.
+ *
+ * So the second requirement is that the theme has no unscaled per-frame state
+ * left in it at all: travel scaled by `fs`, decays through `dk`, approaches
+ * through `ak`. Reading the code catches what the measurement misses, and the
+ * measurement catches what reading it does not — a theme whose scaling is
+ * complete but wrong.
+ *
+ * The list is therefore short and will grow slowly, which is the right way
+ * round: a theme left at 60 is merely less smooth, and a theme wrongly listed
+ * animates at double speed for everyone who picks it.
  */
 export const TIME_NORMALISED = new Set<string>([
-  "AURORA", "BARS", "CANYON", "CASCADE", "COMETS", "DOTGRID",
-  "ECLIPSE", "FIREFLIES", "FISSION", "GALAXY", "GRAVITY", "GRID",
-  "GYROSCOPE", "HELIX", "JELLY", "LIQUID", "MARQUEE", "NOVA",
-  "ORB", "ORIGAMI", "ORRERY", "PRISM", "REACTOR", "RING",
-  "SCOPE", "SERPENT", "SINGULARITY", "SPIRAL", "STRATA",
-  "TESSERACT",
-  // converted by hand and re-verified; LASERS, CITY, TUNNEL and LANTERNS were
-  // converted in the same pass and still fail, so they are deliberately absent
-  "CRYSTAL", "HALO", "KALEIDO", "STARFIELD",
-  // Of the five new ones, only these two pass. The other three are audio-
-  // reactive in fine detail, which the check cannot currently separate from
-  // motion — its samples are spaced in logical frames while the audio runs on
-  // the wall clock, so at fs=0.5 twice as much music passes between samples.
-  // They are correct at 60 either way; they stay off this list until the
-  // check can say so honestly rather than because I believe it.
-  "CAUSTICS", "VEIL",
+  "CITY", "COMETS", "FILAMENT", "GLITCH", "HELIX",
+  "HORIZON", "ORB", "PIXEL", "RING", "VEIL",
 ]);
 
 // Debug handle, companion to `__flux`: lets a test enumerate the theme list

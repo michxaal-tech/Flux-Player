@@ -1,11 +1,11 @@
 import type { ThemeDraw } from "../themeTypes";
 
 // Double helix. Beat: amplitude jolt, nodes swell, rungs light up in a travelling flash.
-export const HELIX: ThemeDraw = ({ c, w, h, cy, freq, liveAudio, vt, beat, beatE, bassV, I, TK, C1, C2, CMix, glow, noGlow, L }) => {
+export const HELIX: ThemeDraw = ({ c, fs, w, h, cy, freq, liveAudio, vt, beat, beatE, bassV, I, TK, C1, C2, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.helix ??= { flash: -1 });
   if (beat) S.flash = 0;
   if (S.flash >= 0) {
-    S.flash += 0.06;
+    S.flash += 0.06 * fs;
     if (S.flash > 1.3) S.flash = -1;
   }
   const amp = h * (0.12 + bassV * 0.12) * (1 + beatE * 0.4);

@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 const LAT = 12, LON = 24;
 const spherePts: { x: number; y: number; z: number; la: number; lo: number }[] = [];
@@ -9,7 +10,7 @@ for (let la = 0; la <= LAT; la++)
   }
 
 // Wireframe sphere. Beat: the orb slams outward and sheds an expanding ghost shell.
-export const ORB: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, beatE, bassV, TK, C2, CMix, L }) => {
+export const ORB: ThemeDraw = ({ c, fs, cx, cy, R, freq, liveAudio, vt, beat, beatE, bassV, TK, C2, CMix, L }) => {
   const S = (L.scratch.orb ??= { shells: [] as { r: number; a: number }[] });
   const rad = R * (0.24 + bassV * 0.07) * (1 + beatE * 0.18);
   if (beat) S.shells.push({ r: rad, a: 0.7 });
@@ -17,8 +18,8 @@ export const ORB: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, beatE,
   c.globalCompositeOperation = "lighter";
   for (let i = S.shells.length - 1; i >= 0; i--) {
     const sh = S.shells[i];
-    sh.r += R * 0.016;
-    sh.a *= 0.88;
+    sh.r += R * 0.016 * fs;
+    sh.a *= dk(0.88, fs);
     if (sh.a < 0.03) { S.shells.splice(i, 1); continue; }
     c.beginPath();
     c.arc(cx, cy, sh.r, 0, Math.PI * 2);
