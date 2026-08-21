@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 const MAXF = 6;                  // fracture pool — hard cap
 const RAYS = 8;                  // radial cracks per impact
@@ -39,7 +40,7 @@ const mkFrac = (): Frac => ({
 // several full-width fractures blowing open at once. Light refracts along
 // every crack line.
 export const SHATTER: ThemeDraw = ({
-  c, w, h, cx, cy, R, vt, beat, beatE, energy, cfg, bassV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, fs, w, h, cx, cy, R, vt, beat, beatE, energy, cfg, bassV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.shatter ??= {
     fracs: [] as Frac[],
@@ -109,20 +110,21 @@ export const SHATTER: ThemeDraw = ({
       if (E > 0.72 && Math.random() < E) spawn();
     }
   }
-  if (E > 0.6 && !beat && Math.random() < (E - 0.6) * 0.35) spawn();
-  S.flash *= 0.86;
+  // scaled by the frame factor: this is a rate per second, not per frame
+  if (E > 0.6 && !beat && Math.random() < (E - 0.6) * 0.35 * fs) spawn();
+  S.flash *= dk(0.86, fs);
 
   // ── evolve + transform ────────────────────────────────────────────────────
   const growRate = (0.035 + E * 0.5) * cfg.speed;
-  const heal = 0.9985 - E * 0.05;      // calm cracks close over many seconds
-  const decay = 0.9975 - E * 0.032;
+  const heal = dk(0.9985 - E * 0.05, fs);      // calm cracks close over many seconds
+  const decay = dk(0.9975 - E * 0.032, fs);
 
   for (let n = 0; n < MAXF; n++) {
     const f = fracs[n];
     if (!f.live) continue;
     f.age++;
     if (f.grow < 1) f.grow = Math.min(1, f.grow + growRate);
-    if (f.age < 5) f.open += f.openMax * 0.26;
+    if (f.age < 5) f.open += f.openMax * 0.26 * fs;
     else f.open *= heal;
     f.life *= decay;
     if (f.life < 0.025) {
@@ -234,7 +236,7 @@ export const SHATTER: ThemeDraw = ({
     c.beginPath();
     for (let i = S.scars.length - 1; i >= 0; i--) {
       const s = S.scars[i];
-      s.a *= 0.985;
+      s.a *= dk(0.985, fs);
       if (s.a < 0.02) { S.scars.splice(i, 1); continue; }
       c.moveTo(s.x1, s.y1);
       c.lineTo(s.x2, s.y2);

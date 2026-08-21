@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk, ak } from "../rate";
 
 /** a horizontal signal tear during overload */
 interface Tear { y: number; hh: number; dx: number; a: number }
@@ -48,7 +49,7 @@ const PANELS = [
  * everything strobes. `section` swaps the solid, the palette and the grid pitch.
  */
 export const CATHODE: ThemeDraw = ({
-  c, w, h, cx, cy, R, vt, freq, wave, liveAudio, beat, beatE, hit, hitE,
+  c, w, h, cx, cy, R, fs, vt, freq, wave, liveAudio, beat, beatE, hit, hitE,
   energy, dropE, section, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L, trackName,
 }) => {
   const S = (L.scratch.cathode ??= {
@@ -84,22 +85,22 @@ export const CATHODE: ThemeDraw = ({
   // ── layer weights (smoothstep + inertia → no threshold flicker) ───────────
   const t2 = Math.max(sstep(0.22, 0.45, E), sstep(0.3, 0.62, cl01(midV)) * 0.85);
   const t3 = Math.max(sstep(0.5, 0.74, E), sstep(0.4, 0.76, cl01(trebV)) * 0.8);
-  S.w2 += (t2 - S.w2) * 0.035;
-  S.w3 += (t3 - S.w3) * 0.028;
+  S.w2 += (t2 - S.w2) * ak(0.035, fs);
+  S.w3 += (t3 - S.w3) * ak(0.028, fs);
   const W2 = cl01(S.w2);
   const W3 = cl01(S.w3);
 
   // ── overload envelope ─────────────────────────────────────────────────────
-  S.cool--;
+  S.cool -= fs;
   if (D > 0.5 && D < S.prevD - 0.004 && S.cool <= 0) {
     S.cool = 70;
     S.burst = 1;
     S.strobe = 1;
   }
   S.prevD = D;
-  S.burst *= 0.955;
-  S.strobe *= 0.9;
-  S.ov += (Math.max(D * 0.8, S.burst) - S.ov) * 0.16;
+  S.burst *= dk(0.955, fs);
+  S.strobe *= dk(0.9, fs);
+  S.ov += (Math.max(D * 0.8, S.burst) - S.ov) * ak(0.16, fs);
   const OV = cl01(S.ov);
   const ST = cl01(S.strobe);
 
@@ -211,7 +212,7 @@ export const CATHODE: ThemeDraw = ({
       const pn = PANELS[p];
       const px = pn.x * w, py = pn.y * h, pw = pn.w * w, ph = pn.h * h;
       const drive = p % 2 === 0 ? cl01(bassV) : cl01(trebV);
-      meters[p] += ((drive * 0.7 + E * 0.3) - meters[p]) * 0.15;
+      meters[p] += ((drive * 0.7 + E * 0.3) - meters[p]) * ak(0.15, fs);
       const mv = cl01(meters[p]);
       c.beginPath();
       if (pn.k === 0) {
@@ -246,14 +247,15 @@ export const CATHODE: ThemeDraw = ({
     }
 
     // labels — a handful of fillText calls, never in a hot loop
-    const fs = Math.max(8, Math.round(R * 0.021));
-    c.font = `600 ${fs}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+    // (named `fontPx`, not `fs`: `fs` is the engine's frame factor everywhere)
+    const fontPx = Math.max(8, Math.round(R * 0.021));
+    c.font = `600 ${fontPx}px ui-monospace, SFMono-Regular, Menlo, monospace`;
     c.textBaseline = "top";
     c.fillStyle = CMix(P + 0.5, Math.min(0.55, pa * 0.4), 64);
-    c.fillText("SIG", PANELS[0].x * w + 4, PANELS[0].y * h - fs - 3);
-    c.fillText("SPEC", PANELS[1].x * w + 4, PANELS[1].y * h - fs - 3);
-    c.fillText(OV > 0.35 ? "SYNC ??" : "SYNC OK", PANELS[2].x * w, PANELS[2].y * h - fs - 3);
-    c.fillText(`CH ${(sec % 16).toString(16).toUpperCase()}`, PANELS[3].x * w, PANELS[3].y * h - fs - 3);
+    c.fillText("SIG", PANELS[0].x * w + 4, PANELS[0].y * h - fontPx - 3);
+    c.fillText("SPEC", PANELS[1].x * w + 4, PANELS[1].y * h - fontPx - 3);
+    c.fillText(OV > 0.35 ? "SYNC ??" : "SYNC OK", PANELS[2].x * w, PANELS[2].y * h - fontPx - 3);
+    c.fillText(`CH ${(sec % 16).toString(16).toUpperCase()}`, PANELS[3].x * w, PANELS[3].y * h - fontPx - 3);
     const nm = (trackName || "NO SIGNAL").toUpperCase().slice(0, 22);
     c.fillText(nm, PANELS[4].x * w + 6, PANELS[4].y * h + PANELS[4].h * h + 4);
   }
@@ -340,8 +342,8 @@ export const CATHODE: ThemeDraw = ({
   }
   for (let i = tears.length - 1; i >= 0; i--) {
     const tr = tears[i];
-    tr.a *= 0.86;
-    tr.y += tr.hh * 0.15 * spd;
+    tr.a *= dk(0.86, fs);
+    tr.y += tr.hh * 0.15 * spd * fs;
     if (tr.a < 0.06) { tears.splice(i, 1); continue; }
     c.save();
     c.beginPath();

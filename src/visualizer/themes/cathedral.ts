@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk, ak } from "../rate";
 
 interface RingState {
   rot: number;
@@ -50,7 +51,7 @@ function getShaft(inner: string, mid: string): HTMLCanvasElement {
 // panels in sequence, and six shafts whip across the frame; every beat flares
 // the glass and throws the light.
 export const CATHEDRAL: ThemeDraw = ({
-  c, w, h, cx, cy, R, vt, beat, beatE, energy, cfg, bassV, midV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, cx, cy, R, fs, vt, beat, beatE, energy, cfg, bassV, midV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.cathedral ??= {
     rings: [] as RingState[],
@@ -72,7 +73,7 @@ export const CATHEDRAL: ThemeDraw = ({
 
   const E = energy;
   const rose = R * 0.46;
-  S.glowV += ((0.35 + E * 0.4 + bassV * 0.25) - S.glowV) * 0.08;
+  S.glowV += ((0.35 + E * 0.4 + bassV * 0.25) - S.glowV) * ak(0.08, fs);
 
   // ── backlight behind the glass ────────────────────────────────────────────
   c.globalCompositeOperation = "source-over";
@@ -88,15 +89,15 @@ export const CATHEDRAL: ThemeDraw = ({
 
   // ── the glass ─────────────────────────────────────────────────────────────
   // strobe cursor: parked when calm, racing around the rings when driving
-  S.sweep += (0.006 + E * E * 0.5) * cfg.speed;
+  S.sweep += (0.006 + E * E * 0.5) * cfg.speed * fs;
   const strobeW = 0.6 + (1 - E) * 4.5;   // wide soft lighting → tight hard strobe
 
   for (let i = 0; i < RINGS; i++) {
     const rg = rings[i];
     const f = i / (RINGS - 1);
-    rg.rot += rg.dir * (0.0016 + E * 0.026 * (0.5 + f) + beatE * 0.012 * E) * cfg.speed;
+    rg.rot += rg.dir * (0.0016 + E * 0.026 * (0.5 + f) + beatE * 0.012 * E) * cfg.speed * fs;
     if (beat) rg.flare = Math.min(1, rg.flare + 0.5 + E * 0.5);
-    rg.flare *= 0.87;
+    rg.flare *= dk(0.87, fs);
 
     const n = PANELS[i];
     const inner = rose * R0[i];
@@ -172,9 +173,9 @@ export const CATHEDRAL: ThemeDraw = ({
   for (let i = 0; i < MAX_SHAFTS; i++) {
     const s = shafts[i];
     const alive = i < want;
-    s.a += ((alive ? 1 : 0) - s.a) * 0.05;
+    s.a += ((alive ? 1 : 0) - s.a) * ak(0.05, fs);
     if (s.a < 0.03) continue;
-    s.ang += s.sp * sweepSp * (1 + beatE * 2.4 * E);
+    s.ang += s.sp * sweepSp * (1 + beatE * 2.4 * E) * fs;
     if (beat && E > 0.45 && Math.random() < 0.4) s.sp = -s.sp;
     const wobble = Math.sin(vt * 0.01 + i * 1.7) * (0.04 + E * 0.12);
     const a = s.ang + wobble;

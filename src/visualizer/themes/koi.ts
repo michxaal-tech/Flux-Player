@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Koi {
   x: number; y: number; ang: number; speed: number; sz: number; hue: number;
@@ -8,7 +9,7 @@ interface Koi {
 // Zen koi pond seen from above: fish glide in lazy arcs trailing wakes, lily
 // pads drift, and every beat makes the koi flick their tails and dart while a
 // ripple ring spreads across the water. Calm, painterly, unique.
-export const KOI: ThemeDraw = ({ c, w, h, vt, beat, beatE, cfg, bassV, midV, trebV, TK, C1, CMix, L }) => {
+export const KOI: ThemeDraw = ({ c, w, h, fs, vt, beat, beatE, cfg, bassV, midV, trebV, TK, C1, CMix, L }) => {
   const S = (L.scratch.koi ??= {
     fish: Array.from({ length: 7 }, (_, i) => ({
       x: Math.random(), y: Math.random(), ang: Math.random() * Math.PI * 2,
@@ -43,8 +44,8 @@ export const KOI: ThemeDraw = ({ c, w, h, vt, beat, beatE, cfg, bassV, midV, tre
   }
   for (let i = S.rings.length - 1; i >= 0; i--) {
     const r = S.rings[i];
-    r.r += Math.min(w, h) * 0.012 * cfg.speed;
-    r.a *= 0.95;
+    r.r += Math.min(w, h) * 0.012 * cfg.speed * fs;
+    r.a *= dk(0.95, fs);
     if (r.a < 0.03) { S.rings.splice(i, 1); continue; }
     c.strokeStyle = C1(r.a * 0.7, 70);
     c.lineWidth = (1.5 + r.a * 2) * TK;
@@ -60,11 +61,11 @@ export const KOI: ThemeDraw = ({ c, w, h, vt, beat, beatE, cfg, bassV, midV, tre
   // koi
   for (const f of S.fish) {
     if (beat) f.turn = (Math.random() - 0.5) * 0.25;
-    f.turn *= 0.94;
-    f.ang += Math.sin(vt * 0.01 + f.wag) * 0.012 + f.turn;
+    f.turn *= dk(0.94, fs);
+    f.ang += (Math.sin(vt * 0.01 + f.wag) * 0.012 + f.turn) * fs;
     const dart = 1 + beatE * 2.2;
-    f.x += Math.cos(f.ang) * f.speed * dart * cfg.speed;
-    f.y += Math.sin(f.ang) * f.speed * dart * cfg.speed;
+    f.x += Math.cos(f.ang) * f.speed * dart * cfg.speed * fs;
+    f.y += Math.sin(f.ang) * f.speed * dart * cfg.speed * fs;
     if (f.x < -0.06) f.x = 1.06;
     if (f.x > 1.06) f.x = -0.06;
     if (f.y < -0.06) f.y = 1.06;

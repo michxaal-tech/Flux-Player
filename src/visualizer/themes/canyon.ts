@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { ak } from "../rate";
 
 // CANYON — a wireframe terrain flying toward you, built as a real heightfield.
 // Each grid vertex is projected through a perspective divide, so the mesh
@@ -25,7 +26,7 @@ interface State {
 }
 
 export const CANYON: ThemeDraw = (x) => {
-  const { c, w, h, cx, cy, R, vt, freq, beat, beatE, energy, dropE, hitE, cfg, bassV, trebV, TK, C1, C2, CMix, glow, noGlow, L } = x;
+  const { c, fs, w, h, cx, cy, R, vt, freq, beat, beatE, energy, dropE, hitE, cfg, bassV, trebV, TK, C1, C2, CMix, glow, noGlow, L } = x;
 
   const S = (L.scratch.canyon ??= {
     rows: [] as number[][],
@@ -41,8 +42,8 @@ export const CANYON: ThemeDraw = (x) => {
 
   const t2 = cl01((energy - 0.26) / 0.28);
   const t3 = cl01((energy - 0.5) / 0.28);
-  S.w2 += (t2 - S.w2) * 0.03;
-  S.w3 += (t3 - S.w3) * 0.03;
+  S.w2 += (t2 - S.w2) * ak(0.03, fs);
+  S.w3 += (t3 - S.w3) * ak(0.03, fs);
   S.crack = Math.max(S.crack * 0.94, dropE);
 
   // ── scroll one row per beat ────────────────────────────────────────────

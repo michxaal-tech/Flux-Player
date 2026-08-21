@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk, ak } from "../rate";
 
 // SINGULARITY — a spinning accretion disc seen edge-on-ish, with a dark core
 // that light bends around. The disc is a real 3D annulus: every particle has an
@@ -28,7 +29,7 @@ interface State {
 }
 
 export const SINGULARITY: ThemeDraw = (x) => {
-  const { c, cx, cy, R, vt, freq, beat, beatE, energy, dropE, hit, hitE, cfg, bassV, midV, trebV, TK, C1, C2, CMix, glow, noGlow, L } = x;
+  const { c, cx, cy, R, fs, vt, freq, beat, beatE, energy, dropE, hit, hitE, cfg, bassV, midV, trebV, TK, C1, C2, CMix, glow, noGlow, L } = x;
 
   const S = (L.scratch.singularity ??= {
     disc: [] as P[],
@@ -55,11 +56,12 @@ export const SINGULARITY: ThemeDraw = (x) => {
 
   const t2 = cl01((energy - 0.3) / 0.28);
   const t3 = cl01((energy - 0.55) / 0.28);
-  S.w2 += (t2 - S.w2) * 0.03;
-  S.w3 += (t3 - S.w3) * 0.03;
-  S.collapse = Math.max(S.collapse * 0.94, dropE);
+  const ease = ak(0.03, fs);
+  S.w2 += (t2 - S.w2) * ease;
+  S.w3 += (t3 - S.w3) * ease;
+  S.collapse = Math.max(S.collapse * dk(0.94, fs), dropE);
 
-  S.spin += (0.004 + energy * 0.006) * cfg.speed;
+  S.spin += (0.004 + energy * 0.006) * cfg.speed * fs;
 
   // disc tilt: nearly edge-on when calm, opening up as the track drives
   const pitch = 1.16 - energy * 0.42 - S.collapse * 0.3;
@@ -83,7 +85,7 @@ export const SINGULARITY: ThemeDraw = (x) => {
   const pts: { px: number; py: number; d: number; p: P }[] = [];
   const bins = freq.length;
   for (const p of S.disc) {
-    p.a += p.sp * cfg.speed * (1 + energy * 0.7 + S.collapse * 2.5);
+    p.a += p.sp * cfg.speed * (1 + energy * 0.7 + S.collapse * 2.5) * fs;
     // the drop drags everything inward
     const rr = p.r * (1 - S.collapse * 0.42);
     const q = proj(p.a, rr, 0);
@@ -168,9 +170,9 @@ export const SINGULARITY: ThemeDraw = (x) => {
 
     c.lineWidth = 1 * TK;
     for (const p of S.debris) {
-      p.a += p.sp * cfg.speed * (1 + S.collapse * 3);
+      p.a += p.sp * cfg.speed * (1 + S.collapse * 3) * fs;
       // spirals inward, then respawns at the rim
-      p.r -= (0.0035 + S.collapse * 0.02) * cfg.speed;
+      p.r -= (0.0035 + S.collapse * 0.02) * cfg.speed * fs;
       if (p.r < 0.3) { p.r = 1.6 + Math.random() * 1.4; p.a = Math.random() * Math.PI * 2; }
       const q0 = proj(p.a, p.r, 0);
       const q1 = proj(p.a - 0.18, p.r + 0.05, 0);

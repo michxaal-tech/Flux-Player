@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import {  } from "../rate";
 
 // CROWN — a ring of spectrum spikes standing on a floor, seen from just above.
 // Built for drop escalation: every drop rings the composition with another,
@@ -17,7 +18,7 @@ const TAU = Math.PI * 2;
 interface State { rot: number[]; }
 
 export const CROWN: ThemeDraw = (x) => {
-  const { c, cx, cy, R, vt, freq, beat, beatE, energy, dropE, bassV, trebV, cfg, TK, C1, C2, CMix, L } = x;
+  const { c, fs, cx, cy, R, vt, freq, beat, beatE, energy, dropE, bassV, trebV, cfg, TK, C1, C2, CMix, L } = x;
 
   const S = (L.scratch.crown ??= { rot: [] as number[] }) as State;
   const tiers = Math.min(MAXT, 1 + L.dropSlots);
@@ -43,7 +44,7 @@ export const CROWN: ThemeDraw = (x) => {
     const amt = k === 0 ? 1 : (L.dropAmts[k - 1] ?? 0);
     if (amt < 0.03) continue;
 
-    S.rot[k] += (0.0018 + energy * 0.004) * (k % 2 ? -1 : 1) * cfg.speed;
+    S.rot[k] += (0.0018 + energy * 0.004) * (k % 2 ? -1 : 1) * cfg.speed * fs;
     const rr = R * (0.24 + k * 0.1);
     const n = 20 + k * 6;
     // each tier reads a different octave of the spectrum

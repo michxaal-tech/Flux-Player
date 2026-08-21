@@ -1,11 +1,12 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 // Top-down turntable: a spinning record whose grooves light up with the
 // spectrum, a tracking tonearm, and stylus sparks on every beat. Made for a
 // music app — the vinyl itself becomes the analyzer.
-export const VINYL: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, beat, beatE, bassV, TK, C1, C2, CMix, glow, noGlow, L }) => {
+export const VINYL: ThemeDraw = ({ c, fs, cx, cy, R, freq, liveAudio, beat, beatE, bassV, TK, C1, C2, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.vinyl ??= { rot: 0, sparks: [] as { x: number; y: number; vx: number; vy: number; a: number }[] });
-  S.rot += 0.02 * (1 + bassV * 0.4);
+  S.rot += 0.02 * (1 + bassV * 0.4) * fs;
   const discR = R * 0.36 * (1 + beatE * 0.015);
 
   c.globalCompositeOperation = "source-over";
@@ -96,10 +97,10 @@ export const VINYL: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, beat, beatE, b
   }
   for (let i = S.sparks.length - 1; i >= 0; i--) {
     const sp = S.sparks[i];
-    sp.x += sp.vx;
-    sp.y += sp.vy;
-    sp.vy += 0.08;
-    sp.a *= 0.92;
+    sp.x += sp.vx * fs;
+    sp.y += sp.vy * fs;
+    sp.vy += 0.08 * fs;
+    sp.a *= dk(0.92, fs);
     if (sp.a < 0.05) { S.sparks.splice(i, 1); continue; }
     c.fillStyle = C1(sp.a, 85);
     glow(10, C1());

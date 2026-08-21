@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk, ak } from "../rate";
 
 interface Ring {
   /** ZFAR (horizon) → ZNEAR (engulfing the camera) */
@@ -32,7 +33,7 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 // passages turn it into a warp-speed rush where petals snap open in a flare
 // and every tip drags a motion streak.
 export const BLOOMRAIL: ThemeDraw = ({
-  c, w, h, cx, cy, R, beat, beatE, energy, cfg, bassV, midV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, cx, cy, R, fs, beat, beatE, energy, cfg, bassV, midV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S: BloomrailState = (L.scratch.bloomrail ??= {
     rings: Array.from({ length: RINGS }, (_, i) => ({
@@ -50,8 +51,8 @@ export const BLOOMRAIL: ThemeDraw = ({
   const eS = energy * energy;                       // sharpens the slow/fast split
   const warp = clamp01((energy - 0.34) / 0.5);      // 0 in calm music, 1 in driving music
   // 0.0018/frame (≈10s per ring) at rest → 0.022+ under a beat: a true warp jump
-  const spd = (0.0018 + eS * 0.02) * cfg.speed * (1 + beatE * (0.35 + energy * 2.2));
-  S.roll += (0.004 + eS * 0.026) * cfg.speed;
+  const spd = (0.0018 + eS * 0.02) * cfg.speed * (1 + beatE * (0.35 + energy * 2.2)) * fs;
+  S.roll += (0.004 + eS * 0.026) * cfg.speed * fs;
 
   // vanishing point sways with the ride, hard at speed
   const vpx = cx + Math.sin(S.roll * 0.7) * R * 0.06 * (0.25 + energy * 1.3);
@@ -97,8 +98,8 @@ export const BLOOMRAIL: ThemeDraw = ({
       r.open = 0;
       r.flash = 0;
     }
-    r.rot += r.spin * (0.0018 + eS * 0.014) * cfg.speed;
-    r.flash *= 0.86;
+    r.rot += r.spin * (0.0018 + eS * 0.014) * cfg.speed * fs;
+    r.flash *= dk(0.86, fs);
 
     // how far along the tunnel this ring is, 0 at the horizon → 1 at the camera
     const p = (ZFAR - r.z) / ZSPAN;
@@ -106,7 +107,7 @@ export const BLOOMRAIL: ThemeDraw = ({
     // crosses a threshold and detonates open.
     const target = clamp01((p - 0.12 - warp * 0.34) * (1.2 + warp * 7));
     const prev = r.open;
-    r.open += (target - r.open) * (0.035 + eS * 0.5 + beatE * warp * 0.3);
+    r.open += (target - r.open) * ak(0.035 + eS * 0.5 + beatE * warp * 0.3, fs);
     if (prev < 0.5 && r.open >= 0.5) r.flash = 0.5 + warp * 0.5;
 
     const proj = 0.34 / r.z;

@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { ak } from "../rate";
 
 // MONOLITH — a ring of tall obelisks standing on a reflective floor, seen from
 // inside the ring. Genuinely 3D: every corner goes through a yaw/pitch camera
@@ -30,7 +31,7 @@ interface State {
 }
 
 export const MONOLITH: ThemeDraw = (x) => {
-  const { c, w, h, cx, cy, R, vt, freq, beat, beatE, energy, dropE, hitE, cfg, bassV, trebV, TK, C1, C2, CMix, glow, noGlow, L } = x;
+  const { c, w, h, cx, cy, R, fs, vt, freq, beat, beatE, energy, dropE, hitE, cfg, bassV, trebV, TK, C1, C2, CMix, glow, noGlow, L } = x;
 
   const S = (L.scratch.monolith ??= {
     h: new Array<number>(SLABS).fill(0),
@@ -47,10 +48,11 @@ export const MONOLITH: ThemeDraw = (x) => {
   // quiet passage really is a bare floor and a full one is the whole scene.
   const t2 = cl01((energy - 0.28) / 0.3);
   const t3 = cl01((energy - 0.52) / 0.3);
-  S.w2 += (t2 - S.w2) * 0.03;
-  S.w3 += (t3 - S.w3) * 0.03;
+  const ease = ak(0.03, fs);
+  S.w2 += (t2 - S.w2) * ease;
+  S.w3 += (t3 - S.w3) * ease;
 
-  S.rot += (0.0016 + energy * 0.004 + dropE * 0.01) * cfg.speed;
+  S.rot += (0.0016 + energy * 0.004 + dropE * 0.01) * cfg.speed * fs;
 
   // ── camera ─────────────────────────────────────────────────────────────
   // Standard yaw about Y then a fixed pitch, followed by the perspective
@@ -111,7 +113,7 @@ export const MONOLITH: ThemeDraw = (x) => {
     const m = i < SLABS / 2 ? i : SLABS - 1 - i;
     const bin = Math.min(bins - 1, 3 + Math.floor((m / (SLABS / 2)) * 46));
     const target = Math.pow((freq[bin] ?? 0) / 255, 1.5);
-    S.h[i] += (target - S.h[i]) * 0.18;
+    S.h[i] += (target - S.h[i]) * ak(0.18, fs);
     const hh = 0.12 + S.h[i] * (1.5 + dropE * 0.9) * (0.5 + cfg.intensity * 0.5);
 
     const halfW = 0.15;
@@ -202,7 +204,7 @@ export const MONOLITH: ThemeDraw = (x) => {
     if (S.sparks.length > want) S.sparks.length = want;
     c.fillStyle = C1(0.4 * S.w3 + trebV * 0.3, 74);
     for (const s of S.sparks) {
-      s.a += s.sp * cfg.speed * (1 + dropE * 2);
+      s.a += s.sp * cfg.speed * (1 + dropE * 2) * fs;
       const [px, py, d] = proj(Math.cos(s.a) * s.r, s.y, Math.sin(s.a) * s.r);
       if (d < 0) continue;
       // size falls off with depth, which is most of what sells the perspective
@@ -216,7 +218,7 @@ export const MONOLITH: ThemeDraw = (x) => {
   // ── drop: ground shockwave ─────────────────────────────────────────────
   if (dropE > 0.5 && S.wave < 0) S.wave = 0;
   if (S.wave >= 0) {
-    S.wave += 0.02 * cfg.speed;
+    S.wave += 0.02 * cfg.speed * fs;
     if (S.wave > 1) S.wave = -1;
     else {
       const rr = S.wave * 5;

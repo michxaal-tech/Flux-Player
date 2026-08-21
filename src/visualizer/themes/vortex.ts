@@ -1,8 +1,9 @@
 import type { ThemeDraw } from "../themeTypes";
+import {  } from "../rate";
 
 // Particle whirlpool. Beat: the vortex sucks everything in fast, the core
 // detonates white, and a fresh ring of matter spawns at the rim.
-export const VORTEX: ThemeDraw = ({ c, cx, cy, R, beat, beatE, cfg, bassV, TK, C2, CMix, L }) => {
+export const VORTEX: ThemeDraw = ({ c, fs, cx, cy, R, beat, beatE, cfg, bassV, TK, C2, CMix, L }) => {
   if (!L.vort.length)
     L.vort = Array.from({ length: 160 }, () => ({
       a: Math.random() * Math.PI * 2, r: Math.random(), sp: 0.5 + Math.random(),
@@ -13,8 +14,8 @@ export const VORTEX: ThemeDraw = ({ c, cx, cy, R, beat, beatE, cfg, bassV, TK, C
     if (L.vort.length > 260) L.vort.splice(0, L.vort.length - 260);
   }
   for (const p of L.vort) {
-    p.r -= (0.0012 + bassV * 0.004) * (1 + beatE * 2.5) * p.sp * cfg.speed;
-    p.a += (0.012 + (1 - p.r) * 0.05) * (1 + beatE * 1.5) * cfg.speed;
+    p.r -= (0.0012 + bassV * 0.004) * (1 + beatE * 2.5) * p.sp * cfg.speed * fs;
+    p.a += (0.012 + (1 - p.r) * 0.05) * (1 + beatE * 1.5) * cfg.speed * fs;
     if (p.r <= 0.03) { p.r = 1; p.a = Math.random() * Math.PI * 2; }
     const x = cx + Math.cos(p.a) * p.r * R * 0.62;
     const y = cy + Math.sin(p.a) * p.r * R * 0.45;

@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Ribbon {
   /** phase offset into the wobble */
@@ -47,7 +48,7 @@ function getScan(c: CanvasRenderingContext2D, col: string): CanvasPattern | null
 // tearing on every beat, the chroma ripped inches off the luma, dropout dashes
 // punching holes through the image and static boiling over everything.
 export const VHS: ThemeDraw = ({
-  c, w, h, freq, liveAudio, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, fs, freq, liveAudio, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.vhs ??= {
     rib: [] as Ribbon[],
@@ -71,8 +72,8 @@ export const VHS: ThemeDraw = ({
   const sp = cfg.speed;
 
   // --- tape condition -------------------------------------------------------
-  S.glitch *= 0.86;
-  S.tear *= 0.8;
+  S.glitch *= dk(0.86, fs);
+  S.tear *= dk(0.8, fs);
   if (beat) {
     S.glitch = Math.min(1.7, S.glitch + 0.35 + E * 1.25);
     S.tear = Math.min(1.6, S.tear + 0.3 + E * 1.1);
@@ -81,7 +82,7 @@ export const VHS: ThemeDraw = ({
   const dmg = Math.min(1.9, (0.06 + E * 0.85) * I + S.glitch * 0.75);
 
   // the tracking band rolls upward, faster the harder the tape is being pushed
-  S.band -= (0.0011 + E * 0.0065) * sp * (1 + S.glitch * 0.5);
+  S.band -= (0.0011 + E * 0.0065) * sp * (1 + S.glitch * 0.5) * fs;
   if (S.band < -0.3) S.band += 1.6;
   const bandH = 0.05 + E * 0.16;
 
@@ -203,7 +204,7 @@ export const VHS: ThemeDraw = ({
   }
 
   // --- dropout static: short dashes where the tape has lost its oxide -------
-  S.dropT -= 1 + E * 3;
+  S.dropT -= (1 + E * 3) * fs;
   if (S.dropT <= 0 || (beat && Math.random() < 0.3 + E * 0.6)) {
     S.dropT = 26 - E * 20;
     const n = 1 + ((E * 4) | 0);
@@ -221,7 +222,7 @@ export const VHS: ThemeDraw = ({
   }
   for (let i = drops.length - 1; i >= 0; i--) {
     const d = drops[i];
-    d.life *= 0.78 - E * 0.06;
+    d.life *= dk(0.78 - E * 0.06, fs);
     if (d.life < 0.06) { drops.splice(i, 1); continue; }
     const dy = d.y;
     c.fillStyle = d.hot ? C1(d.life * 0.7, 72) : CMix(0.5, d.life * 0.75, 8);

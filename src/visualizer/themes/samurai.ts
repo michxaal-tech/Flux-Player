@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Stroke {
   x1: number; y1: number;
@@ -31,7 +32,7 @@ const SEG = 20;           // samples along a stroke — fixed, never scales
 // passage is a flurry: several blades crossing per beat, drawn almost instantly,
 // heavy spray, the paper never clearing.
 export const SAMURAI: ThemeDraw = ({
-  c, w, h, cx, cy, R, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, cx, cy, R, fs, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.samurai ??= {
     st: [] as Stroke[],
@@ -112,7 +113,7 @@ export const SAMURAI: ThemeDraw = ({
     s.live = 1;
   };
 
-  S.idle -= 1;
+  S.idle -= fs;
   if (beat) {
     if (E < 0.32) {
       // contemplative: nothing new until the last cut has finished travelling
@@ -122,11 +123,11 @@ export const SAMURAI: ThemeDraw = ({
       const extra = Math.floor(E * 3.2);
       for (let k = 0; k < extra; k++) if (Math.random() < E) cut();
     }
-  } else if (E > 0.66 && Math.random() < (E - 0.66) * 0.5) cut();
+  } else if (E > 0.66 && Math.random() < (E - 0.66) * 0.5 * fs) cut();
 
   // --- advance the brushes, flicking spray off each travelling tip ----------
   // ink dries faster the harder the piece is being played
-  const dry = 0.9975 - E * 0.028;
+  const dry = dk(0.9975 - E * 0.028, fs);
   for (let n = 0; n < MAXS; n++) {
     const s = st[n];
     if (!s.live) continue;
@@ -135,8 +136,11 @@ export const SAMURAI: ThemeDraw = ({
       if (s.a < 0.035) s.live = 0;
       continue;
     }
-    s.p = Math.min(1, s.p + s.sp);
-    const flick = 1 + Math.round(E * 5 + beatE * 3);
+    s.p = Math.min(1, s.p + s.sp * fs);
+    // spray is thrown per unit of travel, not per frame, so the count carries
+    // the frame factor — the fraction is resolved by a coin toss
+    const flickR = (1 + Math.round(E * 5 + beatE * 3)) * fs;
+    const flick = Math.floor(flickR) + (Math.random() < flickR % 1 ? 1 : 0);
     for (let k = 0; k < flick; k++) {
       if (spray.length >= MAX_SPRAY) break;
       const u = s.p;
@@ -206,16 +210,16 @@ export const SAMURAI: ThemeDraw = ({
 
   // --- ink spray, batched into one path -------------------------------------
   if (spray.length) {
-    const drag = 0.9 - E * 0.05;
+    const drag = dk(0.9 - E * 0.05, fs);
     c.beginPath();
     for (let i = spray.length - 1; i >= 0; i--) {
       const p = spray[i];
-      p.x += p.vx * spd;
-      p.y += p.vy * spd;
+      p.x += p.vx * spd * fs;
+      p.y += p.vy * spd * fs;
       p.vx *= drag;
       p.vy *= drag;
-      p.vy += R * 0.00018;
-      p.a *= 0.955 - E * 0.02;
+      p.vy += R * 0.00018 * fs;
+      p.a *= dk(0.955 - E * 0.02, fs);
       if (p.a < 0.05) { spray.splice(i, 1); continue; }
       const rr = p.sz * (0.5 + p.a);
       c.moveTo(p.x + rr, p.y);

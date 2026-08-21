@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk, ak } from "../rate";
 
 /** drifting background star, positions in 0..1 space so resizes never jolt it */
 interface Star { x: number; y: number; z: number; ph: number }
@@ -58,7 +59,7 @@ function headSprite(color: string): HTMLCanvasElement {
  * doesn't look the same in the second half as it did in the first.
  */
 export const ASCENSION: ThemeDraw = ({
-  c, w, h, cx, cy, R, vt, beat, beatE, hit, hitE, energy, dropE, section,
+  c, w, h, cx, cy, R, fs, vt, beat, beatE, hit, hitE, energy, dropE, section,
   cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.ascension ??= {
@@ -107,15 +108,15 @@ export const ASCENSION: ThemeDraw = ({
   // ── layer weights: smoothstep windows + inertia, so nothing flickers on ───
   const t2 = Math.max(sstep(0.24, 0.46, E), sstep(0.3, 0.6, cl01(midV)) * 0.85);
   const t3 = Math.max(sstep(0.5, 0.74, E), sstep(0.42, 0.78, cl01(trebV)) * 0.9);
-  S.w2 += (t2 - S.w2) * 0.035;
-  S.w3 += (t3 - S.w3) * 0.03;
+  S.w2 += (t2 - S.w2) * ak(0.035, fs);
+  S.w3 += (t3 - S.w3) * ak(0.03, fs);
   const W2 = cl01(S.w2);
   const W3 = cl01(S.w3);
 
   // ── drop: charge while dropE climbs, detonate on its peak ─────────────────
-  S.charge += (D - S.charge) * 0.12;
+  S.charge += (D - S.charge) * ak(0.12, fs);
   const CH = cl01(S.charge);
-  S.cool--;
+  S.cool -= fs;
   if (D > 0.5 && D < S.prevD - 0.004 && S.cool <= 0) {
     S.cool = 70;
     S.rush = 1;
@@ -134,8 +135,8 @@ export const ASCENSION: ThemeDraw = ({
     }
   }
   S.prevD = D;
-  S.rush *= 0.955;
-  S.flash *= 0.9;
+  S.rush *= dk(0.955, fs);
+  S.flash *= dk(0.9, fs);
   const RU = cl01(S.rush);
   const FL = cl01(S.flash);
 
@@ -150,8 +151,8 @@ export const ASCENSION: ThemeDraw = ({
   c.fillRect(0, 0, w, h);
 
   // ── STAGE 1: the starfield ────────────────────────────────────────────────
-  const drift = (0.00042 + E * 0.0007) * spd * (1 + CH * 2.2 + RU * 16);
-  const sway = S.tilt * 0.0002 * spd;
+  const drift = (0.00042 + E * 0.0007) * spd * (1 + CH * 2.2 + RU * 16) * fs;
+  const sway = S.tilt * 0.0002 * spd * fs;
   const streaky = RU > 0.02 || CH > 0.35;
   const stretch = h * (0.004 + CH * 0.03 + RU * 0.5);
 
@@ -198,7 +199,7 @@ export const ASCENSION: ThemeDraw = ({
 
   // ── STAGE 2: meteor rain (fades in with W2) ───────────────────────────────
   if (W2 > 0.01) {
-    S.acc += W2 * (0.35 + E * 1.6) + (hit ? W2 * 2.5 : 0);
+    S.acc += W2 * (0.35 + E * 1.6) * fs + (hit ? W2 * 2.5 : 0);
     while (S.acc >= 1 && rain.length < RAIN_MAX) {
       S.acc -= 1;
       const up = RU > 0.15;
@@ -247,10 +248,10 @@ export const ASCENSION: ThemeDraw = ({
     c.globalCompositeOperation = "lighter";
     for (let i = rain.length - 1; i >= 0; i--) {
       const p = rain[i];
-      p.x += p.vx * spd;
-      p.y += p.vy * spd * (1 + BE * 0.35 + RU * 1.6);
-      if (RU > 0.02) p.vy -= 0.0012 * RU * spd;      // the rush accelerates upward
-      p.a *= 0.992;
+      p.x += p.vx * spd * fs;
+      p.y += p.vy * spd * (1 + BE * 0.35 + RU * 1.6) * fs;
+      if (RU > 0.02) p.vy -= 0.0012 * RU * spd * fs; // the rush accelerates upward
+      p.a *= dk(0.992, fs);
       if (p.y > 1.08 || p.y < -0.08 || p.a < 0.05) { rain.splice(i, 1); continue; }
       const r = R * (0.006 + p.z * 0.008) * (1 + BE * 0.4) * TK;
       c.globalAlpha = Math.min(0.85, p.a * W2 * (0.5 + I * 0.5));
@@ -332,7 +333,7 @@ export const ASCENSION: ThemeDraw = ({
 
     for (let i = pillars.length - 1; i >= 0; i--) {
       const p = pillars[i];
-      p.a *= 0.93;
+      p.a *= dk(0.93, fs);
       if (p.a < 0.04) { pillars.splice(i, 1); continue; }
       const px = p.x * w, pw = Math.max(2, p.wd * w * (0.5 + p.a));
       const pg = c.createLinearGradient(0, h, 0, h * 0.08);
@@ -347,8 +348,8 @@ export const ASCENSION: ThemeDraw = ({
       glow(Math.min(24, 14 * (1 + BE)), C2());
       for (let i = rings.length - 1; i >= 0; i--) {
         const rg2 = rings[i];
-        rg2.r += R * (0.03 + E * 0.03) * spd;
-        rg2.a *= 0.925;
+        rg2.r += R * (0.03 + E * 0.03) * spd * fs;
+        rg2.a *= dk(0.925, fs);
         if (rg2.a < 0.04 || rg2.r > R * 1.6) { rings.splice(i, 1); continue; }
         c.strokeStyle = C2(Math.min(0.4, rg2.a * 0.35), 74);
         c.lineWidth = (1 + rg2.a * 3.5) * TK;

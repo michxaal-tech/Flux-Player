@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Stroke {
   /** control points in 0..1 wall space */
@@ -48,7 +49,7 @@ interface Wall {
 // once, strokes ripped out in a few frames, splatter bursts on every beat and
 // the wall filling up faster than it can fade.
 export const GRAFFITI: ThemeDraw = ({
-  c, w, h, R, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, R, fs, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.graffiti ??= {
     wall: null as Wall | null,
@@ -127,7 +128,7 @@ export const GRAFFITI: ThemeDraw = ({
     });
   };
 
-  S.acc += 0.012 + E2 * 0.42;
+  S.acc += (0.012 + E2 * 0.42) * fs;
   while (S.acc >= 1) { S.acc -= 1; mkStroke(E > 0.45); }
   if (S.acc > 2) S.acc = 2;
   if (beat) {
@@ -148,9 +149,9 @@ export const GRAFFITI: ThemeDraw = ({
     const st = strokes[i];
     const last = st.px.length - 1;
     const prev = st.s;
-    st.s += st.sp * (1 + beatE * 0.8);
+    st.s += st.sp * (1 + beatE * 0.8) * fs;
     if (prev >= last) {
-      st.hold -= 1;
+      st.hold -= fs;
       if (st.hold <= 0) strokes.splice(i, 1);
       continue;
     }
@@ -233,10 +234,10 @@ export const GRAFFITI: ThemeDraw = ({
   for (let i = drips.length - 1; i >= 0; i--) {
     const d = drips[i];
     const y0 = d.y;
-    d.y += d.v * ih * sp;
-    d.v *= 0.998;
-    d.life -= 1;
-    d.a *= 0.997;
+    d.y += d.v * ih * sp * fs;
+    d.v *= dk(0.998, fs);
+    d.life -= fs;
+    d.a *= dk(0.997, fs);
     if (d.life <= 0 || d.y > ih + 4 || d.a < 0.06) { drips.splice(i, 1); continue; }
     g.globalAlpha = d.a * 0.55;
     g.strokeStyle = CMix(d.hue, 1, 44);

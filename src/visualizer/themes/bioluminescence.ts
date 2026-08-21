@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Jelly {
   /** position in fractions of w/h so a resize never teleports the swarm */
@@ -80,7 +81,7 @@ function sparkSprite(color: string): HTMLCanvasElement {
 // small and hypnotically slow, the waves are rare and gentle, and chains die
 // out after a single link.
 export const BIOLUME: ThemeDraw = ({
-  c, w, h, R, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, R, fs, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.biolume ??= {
     jellies: [] as Jelly[],
@@ -96,7 +97,7 @@ export const BIOLUME: ThemeDraw = ({
   const E = energy < 0 ? 0 : energy > 1 ? 1 : energy;
   const E2 = E * E;
   const sp = cfg.speed;
-  S.drift += 0.0009 * sp * (0.4 + E * 2.2);
+  S.drift += 0.0009 * sp * (0.4 + E * 2.2) * fs;
 
   // --- opaque water, painted (never additive) so the deep never washes out ---
   c.globalCompositeOperation = "source-over";
@@ -171,7 +172,7 @@ export const BIOLUME: ThemeDraw = ({
     }
   }
   // ambient stirring, rare when calm
-  if (Math.random() < 0.006 + E2 * 0.05) {
+  if (Math.random() < (0.006 + E2 * 0.05) * fs) {
     pushWave(Math.random(), Math.random(), 0.3 + E * 0.3, 0);
   }
 
@@ -183,8 +184,8 @@ export const BIOLUME: ThemeDraw = ({
   const invRing = 1 / waveRing;
   for (let i = waves.length - 1; i >= 0; i--) {
     const wv = waves[i];
-    wv.r += wv.sp * sp * (1 + beatE * 0.6);
-    wv.a *= 0.972 - E * 0.012;
+    wv.r += wv.sp * sp * (1 + beatE * 0.6) * fs;
+    wv.a *= dk(0.972 - E * 0.012, fs);
     if (wv.a < 0.035 || wv.r > R * 1.3) { waves.splice(i, 1); continue; }
   }
 
@@ -195,11 +196,11 @@ export const BIOLUME: ThemeDraw = ({
   c.beginPath();
   for (let i = 0; i < plankton.length; i++) {
     const p = plankton[i];
-    p.x += p.vx * sp * (1 + E * 2.4);
-    p.y += p.vy * sp * (1 + E * 2.4) - 0.00008 * sp;
+    p.x += p.vx * sp * (1 + E * 2.4) * fs;
+    p.y += (p.vy * (1 + E * 2.4) - 0.00008) * sp * fs;
     if (p.x < -0.02) p.x += 1.04; else if (p.x > 1.02) p.x -= 1.04;
     if (p.y < -0.02) p.y += 1.04; else if (p.y > 1.02) p.y -= 1.04;
-    if (p.cool > 0) p.cool -= 1;
+    if (p.cool > 0) p.cool -= fs;
 
     if (p.lit <= 0.02 && p.cool <= 0) {
       const px = p.x * w, py = p.y * h;
@@ -210,7 +211,7 @@ export const BIOLUME: ThemeDraw = ({
         const off = d - wv.r;
         if (off > -waveRing && off < waveRing) {
           const near = 1 - Math.abs(off) * invRing;
-          if (Math.random() < near * (0.25 + E * 0.6) * wv.a) {
+          if (Math.random() < near * (0.25 + E * 0.6) * wv.a * fs) {
             p.lit = 1;
             p.cool = 26 + Math.random() * 40;
             if (wv.gen < maxGen && Math.random() < chainOdds) {
@@ -234,7 +235,7 @@ export const BIOLUME: ThemeDraw = ({
   for (let i = 0; i < plankton.length; i++) {
     const p = plankton[i];
     if (p.lit <= 0.02) continue;
-    p.lit *= 0.93 - E * 0.02;
+    p.lit *= dk(0.93 - E * 0.02, fs);
     const rr = p.sz * TK * (2.6 + p.lit * 4.5 + beatE * 1.2);
     c.globalAlpha = Math.min(0.7, p.lit * (0.5 + I * 0.5));
     c.drawImage(spr, p.x * w - rr, p.y * h - rr, rr * 2, rr * 2);
@@ -259,10 +260,10 @@ export const BIOLUME: ThemeDraw = ({
   const pulseBoost = 1 + E * 3.2 + beatE * (0.6 + E * 1.6);
   for (let i = 0; i < jellies.length; i++) {
     const j = jellies[i];
-    if (j.fi < 1) j.fi = Math.min(1, j.fi + 0.015);
+    if (j.fi < 1) j.fi = Math.min(1, j.fi + 0.015 * fs);
 
     const prevPh = j.ph;
-    j.ph += j.rate * sp * pulseBoost;
+    j.ph += j.rate * sp * pulseBoost * fs;
     if (j.ph >= 1) j.ph -= 1;
     // the jet happens at the contraction snap, so motion is genuinely pulsed
     const contracted = j.ph < 0.35 ? Math.sin(j.ph / 0.35 * Math.PI) : 0;
@@ -276,16 +277,17 @@ export const BIOLUME: ThemeDraw = ({
     if (E > 0.45) {
       const dx = 0.5 - j.x, dy = 0.5 - j.y;
       const d = Math.sqrt(dx * dx + dy * dy) || 1;
-      const pull = (E - 0.45) * 0.00016;
+      const pull = (E - 0.45) * 0.00016 * fs;
       j.vx += (dx / d) * pull;
       j.vy += (dy / d) * pull;
     }
-    j.vx += Math.sin(S.drift * 9 + j.seed) * 0.000024;
-    j.vy -= 0.0000085 * sp;
-    j.vx *= 0.985;
-    j.vy *= 0.985;
-    j.x += j.vx * sp;
-    j.y += j.vy * sp;
+    j.vx += Math.sin(S.drift * 9 + j.seed) * 0.000024 * fs;
+    j.vy -= 0.0000085 * sp * fs;
+    const jdrag = dk(0.985, fs);
+    j.vx *= jdrag;
+    j.vy *= jdrag;
+    j.x += j.vx * sp * fs;
+    j.y += j.vy * sp * fs;
     if (j.x < -0.12) j.x += 1.24; else if (j.x > 1.12) j.x -= 1.24;
     if (j.y < -0.2) { j.y = 1.16; j.vy = -0.0004 - Math.random() * 0.0008; }
     else if (j.y > 1.2) j.y = -0.16;

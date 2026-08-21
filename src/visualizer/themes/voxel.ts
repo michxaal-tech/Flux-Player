@@ -17,6 +17,7 @@
 // grid lights up and the camera dives toward the deck for a low, fast pass.
 // ─────────────────────────────────────────────────────────────────────────────
 import type { ThemeDraw } from "../themeTypes";
+import { dk, ak } from "../rate";
 
 /** an outward-travelling height wave; `r` is in normalized grid radius (0 centre → 1 corner) */
 interface Ripple { r: number; a: number }
@@ -100,7 +101,7 @@ const G2 = new Float64Array(4);
 const cl01 = (v: number) => (v > 0 ? (v < 1 ? v : 1) : 0);   // also maps NaN → 0
 
 export const VOXEL: ThemeDraw = ({
-  c, w, h, cx, cy, R, freq, liveAudio, vt, beat, beatE, hit, hitE, energy, dropE,
+  c, w, h, cx, cy, R, fs, freq, liveAudio, vt, beat, beatE, hit, hitE, energy, dropE,
   cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S: VoxelState = (L.scratch.voxel ??= {
@@ -123,13 +124,13 @@ export const VOXEL: ThemeDraw = ({
   if ((beat || hit) && S.rip.length < RIP_MAX) S.rip.push({ r: 0, a: beat ? 1 : 0.5 + HE * 0.3 });
   for (let i = S.rip.length - 1; i >= 0; i--) {
     const rp = S.rip[i];
-    rp.r += (0.011 + E * 0.019) * spd;
-    rp.a *= 0.962;
+    rp.r += (0.011 + E * 0.019) * spd * fs;
+    rp.a *= dk(0.962, fs);
     if (rp.r > 1.5 || rp.a < 0.05) S.rip.splice(i, 1);
   }
 
   // ── drop: charge while dropE climbs, detonate on the way down (once per drop) ──
-  S.chg += (D - S.chg) * 0.12;
+  S.chg += (D - S.chg) * ak(0.12, fs);
   if (D > 0.55) { S.arm = 1; if (D > S.peak) S.peak = D; }
   if (S.arm && (D < S.peak * 0.8 || D < 0.28)) {
     S.arm = 0; S.peak = 0;
@@ -137,14 +138,15 @@ export const VOXEL: ThemeDraw = ({
     S.flash = 1;
     if (S.rip.length < RIP_MAX) S.rip.push({ r: 0, a: 1 });
   }
-  S.launch *= 0.952;
-  S.flash *= 0.9;
+  S.launch *= dk(0.952, fs);
+  S.flash *= dk(0.9, fs);
+  const hsEase = ak(0.26, fs);   // column rise, hoisted out of the per-cell loop
   const CH = cl01(S.chg);
   const LA = cl01(S.launch);
   const FL = cl01(S.flash);
 
   // ── camera: a slow orbit that speeds up with energy, diving on the drop ──────
-  S.orb += (0.0016 + E * 0.0058) * spd * (1 + BE * 0.4 + LA * 1.6);
+  S.orb += (0.0016 + E * 0.0058) * spd * (1 + BE * 0.4 + LA * 1.6) * fs;
   const orb = S.orb + Math.sin(S.orb * 0.41) * 0.22;      // uneven sweep, so it never feels like a turntable
   const dist = 2.95 - E * 0.3 - CH * 0.45 - LA * 0.85;    // the dive: the camera rushes the deck
   const pitch = Math.max(0.17, 0.64 - CH * 0.2 - LA * 0.34);
@@ -206,7 +208,7 @@ export const VOXEL: ThemeDraw = ({
       }
     }
     if (tgt > 1.05) tgt = 1.05;                 // no column can ever spike off the frame
-    S.hs[i] += (tgt - S.hs[i]) * 0.26;
+    S.hs[i] += (tgt - S.hs[i]) * hsEase;
   }
 
   // ── the deck, then its grid lines ───────────────────────────────────────────

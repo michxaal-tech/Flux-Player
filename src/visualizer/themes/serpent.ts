@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk, ak } from "../rate";
 
 const MAXS = 7;    // hard cap on creatures
 const SEG = 26;    // nodes per body — fixed, never scales with canvas size
@@ -49,7 +50,7 @@ function getSpark(color: string): HTMLCanvasElement {
 // them like a whip, snapping the head into a hard turn and blowing a burst of
 // light off the body.
 export const SERPENT: ThemeDraw = ({
-  c, cx, cy, R, vt, beat, beatE, energy, cfg, bassV, midV, I, TK, C1, CMix, glow, noGlow, L,
+  c, cx, cy, R, fs, vt, beat, beatE, energy, cfg, bassV, midV, I, TK, C1, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.serpent ??= {
     serps: [] as Serp[],
@@ -96,23 +97,25 @@ export const SERPENT: ThemeDraw = ({
   const spacing = R * 0.03;
   const undF = 0.035 + E * 0.24;                       // undulation rate
   const undA = 0.018 + E * 0.115;                      // how hard it bends
-  let spd = R * (0.0038 + E * 0.014) * cfg.speed * (1 + beatE * (0.4 + E * 1.8));
-  if (spd > spacing * 0.85) spd = spacing * 0.85;      // keeps the chain stable
+  let spd = R * (0.0038 + E * 0.014) * cfg.speed * (1 + beatE * (0.4 + E * 1.8)) * fs;
+  // clamped *after* the frame factor: the chain is stable per step taken, so the
+  // limit belongs on the step this frame actually makes
+  if (spd > spacing * 0.85) spd = spacing * 0.85;
   const bound = R * 0.5;
 
   for (let n = 0; n < MAXS; n++) {
     const s = serps[n];
     if (!s.live) continue;
     if (s.retiring) {
-      s.fade -= 0.02;
+      s.fade -= 0.02 * fs;
       if (s.fade <= 0) { s.live = 0; s.fade = 0; s.retiring = 0; continue; }
     } else if (s.fade < 1) {
-      s.fade = Math.min(1, s.fade + 0.02);
+      s.fade = Math.min(1, s.fade + 0.02 * fs);
     }
 
     if (beat) s.turn += (Math.random() - 0.5) * (0.03 + E * 0.5) * I;
-    s.turn *= 0.87;
-    s.ang += Math.sin(vt * undF + s.ph) * undA + s.turn;
+    s.ang += (Math.sin(vt * undF + s.ph) * undA + s.turn) * fs;
+    s.turn *= dk(0.87, fs);
 
     // steer home so they never wander off-frame
     const dxc = cx - s.nx[0], dyc = cy - s.ny[0];
@@ -121,7 +124,7 @@ export const SERPENT: ThemeDraw = ({
       let da = Math.atan2(dyc, dxc) - s.ang;
       while (da > Math.PI) da -= Math.PI * 2;
       while (da < -Math.PI) da += Math.PI * 2;
-      s.ang += da * Math.min(0.14, (dc / bound - 1) * 0.3);
+      s.ang += da * ak(Math.min(0.14, (dc / bound - 1) * 0.3), fs);
     }
 
     s.nx[0] += Math.cos(s.ang) * spd;
@@ -134,7 +137,7 @@ export const SERPENT: ThemeDraw = ({
     }
 
     // shed motes off the tail — a trickle when calm, a burst on every beat
-    s.shed--;
+    s.shed -= fs;
     const burst = beat ? Math.round(2 + E * 7) : (s.shed <= 0 ? 1 : 0);
     if (burst > 0) {
       s.shed = Math.round(9 - E * 7);
@@ -209,10 +212,11 @@ export const SERPENT: ThemeDraw = ({
   const spr = getSpark(C1(0.85, 78));
   for (let i = sparks.length - 1; i >= 0; i--) {
     const p = sparks[i];
-    p.x += p.vx * cfg.speed;
-    p.y += p.vy * cfg.speed;
-    p.vx *= 0.97; p.vy *= 0.97;
-    p.a *= 0.955 - E * 0.02;
+    p.x += p.vx * cfg.speed * fs;
+    p.y += p.vy * cfg.speed * fs;
+    const drag = dk(0.97, fs);
+    p.vx *= drag; p.vy *= drag;
+    p.a *= dk(0.955 - E * 0.02, fs);
     if (p.a < 0.04) { sparks.splice(i, 1); continue; }
     const r = p.sz * (1 + beatE * 0.6) * TK * 2.6;
     c.globalAlpha = p.a;

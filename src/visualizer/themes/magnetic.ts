@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Filing {
   /** normalized lattice position, fixed for the life of the field */
@@ -45,7 +46,7 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 // lattice. Quiet passages are a slow, graceful comb; loud ones send the poles
 // racing and the whole field churns.
 export const MAGNETIC: ThemeDraw = ({
-  c, w, h, R, vt, beat, beatE, energy, cfg, bassV, midV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, fs, w, h, R, vt, beat, beatE, energy, cfg, bassV, midV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S: MagneticState = (L.scratch.magnetic ??= {
     fil: Array.from({ length: COLS * ROWS }, (_, i) => {
@@ -77,7 +78,7 @@ export const MAGNETIC: ThemeDraw = ({
   const hot = clamp01((energy - 0.35) / 0.5);              // 0 calm → 1 driving
   const nAct = energy < 0.3 ? 2 : energy < 0.62 ? 3 : NPOLES;
   // poles crawl at rest (0.003/frame) and whip around when the music drives
-  S.ft += (0.003 + eS * 0.05) * cfg.speed * (1 + beatE * hot * 1.5);
+  S.ft += (0.003 + eS * 0.05) * cfg.speed * (1 + beatE * hot * 1.5) * fs;
   const ft = S.ft;
 
   for (let i = 0; i < nAct; i++) {
@@ -97,8 +98,8 @@ export const MAGNETIC: ThemeDraw = ({
     S.wa = 1;
   }
   if (S.wa > 0.01) {
-    S.wr += R * (0.012 + energy * 0.03) * cfg.speed;
-    S.wa *= 0.93;
+    S.wr += R * (0.012 + energy * 0.03) * cfg.speed * fs;
+    S.wa *= dk(0.93, fs);
     if (S.wr > R * 2) S.wa = 0;
   }
   const band = R * (0.05 + hot * 0.07);
@@ -140,8 +141,8 @@ export const MAGNETIC: ThemeDraw = ({
     // shortest swing to the field axis (filings are 180°-symmetric)
     let d = ta - f.a;
     d = (((d + Math.PI * 0.5) % Math.PI) + Math.PI) % Math.PI - Math.PI * 0.5;
-    f.a += d * (inWave ? 0.45 + S.wa * 0.4 : baseK);
-    if (churn > 0.001) f.a += Math.sin(vt * 0.11 + f.ph * 6.3) * churn;
+    f.a += d * (inWave ? 0.45 + S.wa * 0.4 : baseK) * fs;
+    if (churn > 0.001) f.a += Math.sin(vt * 0.11 + f.ph * 6.3) * churn * fs;
 
     const len = segBase * (0.55 + str * 1.5) * (inWave ? 1.9 : 1) * TK;
     const ca = Math.cos(f.a) * len, sa = Math.sin(f.a) * len;

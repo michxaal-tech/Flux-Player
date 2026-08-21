@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Matter {
   /** angle around the funnel */
@@ -35,7 +36,7 @@ const TAU = Math.PI * 2;
 // accelerates inward, lensing rings strobe out of the throat on every beat and
 // matter is torn in as long stretched streaks.
 export const WORMHOLE: ThemeDraw = ({
-  c, w, h, cx, cy, R, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, cx, cy, R, fs, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.wormhole ??= {
     matter: [] as Matter[],
@@ -57,9 +58,9 @@ export const WORMHOLE: ThemeDraw = ({
   const mouth = R * (0.62 - E * 0.16);            // screen radius of the near ring
   const throat = R * (0.05 - E * 0.028) + 2;      // singularity radius
   const twistK = (0.28 + E2 * 2.6) * (0.4 + I * 0.8);
-  S.z += (0.006 + E2 * 0.062) * sp * (1 + bassV * 0.6 + beatE * (0.4 + E * 1.6));
-  S.tw += (0.002 + E2 * 0.03) * sp;
-  S.flash *= 0.88;
+  S.z += (0.006 + E2 * 0.062) * sp * (1 + bassV * 0.6 + beatE * (0.4 + E * 1.6)) * fs;
+  S.tw += (0.002 + E2 * 0.03) * sp * fs;
+  S.flash *= dk(0.88, fs);
   if (beat) {
     S.flash = Math.min(1, S.flash + 0.4 + E * 0.5);
     if (lens.length < MAX_LENS) lens.push({ p: 0, a: 0.5 + E * 0.45 });
@@ -141,7 +142,7 @@ export const WORMHOLE: ThemeDraw = ({
     matter.pop();
   }
 
-  const fall = (0.0018 + E2 * 0.019) * sp * (1 + beatE * (0.5 + E * 2));
+  const fall = (0.0018 + E2 * 0.019) * sp * (1 + beatE * (0.5 + E * 2)) * fs;
   const swirl = (0.0009 + E * 0.006) * sp;
   c.beginPath();
   for (let i = 0; i < matter.length; i++) {
@@ -151,9 +152,11 @@ export const WORMHOLE: ThemeDraw = ({
     m.r -= fall * (0.5 + m.r * 0.8);
     // conserved angular momentum: the deeper it falls the faster it whips round
     const rr = m.r > 0.06 ? m.r : 0.06;
+    // clamped as a 60Hz-equivalent rate, then carried to this frame's length —
+    // clamping after the scale would make the cap itself frame-rate dependent
     let dth = swirl / (rr * rr);
     if (dth > 0.42) dth = 0.42;
-    m.a += dth;
+    m.a += dth * fs;
     if (m.r <= 0.04) {
       m.r = 1 + Math.random() * 0.2;
       m.pr = m.r;
@@ -205,8 +208,8 @@ export const WORMHOLE: ThemeDraw = ({
     glow(Math.min(26, (10 + E * 12) * (1 + beatE)), C1());
     for (let i = lens.length - 1; i >= 0; i--) {
       const ln = lens[i];
-      ln.p += (0.012 + E * 0.05) * sp;
-      ln.a *= 0.9 - E * 0.03;
+      ln.p += (0.012 + E * 0.05) * sp * fs;
+      ln.a *= dk(0.9 - E * 0.03, fs);
       if (ln.a < 0.04 || ln.p > 1) { lens.splice(i, 1); continue; }
       const r1 = bend(rad(Math.min(1, ln.p)));
       c.strokeStyle = C1(ln.a * 0.5, 74);

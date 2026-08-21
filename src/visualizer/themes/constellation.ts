@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Star {
   /** unit vector on the celestial sphere */
@@ -75,7 +76,7 @@ function flareSprite(color: string): HTMLCanvasElement {
 // there. Driving passages: seven at once, each snapping shut in a handful of
 // frames, lines whipping across the sky and every touched star flaring.
 export const CONSTELLATION: ThemeDraw = ({
-  c, w, h, cx, cy, R, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, cx, cy, R, fs, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.constellation ??= {
     stars: [] as Star[],
@@ -110,8 +111,8 @@ export const CONSTELLATION: ThemeDraw = ({
   }
 
   // --- the sphere turns; faster and with more nod when the music drives ---
-  S.yaw += (0.0011 + E2 * 0.0075) * sp;
-  S.nod += (0.0004 + E * 0.0018) * sp;
+  S.yaw += (0.0011 + E2 * 0.0075) * sp * fs;
+  S.nod += (0.0004 + E * 0.0018) * sp * fs;
   const cy1 = Math.cos(S.yaw), sy1 = Math.sin(S.yaw);
   const tilt = 0.28 + Math.sin(S.nod) * (0.1 + E * 0.22);
   const ct = Math.cos(tilt), st1 = Math.sin(tilt);
@@ -154,12 +155,12 @@ export const CONSTELLATION: ThemeDraw = ({
     s2.sy = cy + y2 * scale * 0.98;
     // the front hemisphere is bright, the back fades out rather than popping
     s2.vis = z2 > 0 ? Math.min(1, z2 * 2.4) : 0;
-    if (s2.fl > 0) s2.fl *= 0.9 - E * 0.03;
+    if (s2.fl > 0) s2.fl *= dk(0.9 - E * 0.03, fs);
   }
 
   // --- figures ---
   const figTarget = E < 0.25 ? 1 : Math.min(MAX_FIGS - 1, 1 + Math.round(E * 6));
-  S.spawnT -= 1;
+  S.spawnT -= fs;
   const wantNew = figs.length < figTarget && (S.spawnT <= 0 || beat);
   if (wantNew && figs.length < MAX_FIGS) {
     // seed on a visible, reasonably bright star
@@ -214,7 +215,7 @@ export const CONSTELLATION: ThemeDraw = ({
     const F = figs[fi];
     const edges = F.idx.length - 1;
     if (F.st === 0) {
-      F.p += F.sp * (1 + beatE * 1.6);
+      F.p += F.sp * (1 + beatE * 1.6) * fs;
       if (F.p >= edges) {
         F.p = edges;
         F.st = 1;
@@ -223,10 +224,10 @@ export const CONSTELLATION: ThemeDraw = ({
         for (let q = 0; q < F.idx.length; q++) stars[F.idx[q]].fl = 1;
       }
     } else if (F.st === 1) {
-      F.t -= 1;
+      F.t -= fs;
       if (F.t <= 0) F.st = 2;
     } else {
-      F.a *= 0.955 - E * 0.03;
+      F.a *= dk(0.955 - E * 0.03, fs);
       if (F.a < 0.05) { figs.splice(fi, 1); continue; }
     }
 

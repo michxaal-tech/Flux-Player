@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk, ak } from "../rate";
 
 interface Form {
   x: number; y: number;
@@ -25,7 +26,7 @@ const TONES = 4;    // facet shading tiers → 4 batched fills for everything
 // air fills with dozens of small forms snapping open and shut and tumbling
 // past each other, every beat reversing the fold mid-motion.
 export const ORIGAMI: ThemeDraw = ({
-  c, w, h, R, beat, beatE, energy, cfg, midV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, R, fs, beat, beatE, energy, cfg, midV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.origami ??= {
     forms: [] as Form[],
@@ -68,9 +69,9 @@ export const ORIGAMI: ThemeDraw = ({
 
   // ── population: a few large forms when calm, a swarm when driving ─────────
   const want = 3 + Math.round(E * E * (MAXF - 3));
-  const foldRate = (0.0025 + E * 0.032) * cfg.speed;
-  const tumble = (0.0015 + E * 0.05) * cfg.speed;
-  const drift = (0.35 + E * 3.4) * cfg.speed;
+  const foldRate = (0.0025 + E * 0.032) * cfg.speed * fs;
+  const tumble = (0.0015 + E * 0.05) * cfg.speed * fs;
+  const drift = (0.35 + E * 3.4) * cfg.speed * fs;
   const margin = R * 0.2;
 
   const VX: Float32Array = S.vx, VY: Float32Array = S.vy, TONE: Uint8Array = S.tone;
@@ -79,7 +80,7 @@ export const ORIGAMI: ThemeDraw = ({
     const f = forms[i];
     f.on = i < want ? 1 : 0;
     const targetA = f.on ? 1 : 0;
-    f.a += (targetA - f.a) * 0.06;
+    f.a += (targetA - f.a) * ak(0.06, fs);
     if (f.a < 0.02) {
       if (f.on) { place(f); f.a = 0.02; }
       else continue;
@@ -94,8 +95,8 @@ export const ORIGAMI: ThemeDraw = ({
       if (Math.random() < 0.35 + E * 0.6) f.dir = -f.dir;
       f.vr += (Math.random() - 0.5) * 0.04 * (0.4 + E) * I;
     }
-    f.rot += f.vr * (0.4 + E * 2.2) + tumble * (f.sides % 2 === 0 ? 1 : -1) * 0.2;
-    f.vr *= 0.985;
+    f.rot += f.vr * (0.4 + E * 2.2) * fs + tumble * (f.sides % 2 === 0 ? 1 : -1) * 0.2;
+    f.vr *= dk(0.985, fs);
     f.x += f.vx * drift;
     f.y += f.vy * drift;
     if (f.x < -margin) f.x = w + margin; else if (f.x > w + margin) f.x = -margin;

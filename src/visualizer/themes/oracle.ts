@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 /** A rune, described in unit space (-0.5..0.5) and drawn procedurally. */
 interface Glyph {
@@ -68,7 +69,7 @@ function makeGlyph(seed: number): Glyph {
 // Driving passages spin the rings hard, flare the runes on every beat and rake
 // the orb's surface with crackling energy arcs.
 export const ORACLE: ThemeDraw = ({
-  c, cx, cy, R, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, fs, cx, cy, R, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S: OracleState = (L.scratch.oracle ??= {
     rings: RING_N.map((n, ri) => ({
@@ -87,7 +88,7 @@ export const ORACLE: ThemeDraw = ({
   const eS = energy * energy;
   const hot = clamp01((energy - 0.32) / 0.5);               // 0 calm → 1 violent
   const orbR = R * (0.2 + bassV * 0.025 + beatE * 0.035 * I);
-  S.mist += (0.004 + eS * 0.03) * cfg.speed;
+  S.mist += (0.004 + eS * 0.03) * cfg.speed * fs;
 
   // ── the orb ──
   const og = c.createRadialGradient(cx, cy, 0, cx, cy, orbR);
@@ -145,10 +146,12 @@ export const ORACLE: ThemeDraw = ({
   if (beat) {
     const n = 1 + ((hot * 4) | 0);
     for (let i = 0; i < n; i++) spawn(0.1 + hot * 0.3);
-  } else if (hot > 0.4 && Math.random() < hot * 0.35) {
+    // a per-frame spawn chance is a per-*second* rate once the frame rate can
+    // change, so the probability carries the frame factor
+  } else if (hot > 0.4 && Math.random() < hot * 0.35 * fs) {
     spawn(0.1 + hot * 0.3);                                 // continuous crackle at speed
   }
-  const decay = 0.86 - hot * 0.1;
+  const decay = dk(0.86 - hot * 0.1, fs);
   let anyBolt = false;
   for (let i = 0; i < S.bolts.length; i++) if (S.bolts[i].a > 0.04) { anyBolt = true; break; }
   if (anyBolt) {
@@ -173,7 +176,7 @@ export const ORACLE: ThemeDraw = ({
   const spin = (0.0011 + eS * 0.028) * cfg.speed * (1 + beatE * hot * 2.2);
   for (let ri = 0; ri < S.rings.length; ri++) {
     const rg = S.rings[ri];
-    rg.rot += rg.dir * spin * (1 + ri * 0.25);
+    rg.rot += rg.dir * spin * (1 + ri * 0.25) * fs;
     // the outer ward ring only materialises when the music drives
     const ringA = ri === 2 ? hot : 1;
     if (ringA < 0.03) continue;

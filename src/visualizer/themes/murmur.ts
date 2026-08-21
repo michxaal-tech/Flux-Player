@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk, ak } from "../rate";
 
 interface Boid {
   x: number; y: number; vx: number; vy: number;
@@ -19,7 +20,7 @@ const TIERS = 3;        // depth tiers → 3 batched strokes for the whole flock
 // shockwave from the flock's own centre that blows the birds apart before
 // cohesion drags them back together.
 export const MURMUR: ThemeDraw = ({
-  c, w, h, cx, cy, R, vt, beat, beatE, energy, cfg, bassV, I, TK, C1, CMix, glow, noGlow, L,
+  c, w, h, cx, cy, R, fs, vt, beat, beatE, energy, cfg, bassV, I, TK, C1, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.murmur ??= {
     boids: [] as Boid[],
@@ -54,7 +55,7 @@ export const MURMUR: ThemeDraw = ({
   // ── flock waypoint ────────────────────────────────────────────────────────
   // Calm: the waypoint crawls and is barely pulled on, so the flock drifts.
   // Driving: it jumps far on beats and the flock rockets after it.
-  S.tt--;
+  S.tt -= fs;
   if (S.tt <= 0 || (beat && E > 0.5)) {
     const a = Math.random() * Math.PI * 2;
     const rad = R * (0.1 + Math.random() * (0.08 + E * 0.34));
@@ -62,7 +63,7 @@ export const MURMUR: ThemeDraw = ({
     S.gty = cy + Math.sin(a) * rad * 0.8;
     S.tt = Math.floor(120 - E * 90);
   }
-  const chase = 0.012 + E * 0.09;
+  const chase = ak(0.012 + E * 0.09, fs);
   S.tx += (S.gtx - S.tx) * chase;
   S.ty += (S.gty - S.ty) * chase;
 
@@ -75,8 +76,8 @@ export const MURMUR: ThemeDraw = ({
   }
   for (let i = S.shocks.length - 1; i >= 0; i--) {
     const s = S.shocks[i];
-    s.r += R * (0.022 + E * 0.05) * cfg.speed;
-    s.amp *= 0.9;
+    s.r += R * (0.022 + E * 0.05) * cfg.speed * fs;
+    s.amp *= dk(0.9, fs);
     if (s.amp < 0.05 || s.r > R * 1.3) S.shocks.splice(i, 1);
   }
 
@@ -102,10 +103,12 @@ export const MURMUR: ThemeDraw = ({
   const percR2 = percR * percR;
   const maxSp = R * (0.0022 + E * 0.0125) * cfg.speed * (1 + beatE * 1.1 * E);
   const minSp = maxSp * 0.42;
-  const cohW = 0.00008 + E * 0.0011;
-  const aliW = 0.02 + E * 0.16;
-  const sepA = maxSp * (0.34 + E * 0.2);
-  const seekW = (0.0003 + E * 0.0062) * I;
+  // Forces are accelerations per 60Hz frame, so they carry `fs`; alignment is
+  // an approach toward the neighbours' mean velocity, so it goes through `ak`.
+  const cohW = (0.00008 + E * 0.0011) * fs;
+  const aliW = ak(0.02 + E * 0.16, fs);
+  const sepA = maxSp * (0.34 + E * 0.2) * fs;
+  const seekW = (0.0003 + E * 0.0062) * I * fs;
   const wander = 0.05 + (1 - E) * 0.1;    // lazy meander dominates when calm
   const band = R * 0.14;
   const shocks: Shock[] = S.shocks;
@@ -166,7 +169,7 @@ export const MURMUR: ThemeDraw = ({
 
     // organic meander (a cheap flow field), strongest in the quiet passages
     const turn =
-      (Math.sin(b.x * 0.006 + vt * 0.011) + Math.cos(b.y * 0.007 - vt * 0.013 + b.z * 6)) * wander;
+      (Math.sin(b.x * 0.006 + vt * 0.011) + Math.cos(b.y * 0.007 - vt * 0.013 + b.z * 6)) * wander * fs;
     const cs = Math.cos(turn), sn = Math.sin(turn);
     const rvx = b.vx * cs - b.vy * sn;
     b.vy = b.vx * sn + b.vy * cs;
@@ -178,7 +181,7 @@ export const MURMUR: ThemeDraw = ({
       const d = Math.sqrt(dx * dx + dy * dy) || 1e-4;
       const kk = 1 - Math.abs(d - s.r) / band;
       if (kk > 0) {
-        const f = kk * s.amp * maxSp * 2.4;
+        const f = kk * s.amp * maxSp * 2.4 * fs;
         b.vx += (dx / d) * f;
         b.vy += (dy / d) * f;
       }
@@ -192,7 +195,7 @@ export const MURMUR: ThemeDraw = ({
       b.vx = maxSp;
     }
 
-    b.x += b.vx; b.y += b.vy;
+    b.x += b.vx * fs; b.y += b.vy * fs;
     const m2 = R * 0.07;
     if (b.x < -m2) b.x = w + m2; else if (b.x > w + m2) b.x = -m2;
     if (b.y < -m2) b.y = h + m2; else if (b.y > h + m2) b.y = -m2;
@@ -205,7 +208,7 @@ export const MURMUR: ThemeDraw = ({
   const mx = sumX * invN, my = sumY * invN;
   const varr = sumSq * invN - (mx * mx + my * my);
   S.ccx = mx; S.ccy = my;
-  S.spread += (Math.sqrt(Math.max(0, varr)) - S.spread) * 0.1;
+  S.spread += (Math.sqrt(Math.max(0, varr)) - S.spread) * ak(0.1, fs);
 
   // ── the flock's own aura: a tight hot core when driving, a wide haze when calm
   const halo = Math.max(R * 0.06, S.spread * 2.1);

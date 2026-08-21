@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Curtain {
   /** 0..1 horizontal anchor */
@@ -58,7 +59,7 @@ function moteSprite(color: string): HTMLCanvasElement {
 // the slats separate into narrow torn ribbons, folds pack in tight and the whole
 // wall strobes on every beat.
 export const AURORAFALL: ThemeDraw = ({
-  c, w, h, R, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, R, fs, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.aurorafall ??= {
     cur: [] as Curtain[],
@@ -98,18 +99,18 @@ export const AURORAFALL: ThemeDraw = ({
   const sharp = 1.2 + E * 2.6;                 // fold contrast
 
   // strobe only really exists at high energy
-  S.strobe = beat ? 1 : S.strobe * 0.8;
+  S.strobe = beat ? 1 : S.strobe * dk(0.8, fs);
   const strobe = S.strobe * E2;
 
   for (const cu of cur) {
-    cu.whip *= 0.9;
-    cu.tear *= 0.93;
+    cu.whip *= dk(0.9, fs);
+    cu.tear *= dk(0.93, fs);
     if (beat) {
       cu.whip += (0.25 + E * 1.9) * I * (0.6 + Math.random() * 0.7);
       if (E > 0.5) cu.tear = 1;
     }
-    cu.ph += swayRate * cu.sp * (1 + cu.whip * 1.6);
-    cu.x += (0.00018 + E * 0.0016) * cu.sp * cu.dir * sp;
+    cu.ph += swayRate * cu.sp * (1 + cu.whip * 1.6) * fs;
+    cu.x += (0.00018 + E * 0.0016) * cu.sp * cu.dir * sp * fs;
     if (cu.x < -0.15) cu.x += 1.3;
     if (cu.x > 1.15) cu.x -= 1.3;
 
@@ -205,8 +206,8 @@ export const AURORAFALL: ThemeDraw = ({
     c.lineWidth = (1 + E * 2.5) * TK;
     for (let i = rips.length - 1; i >= 0; i--) {
       const rp = rips[i];
-      rp.y += rp.sp * sp;
-      rp.a *= 0.84;
+      rp.y += rp.sp * sp * fs;
+      rp.a *= dk(0.84, fs);
       if (rp.a < 0.04) { rips.splice(i, 1); continue; }
       c.strokeStyle = C2(rp.a * 0.7, 88);
       c.beginPath();
@@ -218,7 +219,7 @@ export const AURORAFALL: ThemeDraw = ({
   }
 
   // --- falling light-motes ---
-  S.moteAcc += 0.35 + E * 2.6 + beatE * (2 + E * 8);
+  S.moteAcc += (0.35 + E * 2.6 + beatE * (2 + E * 8)) * fs;
   while (S.moteAcc >= 1) {
     S.moteAcc -= 1;
     if (motes.length >= MAX_MOTES) break;
@@ -238,9 +239,9 @@ export const AURORAFALL: ThemeDraw = ({
   const streak = 1 + E * 3.2 + beatE * 1.5;
   for (let i = motes.length - 1; i >= 0; i--) {
     const m = motes[i];
-    m.y += m.vy * (1 + E * 3.5 + beatE * 2) * sp;
-    m.x += (m.vx + Math.sin(vt * 0.01 + m.y * 0.01) * h * 0.0006 * (1 + E * 2)) * sp;
-    m.a *= 0.994;
+    m.y += m.vy * (1 + E * 3.5 + beatE * 2) * sp * fs;
+    m.x += (m.vx + Math.sin(vt * 0.01 + m.y * 0.01) * h * 0.0006 * (1 + E * 2)) * sp * fs;
+    m.a *= dk(0.994, fs);
     if (m.y > h * 1.06 || m.a < 0.05) { motes.splice(i, 1); continue; }
     const rw = m.sz * TK * 2.2;
     c.globalAlpha = m.a * (0.5 + trebV * 0.5 + beatE * 0.4);

@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Trace {
   /** flat [x0,y0,x1,y1,…] in 0..1 space — right angles survive any resize */
@@ -55,7 +56,7 @@ function headSprite(color: string): HTMLCanvasElement {
 // per second, source nodes detonating on every beat, and traces accumulating so
 // much heat they overload and glow white-hot.
 export const CIRCUITRY: ThemeDraw = ({
-  c, w, h, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, fs, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.circuitry ??= {
     key: "",
@@ -190,7 +191,7 @@ export const CIRCUITRY: ThemeDraw = ({
     });
   };
   // ambient: a trickle when calm, a flood when driving
-  S.acc += 0.035 + E2 * 3.4;
+  S.acc += (0.035 + E2 * 3.4) * fs;
   while (S.acc >= 1) {
     S.acc -= 1;
     mkPulse((Math.random() * traces.length) | 0);
@@ -212,14 +213,14 @@ export const CIRCUITRY: ThemeDraw = ({
   for (let i = pulses.length - 1; i >= 0; i--) {
     const pu = pulses[i];
     const tr = traces[pu.tr];
-    pu.s += pu.sp * spd * (1 + beatE * 0.8);
+    pu.s += pu.sp * spd * (1 + beatE * 0.8) * fs;
     if (pu.s > tr.len) {
       // arrival: dump the charge into the end pad
       tr.heat += 0.25 + E * 0.4;
       pulses.splice(i, 1);
       continue;
     }
-    tr.heat += 0.012 + E * 0.05;
+    tr.heat += (0.012 + E * 0.05) * fs;
     const s1 = pu.s;
     const s0 = Math.max(0, s1 - tail);
     locate(tr, s1);
@@ -266,15 +267,16 @@ export const CIRCUITRY: ThemeDraw = ({
     c.stroke();
     noGlow();
   }
-  for (const tr of traces) tr.heat *= 0.93;
+  const cool = dk(0.93, fs);
+  for (const tr of traces) tr.heat *= cool;
 
   // --- source-node detonations ---
   if (bursts.length) {
     glow(Math.min(26, 16 * (1 + beatE)), C2());
     for (let i = bursts.length - 1; i >= 0; i--) {
       const b = bursts[i];
-      b.r += Math.min(w, h) * (0.008 + E * 0.02) * spd;
-      b.a *= 0.87;
+      b.r += Math.min(w, h) * (0.008 + E * 0.02) * spd * fs;
+      b.a *= dk(0.87, fs);
       if (b.a < 0.04) { bursts.splice(i, 1); continue; }
       c.strokeStyle = C2(b.a * 0.7, 86);
       c.lineWidth = (1 + b.a * 2.5) * TK;

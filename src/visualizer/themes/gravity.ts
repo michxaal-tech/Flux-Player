@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk, ak } from "../rate";
 
 interface Orbiter {
   /** rest semi-major axis / eccentricity (fraction of R) */
@@ -58,7 +59,7 @@ function bodySprite(color: string): HTMLCanvasElement {
 // core throbs, orbits decay every frame, bodies spiral all the way in and get
 // slingshot back out on wild eccentric arcs.
 export const GRAVITY: ThemeDraw = ({
-  c, cx, cy, R, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, cx, cy, R, fs, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.gravity ??= {
     orbs: [] as Orbiter[],
@@ -96,7 +97,7 @@ export const GRAVITY: ThemeDraw = ({
   // --- central mass ---
   const throb = E2 * Math.sin(vt * 0.13 * sp) * 0.35;
   const coreR = R * (0.05 + bassV * 0.035) * (1 + beatE * (0.4 + E) + throb);
-  S.flash *= 0.88;
+  S.flash *= dk(0.88, fs);
   if (beat) {
     S.flash = Math.min(1, S.flash + 0.5 + E * 0.5);
     if (rings.length < 7) rings.push({ r: coreR, a: 0.55 + E * 0.45, sp: R * (0.012 + E * 0.03) });
@@ -121,12 +122,13 @@ export const GRAVITY: ThemeDraw = ({
   // --- bodies + comet tails ---
   const spr = bodySprite(C1(0.9, 76));
   const decay = (0.00015 + E2 * 0.0055) * sp;
-  const relax = 0.05 * (1 - E * 0.9);
+  const shrink = dk(1 - decay, fs);        // orbital decay, as a rate rather than a per-frame step
+  const relax = ak(0.05 * (1 - E * 0.9), fs);
   const rate = KEP * sp * (0.55 + E * 1.7);
   const TSEG = 4;
   for (let i = orbs.length - 1; i >= 0; i--) {
     const o = orbs[i];
-    if (o.fi < 1) o.fi = Math.min(1, o.fi + 0.03);
+    if (o.fi < 1) o.fi = Math.min(1, o.fi + 0.03 * fs);
 
     if (beat) {
       const kick = (0.05 + E * 0.32) * I * (0.5 + Math.random() * 0.9);
@@ -137,7 +139,7 @@ export const GRAVITY: ThemeDraw = ({
     // the orbit decays inward until the core slingshots it out again.
     o.e += (o.e0 - o.e) * relax;
     o.a += (o.a0 - o.a) * relax;
-    o.a *= 1 - decay;
+    o.a *= shrink;
     if (o.e > 0.88) o.e = 0.88;
     if (o.e < 0.01) o.e = 0.01;
     if (o.a > 0.7) o.a = 0.7; // repeated kicks must not balloon an orbit forever
@@ -156,8 +158,9 @@ export const GRAVITY: ThemeDraw = ({
     const denom = 1 + o.e * Math.cos(o.th);
     const rn = semi / (denom > 0.06 ? denom : 0.06);
     let dth = (rate * Math.sqrt(Math.max(1e-4, semi))) / Math.max(1e-4, rn * rn);
+    // clamped as a 60Hz-equivalent step, then carried to this frame
     if (dth > 0.3) dth = 0.3;
-    o.th += dth * o.dir;
+    o.th += dth * o.dir * fs;
     if (o.th > TAU) o.th -= TAU;
     if (o.th < 0) o.th += TAU;
 
@@ -193,8 +196,8 @@ export const GRAVITY: ThemeDraw = ({
     glow(Math.min(26, 14 * (1 + beatE)), C2());
     for (let i = rings.length - 1; i >= 0; i--) {
       const rg2 = rings[i];
-      rg2.r += rg2.sp * sp * (1 + E);
-      rg2.a *= 0.9;
+      rg2.r += rg2.sp * sp * (1 + E) * fs;
+      rg2.a *= dk(0.9, fs);
       if (rg2.a < 0.04 || rg2.r > R * 1.1) { rings.splice(i, 1); continue; }
       c.strokeStyle = C2(rg2.a * 0.6, 78);
       c.lineWidth = (1 + rg2.a * 3) * TK;

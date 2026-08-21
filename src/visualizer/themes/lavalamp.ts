@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Blob {
   x: number; y: number;
@@ -24,7 +25,7 @@ const TANG = HALF_PI * 0.78;   // where the goo bridge leaves each blob
 // many seconds. A driving passage boils the lamp — a dozen small blobs erupting
 // off the base, splitting mid-climb and churning.
 export const LAVALAMP: ThemeDraw = ({
-  c, w, h, R, vt, beat, beatE, energy, cfg, bassV, midV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, R, fs, vt, beat, beatE, energy, cfg, bassV, midV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.lavalamp ??= {
     blobs: [] as Blob[],
@@ -72,11 +73,11 @@ export const LAVALAMP: ThemeDraw = ({
   }
 
   // --- energy: everything about the wax's temperament -----------------------
-  S.boil = S.boil * 0.9 + (beat ? 0.6 + E * 0.4 : 0) ;
+  S.boil = S.boil * dk(0.9, fs) + (beat ? 0.6 + E * 0.4 : 0);
   const boil = S.boil > 1.4 ? 1.4 : S.boil;
   const target = 3 + Math.round(E * 9);              // 3 fat lumps → 12 small ones
-  const buoy = R * (0.000045 + E * 0.00055) * sp * I; // creep → erupt
-  const visc = 0.972 - E * 0.055;                    // treacle → thin boiling wax
+  const buoy = R * (0.000045 + E * 0.00055) * sp * I * fs; // creep → erupt
+  const visc = dk(0.972 - E * 0.055, fs);            // treacle → thin boiling wax
   const heatRate = 0.0022 + E * 0.019;               // slow soak → instant flash
   const wobble = 0.006 + E * 0.03;
 
@@ -110,7 +111,7 @@ export const LAVALAMP: ThemeDraw = ({
   }
 
   // --- split: fat lumps tear in two, violently when the music drives --------
-  const wantSplit = live < target && (beat ? Math.random() < 0.35 + E * 0.6 : Math.random() < E * 0.06);
+  const wantSplit = live < target && (beat ? Math.random() < 0.35 + E * 0.6 : Math.random() < E * 0.06 * fs);
   if (wantSplit) {
     let big = -1, bigR = rMin * 1.6;
     for (let i = 0; i < MAXB; i++) if (blobs[i].live && blobs[i].r > bigR) { bigR = blobs[i].r; big = i; }
@@ -146,14 +147,14 @@ export const LAVALAMP: ThemeDraw = ({
     const yn = (b.y - topY) / span;
     // the base is the heater, the metal cap is the condenser
     const src = yn > 0.78 ? 1 : yn < 0.2 ? 0 : 0.5;
-    b.heat += (src - b.heat) * heatRate * sp * (1 + bassV * 0.8);
+    b.heat += (src - b.heat) * heatRate * sp * (1 + bassV * 0.8) * fs;
     b.vy -= (b.heat - 0.5) * buoy * 2 * (1 + boil * 0.5);
-    b.vx += Math.sin(vt * wobble * sp + b.ph) * R * 0.00008 * (1 + E * 4);
+    b.vx += Math.sin(vt * wobble * sp + b.ph) * R * 0.00008 * (1 + E * 4) * fs;
     b.vx *= visc;
     b.vy *= visc;
-    b.x += b.vx * sp;
-    b.y += b.vy * sp;
-    b.ph += 0.01 + E * 0.03;
+    b.x += b.vx * sp * fs;
+    b.y += b.vy * sp * fs;
+    b.ph += (0.01 + E * 0.03) * fs;
 
     // glass walls
     const yn2 = (b.y - topY) / span;

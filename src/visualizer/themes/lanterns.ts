@@ -63,8 +63,8 @@ export const LANTERNS: ThemeDraw = ({ c, w, h, fs, vt, beat, beatE, cfg, bassV, 
   // light is additive from here on
   c.globalCompositeOperation = "lighter";
   for (const ln of S.l) {
-    ln.y -= ln.sp * (0.0006 + bassV * 0.0007) * cfg.speed;
-    ln.x += Math.sin(vt * 0.008 + ln.sway) * 0.0005;
+    ln.y -= ln.sp * (0.0006 + bassV * 0.0007) * cfg.speed * fs;
+    ln.x += Math.sin(vt * 0.008 + ln.sway) * 0.0005 * fs;
     if (ln.y < -0.08) { ln.y = 1.05; ln.x = Math.random(); }
     const lx = ln.x * w;
     const ly = ln.y * (waterY - h * 0.05);
@@ -113,8 +113,8 @@ export const LANTERNS: ThemeDraw = ({ c, w, h, fs, vt, beat, beatE, cfg, bassV, 
 
   for (let i = S.embers.length - 1; i >= 0; i--) {
     const e = S.embers[i];
-    e.x += e.vx;
-    e.y += e.vy;
+    e.x += e.vx * fs;
+    e.y += e.vy * fs;
     e.a *= dk(0.97, fs);
     if (e.a < 0.05) { S.embers.splice(i, 1); continue; }
     c.fillStyle = C1(e.a, 75);

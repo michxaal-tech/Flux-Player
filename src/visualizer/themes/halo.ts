@@ -11,7 +11,7 @@ export const HALO: ThemeDraw = ({ c, cx, cy, R, fs, freq, liveAudio, vt, beat, b
   if (beat) S.echoes.push({ r: r0, a: 0.8 });
   for (let i = S.echoes.length - 1; i >= 0; i--) {
     const e = S.echoes[i];
-    e.r += R * 0.018;
+    e.r += R * 0.018 * fs;
     e.a *= dk(0.9, fs);
     if (e.a < 0.03) { S.echoes.splice(i, 1); continue; }
     c.beginPath();

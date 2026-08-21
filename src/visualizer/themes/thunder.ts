@@ -1,11 +1,12 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Bolt { pts: [number, number][]; a: number; hue: number; }
 
 // Storm cell. Rolling cloud banks pulse with the low end, rain falls with the
 // treble, and every beat rips a branching lightning bolt from cloud to ground
 // with a full-sky flash.
-export const THUNDER: ThemeDraw = ({ c, w, h, vt, beat, beatE, bassV, midV, trebV, TK, C1, C2, CMix, glow, noGlow, L }) => {
+export const THUNDER: ThemeDraw = ({ c, fs, w, h, vt, beat, beatE, bassV, midV, trebV, TK, C1, C2, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.thunder ??= {
     bolts: [] as Bolt[],
     rain: Array.from({ length: 90 }, () => ({ x: Math.random(), y: Math.random(), sp: 0.5 + Math.random() })),
@@ -40,7 +41,7 @@ export const THUNDER: ThemeDraw = ({ c, w, h, vt, beat, beatE, bassV, midV, treb
 
   for (let i = S.bolts.length - 1; i >= 0; i--) {
     const b = S.bolts[i];
-    b.a *= 0.82;
+    b.a *= dk(0.82, fs);
     if (b.a < 0.05) { S.bolts.splice(i, 1); continue; }
     // main channel + faint wide halo
     for (const [lw, alpha, l2] of [[7, b.a * 0.25, 70], [2.4, b.a, 88]] as const) {
@@ -80,8 +81,8 @@ export const THUNDER: ThemeDraw = ({ c, w, h, vt, beat, beatE, bassV, midV, treb
   c.lineWidth = 1 * TK;
   c.beginPath();
   for (const r of S.rain) {
-    r.y += (rainSpeed * r.sp) / h;
-    r.x += 0.0008;
+    r.y += ((rainSpeed * r.sp) / h) * fs;
+    r.x += 0.0008 * fs;
     if (r.y > 1) { r.y = -0.02; r.x = Math.random(); }
     const rx = r.x * w, ry = r.y * h;
     c.moveTo(rx, ry);

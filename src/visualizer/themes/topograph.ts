@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Peak {
   /** grid coordinates */ gx: number; gy: number;
@@ -30,7 +31,7 @@ const TAU = Math.PI * 2;
 // every beat punches a sharp peak up through the surface, the contours pack in
 // tight around it and ripple outward before the next hit lands.
 export const TOPOGRAPH: ThemeDraw = ({
-  c, w, h, R, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, fs, w, h, R, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.topograph ??= {
     field: new Float32Array(GW * GH),
@@ -84,16 +85,17 @@ export const TOPOGRAPH: ThemeDraw = ({
   }
   for (let i = peaks.length - 1; i >= 0; i--) {
     const p = peaks[i];
-    p.age += spd;
-    p.life *= 0.998 - E * 0.028;   // lingers for ~20s when calm, ~1s when loud
+    p.age += spd * fs;
+    p.life *= dk(0.998 - E * 0.028, fs);   // lingers for ~20s when calm, ~1s when loud
     if (p.life < 0.03) peaks.splice(i, 1);
   }
 
   // --- rebuild the elevation field -----------------------------------------
-  const fs = 1 + E * 3.2;                       // broad swells → tight ridges
+  // renamed from `fs`, which now means the engine's frame factor everywhere
+  const fieldScale = 1 + E * 3.2;               // broad swells → tight ridges
   const rate = (0.0035 + E * 0.028) * spd;
-  const kx = [2.1 * fs, -1.4 * fs, 3.6 * fs];
-  const ky = [1.3 * fs, 2.6 * fs, -3.0 * fs];
+  const kx = [2.1 * fieldScale, -1.4 * fieldScale, 3.6 * fieldScale];
+  const ky = [1.3 * fieldScale, 2.6 * fieldScale, -3.0 * fieldScale];
   const phs = [vt * rate, vt * rate * 0.72 + 1.7, vt * rate * 1.35 + 3.2];
   amp[0] = 0.62 * (0.55 + E * 0.7) * (1 + bassV * 0.3);
   amp[1] = 0.4 * (0.55 + E * 0.7);
@@ -271,7 +273,7 @@ export const TOPOGRAPH: ThemeDraw = ({
   noGlow();
 
   // --- survey scan sweeping the sheet --------------------------------------
-  S.scan += (0.0014 + E * 0.0042) * spd;
+  S.scan += (0.0014 + E * 0.0042) * spd * fs;
   if (S.scan > 1.2) S.scan = -0.2;
   const sxp = S.scan * w;
   const bandW = w * (0.07 + E * 0.06);

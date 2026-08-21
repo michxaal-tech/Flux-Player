@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk, ak } from "../rate";
 
 /** suspended particle in the water column, 0..1 space */
 interface Mote { x: number; y: number; z: number; ph: number }
@@ -56,7 +57,7 @@ function spraySprite(color: string): HTMLCanvasElement {
  * bloom of light. `section` moves the palette, the spine count and the drift.
  */
 export const LEVIATHAN: ThemeDraw = ({
-  c, w, h, cx, cy, R, vt, beat, beatE, hit, hitE, energy, dropE, section,
+  c, w, h, cx, cy, R, fs, vt, beat, beatE, hit, hitE, energy, dropE, section,
   cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.leviathan ??= {
@@ -98,15 +99,15 @@ export const LEVIATHAN: ThemeDraw = ({
   // ── layer weights: smoothstep + inertia so layers never strobe at a edge ──
   const t2 = Math.max(sstep(0.2, 0.44, E), sstep(0.32, 0.66, bv) * 0.8);
   const t3 = Math.max(sstep(0.46, 0.72, E), sstep(0.4, 0.75, cl01(midV)) * 0.85);
-  S.w2 += (t2 - S.w2) * 0.03;
-  S.w3 += (t3 - S.w3) * 0.025;
+  S.w2 += (t2 - S.w2) * ak(0.03, fs);
+  S.w3 += (t3 - S.w3) * ak(0.025, fs);
   const W2 = cl01(S.w2);
   const W3 = cl01(S.w3);
 
   // ── drop charge + breach trigger ──────────────────────────────────────────
-  S.charge += (D - S.charge) * 0.1;
+  S.charge += (D - S.charge) * ak(0.1, fs);
   const CH = cl01(S.charge);
-  S.cool--;
+  S.cool -= fs;
   let justBreached = false;
   if (D > 0.5 && D < S.prevD - 0.004 && S.cool <= 0) {
     S.cool = 90;
@@ -117,15 +118,15 @@ export const LEVIATHAN: ThemeDraw = ({
   S.prevD = D;
   // breach arc: up fast, hang, fall back — ~110 frames
   if (S.bt >= 0) {
-    S.bt += spd;
+    S.bt += spd * fs;
     const p = S.bt / 110;
     if (p >= 1) { S.bt = -1; S.breach = 0; }
     else S.breach = Math.sin(Math.PI * Math.pow(p, 0.72));
   } else {
-    S.breach *= 0.9;
+    S.breach *= dk(0.9, fs);
   }
   const BR = cl01(S.breach);
-  S.bloom *= 0.93;
+  S.bloom *= dk(0.93, fs);
   const BL = cl01(S.bloom);
 
   // ── geometry: waterline, creature crest ───────────────────────────────────
@@ -148,11 +149,11 @@ export const LEVIATHAN: ThemeDraw = ({
   c.fillRect(0, 0, w, h);
 
   // ── STAGE 1: drifting motes, batched into 3 fills ─────────────────────────
-  const rise = (0.00035 + E * 0.0006) * spd;
+  const rise = (0.00035 + E * 0.0006) * spd * fs;
   for (let i = 0; i < MOTES; i++) {
     const m = motes[i];
     m.y -= rise * (0.3 + m.z) * (1 - CH * 1.9);       // charge reverses the drift
-    m.x += Math.sin(vt * 0.006 + m.ph) * 0.0004 * spd * S.drift;
+    m.x += Math.sin(vt * 0.006 + m.ph) * 0.0004 * spd * S.drift * fs;
     if (m.y < -0.03) { m.y = 1.03; m.x = Math.random(); }
     else if (m.y > 1.06) { m.y = -0.03; m.x = Math.random(); }
     if (m.x < -0.02) m.x = 1.02; else if (m.x > 1.02) m.x = -0.02;
@@ -344,8 +345,8 @@ export const LEVIATHAN: ThemeDraw = ({
       c.lineWidth = (1 + BR * 2) * TK;
       for (let i = wakes.length - 1; i >= 0; i--) {
         const k = wakes[i];
-        k.r += R * (0.016 + E * 0.02) * spd;
-        k.a *= 0.93;
+        k.r += R * (0.016 + E * 0.02) * spd * fs;
+        k.a *= dk(0.93, fs);
         if (k.a < 0.04 || k.r > R * 1.5) { wakes.splice(i, 1); continue; }
         c.strokeStyle = C1(Math.min(0.35, k.a * 0.3), 68);
         c.beginPath();
@@ -359,10 +360,10 @@ export const LEVIATHAN: ThemeDraw = ({
     const grav = h * 0.0004;
     for (let i = spray.length - 1; i >= 0; i--) {
       const p = spray[i];
-      p.x += p.vx * spd;
-      p.y += p.vy * spd;
-      p.vy += grav * spd;
-      p.a *= 0.962;
+      p.x += p.vx * spd * fs;
+      p.y += p.vy * spd * fs;
+      p.vy += grav * spd * fs;
+      p.a *= dk(0.962, fs);
       if (p.a < 0.045 || p.y > h * 1.05) { spray.splice(i, 1); continue; }
       const r = p.sz * (1 + BE * 0.4) * TK * 3;
       c.globalAlpha = Math.min(0.75, p.a * (0.45 + I * 0.55));

@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { ak } from "../rate";
 
 // ORRERY — nested orbital rings tilted in 3D, with bodies running along them.
 // Real perspective: every point is rotated in two axes and divided by depth, so
@@ -50,7 +51,7 @@ interface State {
 }
 
 export const ORRERY: ThemeDraw = (x) => {
-  const { c, cx, cy, R, vt, freq, beat, beatE, energy, dropE, hit, hitE, cfg, bassV, midV, trebV, TK, C1, C2, CMix, glow, noGlow, L } = x;
+  const { c, fs, cx, cy, R, vt, freq, beat, beatE, energy, dropE, hit, hitE, cfg, bassV, midV, trebV, TK, C1, C2, CMix, glow, noGlow, L } = x;
 
   const S = (L.scratch.orrery ??= {
     bodies: [] as Body[],
@@ -76,13 +77,13 @@ export const ORRERY: ThemeDraw = (x) => {
 
   const t2 = cl01((energy - 0.3) / 0.28);
   const t3 = cl01((energy - 0.55) / 0.28);
-  S.w2 += (t2 - S.w2) * 0.03;
-  S.w3 += (t3 - S.w3) * 0.03;
+  S.w2 += (t2 - S.w2) * ak(0.03, fs);
+  S.w3 += (t3 - S.w3) * ak(0.03, fs);
 
-  S.spin += (0.003 + energy * 0.006) * cfg.speed;
+  S.spin += (0.003 + energy * 0.006) * cfg.speed * fs;
   // a drop tips the whole system to face you, then it eases back
   const tiltTarget = 0.5 - dropE * 0.46;
-  S.tilt += (tiltTarget - S.tilt) * 0.06;
+  S.tilt += (tiltTarget - S.tilt) * ak(0.06, fs);
   S.flare = Math.max(S.flare * 0.93, dropE);
 
   const ct = Math.cos(S.tilt), stl = Math.sin(S.tilt);
@@ -145,7 +146,7 @@ export const ORRERY: ThemeDraw = (x) => {
     // painter's order so near bodies cover far ones
     const drawList: { px: number; py: number; d: number; b: Body }[] = [];
     for (const b of S.bodies) {
-      b.a += b.sp * cfg.speed * (1 + energy * 0.8 + dropE * 3);
+      b.a += b.sp * cfg.speed * (1 + energy * 0.8 + dropE * 3) * fs;
       const [px, py, d] = proj(b.a, ringR(b.ring), 0, tiltS[b.ring], tiltC[b.ring]);
       if (d < 0) continue;
       drawList.push({ px, py, d, b });

@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Ring {
   /** radius in grid units */
@@ -25,8 +26,8 @@ export const DOTGRID: ThemeDraw = ({
 
   if (beat) S.rings.push({ r: 0, amp: 0.7 + bassV * 0.8 });
   for (let i = S.rings.length - 1; i >= 0; i--) {
-    S.rings[i].r += 0.42;
-    S.rings[i].amp *= 0.982;
+    S.rings[i].r += 0.42 * fs;
+    S.rings[i].amp *= dk(0.982, fs);
     if (S.rings[i].r > 30 || S.rings[i].amp < 0.05) S.rings.splice(i, 1);
   }
   if (S.rings.length > 14) S.rings.splice(0, S.rings.length - 14);

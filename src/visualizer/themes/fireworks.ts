@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 import { light } from "../light";
 
 interface Rocket { x: number; y: number; vy: number; targetY: number; hue: number; }
@@ -10,7 +11,7 @@ interface Spark {
 // Fireworks show. Every beat launches rockets that climb with sparkling
 // trails and burst into peony shells at the top; quiet passages get small
 // ambient launches so the sky never goes dead.
-export const FIREWORKS: ThemeDraw = ({ c, w, h, t, vt, every, beat, beatE, bassV, trebV, TK, CMix, glow, noGlow, L }) => {
+export const FIREWORKS: ThemeDraw = ({ c, fs, w, h, t, vt, every, beat, beatE, bassV, trebV, TK, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.fireworks ??= { rockets: [] as Rocket[], sparks: [] as Spark[] });
 
   const launch = (big: boolean) => {
@@ -31,7 +32,7 @@ export const FIREWORKS: ThemeDraw = ({ c, w, h, t, vt, every, beat, beatE, bassV
   // rockets climb, dropping a sparkle trail
   for (let i = S.rockets.length - 1; i >= 0; i--) {
     const r = S.rockets[i];
-    r.y += r.vy;
+    r.y += r.vy * fs;
     if (every(2))
       S.sparks.push({
         x: r.x + (Math.random() - 0.5) * 3, y: r.y, vx: (Math.random() - 0.5) * 0.4,
@@ -66,11 +67,11 @@ export const FIREWORKS: ThemeDraw = ({ c, w, h, t, vt, every, beat, beatE, bassV
   // sparks: drag + gravity + twinkle
   for (let i = S.sparks.length - 1; i >= 0; i--) {
     const s2 = S.sparks[i];
-    s2.x += s2.vx;
-    s2.y += s2.vy;
-    s2.vx *= 0.965;
+    s2.x += s2.vx * fs;
+    s2.y += s2.vy * fs;
+    s2.vx *= dk(0.965, fs);
     s2.vy = s2.vy * 0.965 + h * 0.00022;
-    s2.a *= s2.sz > 6 ? 0.82 : 0.972; // core flashes die fast
+    s2.a *= dk(s2.sz > 6 ? 0.82 : 0.972, fs); // core flashes die fast
     if (s2.a < 0.03 || s2.y > h * 1.05) { S.sparks.splice(i, 1); continue; }
     const twinkle = 0.55 + 0.45 * Math.sin(vt * 0.3 + s2.tw);
     const rr = s2.sz * (s2.sz > 6 ? s2.a : 1) * TK;

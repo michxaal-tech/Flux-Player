@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk, ak } from "../rate";
 
 interface Gear {
   /** centre, in units of R relative to screen centre (survives any resize) */
@@ -62,7 +63,7 @@ function sparkSprite(color: string): HTMLCanvasElement {
 // big wheels smear into blurred ghosts, the escapement hammers back and forth,
 // and sparks are thrown off the mesh points.
 export const MECHANISM: ThemeDraw = ({
-  c, w, h, cx, cy, R, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, cx, cy, R, fs, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.mechanism ??= {
     key: "",
@@ -141,16 +142,16 @@ export const MECHANISM: ThemeDraw = ({
   const N0 = gears[0].n;
 
   // --- drive rate: stately when calm, racing when driving ---
-  const rate = (0.0055 + E2 * 0.075) * sp * (1 + bassV * 0.5 + beatE * (0.3 + E * 1.4));
+  const rate = (0.0055 + E2 * 0.075) * sp * (1 + bassV * 0.5 + beatE * (0.3 + E * 1.4)) * fs;
   S.drive += rate;
   if (S.drive > TAU * 1e5) S.drive -= TAU * 1e5;
   S.wind += rate * 0.5;
 
   // escapement: one hard flip per beat, hammering when loud
-  S.tick = Math.max(0, S.tick - 1);
+  S.tick = Math.max(0, S.tick - fs);
   if (beat) { S.escTo = -S.escTo; S.tick = 6; }
-  else if (E > 0.55 && S.tick === 0 && Math.random() < E2 * 0.35) { S.escTo = -S.escTo; S.tick = 3; }
-  S.esc += (S.escTo - S.esc) * (0.16 + E * 0.5);
+  else if (E > 0.55 && S.tick <= 0 && Math.random() < E2 * 0.35 * fs) { S.escTo = -S.escTo; S.tick = 3; }
+  S.esc += (S.escTo - S.esc) * ak(0.16 + E * 0.5, fs);
 
   // --- brass plate, painted opaque ---
   c.globalCompositeOperation = "source-over";
@@ -279,7 +280,7 @@ export const MECHANISM: ThemeDraw = ({
     c.lineCap = "butt";
 
     // sparks off the mesh points when the movement is really going
-    if ((beat || Math.random() < E2 * 0.45) && sparks.length < MAX_SPARKS) {
+    if ((beat || Math.random() < E2 * 0.45 * fs) && sparks.length < MAX_SPARKS) {
       const src = gears[1 + Math.floor(Math.random() * Math.max(1, gears.length - 1))];
       const pg = gears[src.parent < 0 ? 0 : src.parent];
       const mx = cx + (pg.x + Math.cos(src.phi) * pg.r) * R;
@@ -299,11 +300,11 @@ export const MECHANISM: ThemeDraw = ({
     const spr = sparkSprite(C2(0.9, 74));
     for (let i = sparks.length - 1; i >= 0; i--) {
       const s2 = sparks[i];
-      s2.x += s2.vx * sp;
-      s2.y += s2.vy * sp;
-      s2.vy += R * 0.00035;
-      s2.vx *= 0.965;
-      s2.a *= 0.9;
+      s2.x += s2.vx * sp * fs;
+      s2.y += s2.vy * sp * fs;
+      s2.vy += R * 0.00035 * fs;
+      s2.vx *= dk(0.965, fs);
+      s2.a *= dk(0.9, fs);
       if (s2.a < 0.05) { sparks.splice(i, 1); continue; }
       const rr = Math.max(1, R * 0.008 * s2.a * TK * (1 + trebV));
       c.globalAlpha = Math.min(0.8, s2.a);

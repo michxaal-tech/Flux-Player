@@ -35,8 +35,8 @@ export const CRYSTAL: ThemeDraw = ({ c, cx, cy, R, fs, freq, liveAudio, vt, beat
 
   for (const sh of S.shards) {
     const fv = liveAudio ? freq[sh.band] / 255 : 0.15 + 0.1 * Math.sin(vt * 0.02 + sh.rot);
-    sh.ang += 0.0018 * sh.spin * (1 + beatE * 1.5);
-    sh.rot += 0.006 * sh.spin;
+    sh.ang += 0.0018 * sh.spin * (1 + beatE * 1.5) * fs;
+    sh.rot += 0.006 * sh.spin * fs;
     const d = R * sh.dist * (1 + fv * 0.18 + beatE * 0.08);
     const x = cx + Math.cos(sh.ang) * d;
     const y = cy + Math.sin(sh.ang) * d * 0.85;

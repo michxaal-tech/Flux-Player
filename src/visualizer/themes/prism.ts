@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Beam {
   /** incoming angle (direction the light travels toward the prism) */
@@ -74,7 +75,7 @@ function getRay(i: number, color: string, key: string): HTMLCanvasElement {
 // every beat fractures the input into extra splayed beams, and each fan
 // shatters into strobing, jittering rays that spray the whole screen.
 export const PRISM: ThemeDraw = ({
-  c, w, h, cx, cy, R, vt, beat, beatE, energy, dropE, hit, hitE, cfg, bassV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, cx, cy, R, fs, every, vt, beat, beatE, energy, dropE, hit, hitE, cfg, bassV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.prism ??= {
     beams: [] as Beam[],
@@ -98,18 +99,20 @@ export const PRISM: ThemeDraw = ({
   // whole 360°, and throws shockwaves. `burn` decays slowly so the aftermath
   // keeps glowing instead of snapping back the instant the envelope falls.
   const D = dropE;
-  S.burn = Math.max(S.burn * 0.965, D);
+  S.burn = Math.max(S.burn * dk(0.965, fs), D);
   const B = S.burn;
   // energy is bumped by the drop so every existing energy-driven term escalates
   const E = Math.min(1.6, energy + D * 0.85);
 
   // ── prism spin: a lazy turn when calm, a blur when driving ────────────────
-  S.rot += (0.0035 + E * 0.055 + beatE * 0.05 * E + D * D * 0.42) * cfg.speed;
-  S.drift += (0.0012 + E * 0.006 + D * 0.03) * cfg.speed;
-  S.flash *= 0.88;
-  if (D > 0.5 && S.waves.length < 5 && (vt | 0) % 9 === 0) S.waves.push(0);
+  S.rot += (0.0035 + E * 0.055 + beatE * 0.05 * E + D * D * 0.42) * cfg.speed * fs;
+  S.drift += (0.0012 + E * 0.006 + D * 0.03) * cfg.speed * fs;
+  S.flash *= dk(0.88, fs);
+  // `every(9)` rather than `(vt | 0) % 9`: vt is a float, so the integer test
+  // fires once per frame that lands in a new unit — twice as often at 120Hz
+  if (D > 0.5 && S.waves.length < 5 && every(9)) S.waves.push(0);
   for (let i = S.waves.length - 1; i >= 0; i--) {
-    S.waves[i] += (0.014 + D * 0.03) * cfg.speed;
+    S.waves[i] += (0.014 + D * 0.03) * cfg.speed * fs;
     if (S.waves[i] > 1) S.waves.splice(i, 1);
   }
 
@@ -145,8 +148,8 @@ export const PRISM: ThemeDraw = ({
 
   for (let i = beams.length - 1; i >= 1; i--) {
     const b = beams[i];
-    b.life -= 1 + E * 0.6;
-    b.a *= 0.975;
+    b.life -= (1 + E * 0.6) * fs;
+    b.a *= dk(0.975, fs);
     if (b.life <= 0 || b.a < 0.06) beams.splice(i, 1);
   }
   // splinters die off fast once the music calms down
@@ -295,10 +298,10 @@ export const PRISM: ThemeDraw = ({
     const grav = R * 0.00018;
     for (let i = shards.length - 1; i >= 0; i--) {
       const s = shards[i];
-      s.x += s.vx * cfg.speed; s.y += s.vy * cfg.speed;
-      s.vy += grav;
-      s.rot += s.vr;
-      s.a *= 0.955 - E * 0.012;
+      s.x += s.vx * cfg.speed * fs; s.y += s.vy * cfg.speed * fs;
+      s.vy += grav * fs;
+      s.rot += s.vr * fs;
+      s.a *= dk(0.955 - E * 0.012, fs);
       if (s.a < 0.05) shards.splice(i, 1);
     }
     for (let t = 0; t < SHARD_TIERS; t++) {

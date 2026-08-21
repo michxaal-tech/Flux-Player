@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Blob {
   x: number; y: number; vx: number; vy: number;
@@ -44,7 +45,7 @@ function getPuff(i: number, inner: string, mid: string): HTMLCanvasElement {
 // streaks that churn and dissipate almost immediately. Each beat is a fresh
 // drop hitting the surface.
 export const INKFLOW: ThemeDraw = ({
-  c, w, h, cx, cy, R, vt, beat, beatE, energy, cfg, bassV, midV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, cx, cy, R, fs, vt, beat, beatE, energy, cfg, bassV, midV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.inkflow ??= {
     blobs: [] as Blob[],
@@ -64,11 +65,11 @@ export const INKFLOW: ThemeDraw = ({
 
   // ── energy-driven fluid constants ─────────────────────────────────────────
   // Glassy & suspended when calm; violent, small-scale turbulence when loud.
-  const damp = 0.9 + E * 0.088;              // 0.90 (ink stalls) → 0.988 (it keeps going)
-  const curl = R * (0.0006 + E * 0.0075) * I;
+  const damp = dk(0.9 + E * 0.088, fs);      // 0.90 (ink stalls) → 0.988 (it keeps going)
+  const curl = R * (0.0006 + E * 0.0075) * I * fs;
   const fieldK = 0.0035 + E * 0.014;         // large lazy eddies → tight churn
-  const grow = R * (0.0022 + E * 0.0032) * cfg.speed;
-  const fade = 0.9955 - E * 0.021;           // hangs for ~10s → gone in ~1s
+  const grow = R * (0.0022 + E * 0.0032) * cfg.speed * fs;
+  const fade = dk(0.9955 - E * 0.021, fs);   // hangs for ~10s → gone in ~1s
   const rCap = R * 0.075;
 
   const inject = (ix: number, iy: number, n: number, force: number) => {
@@ -101,7 +102,7 @@ export const INKFLOW: ThemeDraw = ({
       R * (0.0015 + E * 0.014) * (1 + beatE) * I,
     );
   }
-  S.spawnT--;
+  S.spawnT -= fs;
   if (S.spawnT <= 0) {
     inject(
       cx + (Math.random() - 0.5) * w * 0.7,
@@ -115,8 +116,8 @@ export const INKFLOW: ThemeDraw = ({
   // ── blooming cores at the injection points ────────────────────────────────
   for (let i = S.blooms.length - 1; i >= 0; i--) {
     const bl = S.blooms[i];
-    bl.r += R * (0.004 + E * 0.012) * cfg.speed;
-    bl.a *= 0.9 - E * 0.06;
+    bl.r += R * (0.004 + E * 0.012) * cfg.speed * fs;
+    bl.a *= dk(0.9 - E * 0.06, fs);
     if (bl.a < 0.03) { S.blooms.splice(i, 1); continue; }
     const g = c.createRadialGradient(bl.x, bl.y, 0, bl.x, bl.y, bl.r);
     g.addColorStop(0, C1(bl.a * 0.5, 82));
@@ -129,7 +130,7 @@ export const INKFLOW: ThemeDraw = ({
   }
 
   // ── advect the ink ────────────────────────────────────────────────────────
-  const drift = R * 0.00025 * (1 - E);   // slow upward hang when calm
+  const drift = R * 0.00025 * (1 - E) * fs;   // slow upward hang when calm
   for (let i = 0; i < MAX; i++) {
     const b = blobs[i];
     if (b.a <= 0.02) continue;
@@ -141,8 +142,8 @@ export const INKFLOW: ThemeDraw = ({
     b.vy += Math.sin(ang) * curl - drift;
     b.vx *= damp;
     b.vy *= damp;
-    b.x += b.vx * cfg.speed;
-    b.y += b.vy * cfg.speed;
+    b.x += b.vx * cfg.speed * fs;
+    b.y += b.vy * cfg.speed * fs;
     if (b.r < rCap) b.r += grow;
     b.a *= fade;
     // recycle anything that wanders far off-frame

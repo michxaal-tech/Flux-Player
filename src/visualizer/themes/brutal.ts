@@ -1,15 +1,16 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 // Brutalist poster: giant flat shapes, hard edges, stark typography, zero
 // glow. The composition snaps to a new arrangement on every beat like pages
 // of a Swiss design annual flipping to the music.
-export const BRUTAL: ThemeDraw = ({ c, w, h, freq, liveAudio, beat, beatE, bassV, midV, TK, C1, C2, CMix, L }) => {
+export const BRUTAL: ThemeDraw = ({ c, fs, w, h, freq, liveAudio, beat, beatE, bassV, midV, TK, C1, C2, CMix, L }) => {
   const S = (L.scratch.brutal ??= { seed: 1, flip: 0 });
   if (beat) {
     S.seed = (S.seed * 16807) % 2147483647;
     S.flip = 1;
   }
-  S.flip *= 0.88;
+  S.flip *= dk(0.88, fs);
   // cheap deterministic PRNG from the seed so the layout is stable between beats
   const rnd = (i: number) => {
     let x = (S.seed + i * 374761393) % 2147483647;

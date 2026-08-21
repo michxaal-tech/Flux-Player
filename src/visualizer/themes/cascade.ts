@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import {  } from "../rate";
 
 // CASCADE — terraces of falling light, added one per drop.
 //
@@ -15,7 +16,7 @@ interface Drop { x: number; y: number; sp: number; len: number }
 interface State { d: Drop[][]; ph: number[] }
 
 export const CASCADE: ThemeDraw = (x) => {
-  const { c, w, h, cx, cy, R, freq, beatE, energy, dropE, bassV, midV, cfg, TK, C1, C2, CMix, glow, noGlow, L } = x;
+  const { c, fs, w, h, cx, cy, R, freq, beatE, energy, dropE, bassV, midV, cfg, TK, C1, C2, CMix, glow, noGlow, L } = x;
 
   const S = (L.scratch.cascade ??= { d: [] as Drop[][], ph: [] as number[] }) as State;
   const tiers = Math.min(MAXT, 1 + L.dropSlots);
@@ -35,7 +36,7 @@ export const CASCADE: ThemeDraw = (x) => {
     // ledges narrow as they rise, so the shape reads as a stepped fall
     const halfW = w * (0.42 - k * 0.028) * (0.7 + amt * 0.3);
     const hue = k / MAXT;
-    S.ph[k] += (0.01 + energy * 0.02) * cfg.speed;
+    S.ph[k] += (0.01 + energy * 0.02) * cfg.speed * fs;
 
     // the ledge itself: a spectrum-displaced edge, not a flat line
     glow(Math.min(18, 6 + amt * 10), CMix(hue));
@@ -70,7 +71,7 @@ export const CASCADE: ThemeDraw = (x) => {
     c.lineWidth = (0.7 + amt * 0.8) * TK;
     c.beginPath();
     for (const p of D) {
-      p.y += p.sp * (1 + energy + dropE * 1.5) * cfg.speed;
+      p.y += p.sp * (1 + energy + dropE * 1.5) * cfg.speed * fs;
       if (p.y > 1) { p.y = 0; p.x = Math.random(); }
       const px = cx - halfW + p.x * halfW * 2;
       // 0..1 maps to the whole remaining fall, so the top tier's water really

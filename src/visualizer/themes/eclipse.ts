@@ -1,13 +1,14 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Prominence { ang: number; life: number; sz: number; }
 
 // Total eclipse. A black sun with a live corona: rays breathe with the
 // spectrum, solar prominences erupt off the rim on every beat, and a lens
 // flare cuts across the frame when the music hits.
-export const ECLIPSE: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, beatE, bassV, midV, I, TK, C1, C2, CMix, glow, noGlow, L }) => {
+export const ECLIPSE: ThemeDraw = ({ c, fs, cx, cy, R, freq, liveAudio, vt, beat, beatE, bassV, midV, I, TK, C1, C2, CMix, glow, noGlow, L }) => {
   const S = (L.scratch.eclipse ??= { proms: [] as Prominence[], rot: 0 });
-  S.rot += 0.0012 + beatE * 0.004;
+  S.rot += (0.0012 + beatE * 0.004) * fs;
   const discR = R * 0.17;
 
   // corona rays, band-reactive
@@ -50,7 +51,7 @@ export const ECLIPSE: ThemeDraw = ({ c, cx, cy, R, freq, liveAudio, vt, beat, be
   }
   for (let i = S.proms.length - 1; i >= 0; i--) {
     const p = S.proms[i];
-    p.life *= 0.955;
+    p.life *= dk(0.955, fs);
     if (p.life < 0.06) { S.proms.splice(i, 1); continue; }
     const reach = discR * (0.4 + (1 - p.life) * 1.1) * p.sz;
     const bx = cx + Math.cos(p.ang) * discR, by = cy + Math.sin(p.ang) * discR;

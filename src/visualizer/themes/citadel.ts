@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk, ak } from "../rate";
 
 /** One extruded block of the city, living in world space (u lateral, d depth). */
 interface Tower {
@@ -80,7 +81,7 @@ const bandOf = (d: number) => (d < 1.5 ? 0 : d < 2.8 ? 1 : 2);
 //   • drop    — the charge runs up every tower, then a beam erupts skyward, the
 //               skyline blows apart into shards and rebuilds itself block by block
 export const CITADEL: ThemeDraw = ({
-  c, w, h, cx, R, freq, liveAudio, vt, beat, beatE, hit, hitE, energy, dropE, section,
+  c, w, h, cx, R, fs, freq, liveAudio, vt, beat, beatE, hit, hitE, energy, dropE, section,
   cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S: CitadelState = (L.scratch.citadel ??= {
@@ -117,9 +118,9 @@ export const CITADEL: ThemeDraw = ({
   }
 
   // ── layer weights: smoothed so nothing flickers at a threshold ───────────
-  S.w2 += (cl01((energy - 0.24) / 0.26) - S.w2) * 0.035;
-  S.w3 += (cl01((energy - 0.52) / 0.28) - S.w3) * 0.025;
-  S.chg += (dropE - S.chg) * 0.14;
+  S.w2 += (cl01((energy - 0.24) / 0.26) - S.w2) * ak(0.035, fs);
+  S.w3 += (cl01((energy - 0.52) / 0.28) - S.w3) * ak(0.025, fs);
+  S.chg += (dropE - S.chg) * ak(0.14, fs);
   const w2 = S.w2, w3 = S.w3, chg = S.chg;
 
   const HZ = h * 0.42;                 // horizon
@@ -180,7 +181,7 @@ export const CITADEL: ThemeDraw = ({
   c.fillRect(0, 0, w, h);
 
   // ── LAYER 1 — the foundation grid, always present ────────────────────────
-  S.gridPh += (0.0016 + energy * 0.0042) * cfg.speed;
+  S.gridPh += (0.0016 + energy * 0.0042) * cfg.speed * fs;
   const frac = S.gridPh - Math.floor(S.gridPh);
   const gFar = new Path2D();
   const gNear = new Path2D();
@@ -211,7 +212,9 @@ export const CITADEL: ThemeDraw = ({
 
   // ── advance the towers ───────────────────────────────────────────────────
   const fl = freq.length || 1;
-  const flow = (0.0016 + energy * 0.0034) * cfg.speed;
+  const flow = (0.0016 + energy * 0.0034) * cfg.speed * fs;
+  const slide = ak(0.03, fs);
+  const cool = dk(0.86, fs);
   for (let i = 0; i < TOWER_N; i++) {
     const t = S.tw[i];
     t.d -= flow;
@@ -226,14 +229,14 @@ export const CITADEL: ThemeDraw = ({
       t.hs = 0;
       t.rb = 0.1;
     }
-    t.u += (t.uT - t.u) * 0.03;
+    t.u += (t.uT - t.u) * slide;
     const fv = liveAudio
       ? freq[t.bin % fl] / 255
       : 0.3 + 0.26 * Math.sin(vt * 0.012 + t.ph * 6.2);
     const tgt = Math.min(1.25, (0.1 + fv * 1.05) * (0.45 + energy * 0.75) * (0.65 + I * 0.45));
-    t.hs += (tgt - t.hs) * (0.1 + beatE * 0.22);
-    if (t.rb < 1) t.rb = Math.min(1, t.rb + (0.011 + t.ph * 0.016) * cfg.speed);
-    t.lit *= 0.86;
+    t.hs += (tgt - t.hs) * ak(0.1 + beatE * 0.22, fs);
+    if (t.rb < 1) t.rb = Math.min(1, t.rb + (0.011 + t.ph * 0.016) * cfg.speed * fs);
+    t.lit *= cool;
   }
   if (hit) for (let k = 0; k < 5; k++) S.tw[(Math.random() * TOWER_N) | 0].lit = 1;
   S.tw.sort(byDepth);
@@ -399,13 +402,13 @@ export const CITADEL: ThemeDraw = ({
     c.lineTo(bx, 0);
     c.stroke();
     noGlow();
-    S.beam *= 0.955;
+    S.beam *= dk(0.955, fs);
   }
 
   // ground shockwave
   if (S.ringA > 0.02) {
-    S.ring += 0.022 * cfg.speed;
-    S.ringA *= 0.955;
+    S.ring += 0.022 * cfg.speed * fs;
+    S.ringA *= dk(0.955, fs);
     const rr = R * S.ring * 1.5;
     glow(Math.min(24, 12 * S.ringA + 6), C2());
     c.strokeStyle = C2(Math.min(0.45, S.ringA * 0.45), 70);
@@ -422,11 +425,11 @@ export const CITADEL: ThemeDraw = ({
   if (S.sh.length) {
     for (let i = S.sh.length - 1; i >= 0; i--) {
       const p = S.sh[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vy += h * 0.00035;
-      p.rot += p.vr;
-      p.a *= 0.968;
+      p.x += p.vx * fs;
+      p.y += p.vy * fs;
+      p.vy += h * 0.00035 * fs;
+      p.rot += p.vr * fs;
+      p.a *= dk(0.968, fs);
       if (p.a < 0.05 || p.y > h + 40) S.sh.splice(i, 1);
     }
     for (let b = 0; b < 3; b++) {
@@ -452,7 +455,7 @@ export const CITADEL: ThemeDraw = ({
   }
 
   // blast wash — kept faint; the trail buffer accumulates it
-  S.flash *= 0.88;
+  S.flash *= dk(0.88, fs);
   if (S.flash > 0.03) {
     c.fillStyle = C1(S.flash * 0.07, 72);
     c.fillRect(0, 0, w, h);

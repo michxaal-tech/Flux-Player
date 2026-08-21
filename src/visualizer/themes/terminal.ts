@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 const BLOCKS = ["░", "▒", "▓", "█"];
 const HEADER = "> FLUX PRO v5 — AUDIO ANALYSIS RUNNING _";
@@ -6,7 +7,7 @@ const HEADER = "> FLUX PRO v5 — AUDIO ANALYSIS RUNNING _";
 // Retro CRT terminal: an ASCII spectrum wall typed in phosphor characters,
 // scanlines, cursor blink. Beats glitch entire rows sideways and flash the
 // phosphor. A totally different, flat "hacker" aesthetic — no glow.
-export const TERMINAL: ThemeDraw = ({ c, w, h, t, freq, liveAudio, vt, beat, beatE, bassV, trebV, C1, CMix, L }) => {
+export const TERMINAL: ThemeDraw = ({ c, w, h, t, fs, freq, liveAudio, vt, beat, beatE, bassV, trebV, C1, CMix, L }) => {
   const S = (L.scratch.terminal ??= { glitchRows: [] as { row: number; off: number; life: number }[] });
 
   // opaque CRT background
@@ -23,7 +24,7 @@ export const TERMINAL: ThemeDraw = ({ c, w, h, t, freq, liveAudio, vt, beat, bea
 
   if (beat) S.glitchRows.push({ row: Math.floor(Math.random() * rows), off: (Math.random() - 0.5) * cw * 6, life: 1 });
   for (let i = S.glitchRows.length - 1; i >= 0; i--) {
-    S.glitchRows[i].life *= 0.82;
+    S.glitchRows[i].life *= dk(0.82, fs);
     if (S.glitchRows[i].life < 0.05) S.glitchRows.splice(i, 1);
   }
 

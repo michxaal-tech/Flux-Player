@@ -1,16 +1,17 @@
 import type { ThemeDraw } from "../themeTypes";
+import { ak } from "../rate";
 
 // Cassette deck close-up: spinning tape reels whose speed rides the music,
 // analog VU needles that slam on the bass, and a wobbling tape path. Retro
 // hardware aesthetic — dials and needles instead of glow.
-export const CASSETTE: ThemeDraw = ({ c, w, h, freq, liveAudio, vt, beat, beatE, bassV, midV, TK, C1, C2, CMix, L }) => {
+export const CASSETTE: ThemeDraw = ({ c, fs, w, h, freq, liveAudio, vt, beat, beatE, bassV, midV, TK, C1, C2, CMix, L }) => {
   const S = (L.scratch.cassette ??= { rot: 0, needleL: 0, needleR: 0 });
-  S.rot += 0.03 + bassV * 0.12 + beatE * 0.15;
+  S.rot += (0.03 + bassV * 0.12 + beatE * 0.15) * fs;
   // needle ballistics: fast attack, slow fall
   const targetL = Math.min(1, bassV * 1.6 + beatE * 0.4);
   const targetR = Math.min(1, midV * 2 + beatE * 0.35);
-  S.needleL += (targetL - S.needleL) * (targetL > S.needleL ? 0.5 : 0.06);
-  S.needleR += (targetR - S.needleR) * (targetR > S.needleR ? 0.5 : 0.06);
+  S.needleL += (targetL - S.needleL) * ak(targetL > S.needleL ? 0.5 : 0.06, fs);
+  S.needleR += (targetR - S.needleR) * ak(targetR > S.needleR ? 0.5 : 0.06, fs);
 
   c.globalCompositeOperation = "source-over";
   // deck face

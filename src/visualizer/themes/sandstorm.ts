@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk, ak } from "../rate";
 
 interface Grain {
   x: number; y: number;
@@ -29,7 +30,7 @@ const DEVIL_SEGS = 26;
 // streaks, and dust devils tear across the screen dragging grains into their
 // vortices. Beats arrive as gusts that punch a fresh sheet off every crest.
 export const SANDSTORM: ThemeDraw = ({
-  c, w, h, R, vt, beat, beatE, energy, cfg, bassV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, R, fs, vt, beat, beatE, energy, cfg, bassV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.sandstorm ??= {
     grains: [] as Grain[],
@@ -50,9 +51,9 @@ export const SANDSTORM: ThemeDraw = ({
 
   const E = energy;
   const wind = R * (0.0018 + E * 0.026) * cfg.speed * (1 + beatE * 0.5 * E);
-  S.gust += ((0.2 + E * 1.4 + beatE * 1.1 * E) - S.gust) * 0.08;
-  S.ph += (0.004 + E * 0.05) * cfg.speed;      // how fast the dunes reshape
-  S.haze += ((E * E) - S.haze) * 0.03;
+  S.gust += ((0.2 + E * 1.4 + beatE * 1.1 * E) - S.gust) * ak(0.08, fs);
+  S.ph += (0.004 + E * 0.05) * cfg.speed * fs; // how fast the dunes reshape
+  S.haze += ((E * E) - S.haze) * ak(0.03, fs);
 
   // ── dune ridges — a painted scene, never additive ─────────────────────────
   c.globalCompositeOperation = "source-over";
@@ -111,10 +112,10 @@ export const SANDSTORM: ThemeDraw = ({
   for (let i = devils.length - 1; i >= 0; i--) {
     const d = devils[i];
     const alive = i < wantDevils;
-    d.s += ((alive ? 1 : 0) - d.s) * 0.035;
-    d.ph += (0.05 + E * 0.22) * cfg.speed;
-    d.x += d.vx * (0.6 + E * 2.6) * cfg.speed;
-    d.y += Math.sin(d.ph * 0.3) * R * 0.0015;
+    d.s += ((alive ? 1 : 0) - d.s) * ak(0.035, fs);
+    d.ph += (0.05 + E * 0.22) * cfg.speed * fs;
+    d.x += d.vx * (0.6 + E * 2.6) * cfg.speed * fs;
+    d.y += Math.sin(d.ph * 0.3) * R * 0.0015 * fs;
     if (d.s < 0.03 || d.x < -R * 0.5 || d.x > w + R * 0.5) { devils.splice(i, 1); continue; }
   }
 
@@ -149,17 +150,19 @@ export const SANDSTORM: ThemeDraw = ({
     }
   }
 
-  const drag = 0.965 + E * 0.026;
-  const turb = R * (0.00035 + E * 0.0022) * I;
-  const fade = 0.988 - E * 0.006;
+  const drag = dk(0.965 + E * 0.026, fs);
+  const turb = R * (0.00035 + E * 0.0022) * I * fs;   // an acceleration per frame
+  const fade = dk(0.988 - E * 0.006, fs);
+  const windK = ak(0.03, fs);
+  const swirl = R * 0.02 * fs, inward = R * 0.004 * fs;
   for (let i = 0; i < MAX_GRAINS; i++) {
     const g = grains[i];
     if (g.a <= 0.02) continue;
-    g.vx += (wind - g.vx) * 0.03;
+    g.vx += (wind - g.vx) * windK;
     const n =
       Math.sin(g.y * 0.02 + vt * 0.03) * turb +
       Math.cos(g.x * 0.013 - vt * 0.021) * turb;
-    g.vy += n * 0.9 - R * 0.00012;
+    g.vy += n * 0.9 - R * 0.00012 * fs;
     g.vx += n * 0.4;
 
     for (let q = 0; q < devils.length; q++) {
@@ -169,12 +172,12 @@ export const SANDSTORM: ThemeDraw = ({
       if (dist > d.r * 2.6) continue;
       const pull = d.s * (1 - dist / (d.r * 2.6));
       // tangential swirl + a little inward pull
-      g.vx += (-dy / dist) * pull * R * 0.02 - (dx / dist) * pull * R * 0.004;
-      g.vy += (dx / dist) * pull * R * 0.02 - (dy / dist) * pull * R * 0.004;
+      g.vx += (-dy / dist) * pull * swirl - (dx / dist) * pull * inward;
+      g.vy += (dx / dist) * pull * swirl - (dy / dist) * pull * inward;
     }
 
     g.vx *= drag; g.vy *= drag;
-    g.x += g.vx; g.y += g.vy;
+    g.x += g.vx * fs; g.y += g.vy * fs;
     g.a *= fade;
     if (g.x < -R * 0.12) g.x = w + R * 0.1;
     else if (g.x > w + R * 0.12) g.x = -R * 0.1;

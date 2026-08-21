@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import {  } from "../rate";
 
 // FISSION — a core wrapped in nested shells, one shell per drop.
 //
@@ -17,7 +18,7 @@ const TAU = Math.PI * 2;
 interface State { a: number[]; b: number[] }
 
 export const FISSION: ThemeDraw = (x) => {
-  const { c, cx, cy, R, freq, beat, beatE, energy, dropE, bassV, trebV, cfg, TK, C1, C2, CMix, glow, noGlow, L } = x;
+  const { c, fs, cx, cy, R, freq, beat, beatE, energy, dropE, bassV, trebV, cfg, TK, C1, C2, CMix, glow, noGlow, L } = x;
 
   const S = (L.scratch.fission ??= { a: [] as number[], b: [] as number[] }) as State;
   const shells = Math.min(MAXS, 1 + L.dropSlots);
@@ -34,8 +35,8 @@ export const FISSION: ThemeDraw = (x) => {
     // each shell tumbles on its own pair of axes and at its own rate — that is
     // where the complexity comes from as they stack
     const sgn = k % 2 ? -1 : 1;
-    S.a[k] += (0.004 + energy * 0.008 + dropE * 0.012) * sgn * cfg.speed;
-    S.b[k] += (0.0026 + energy * 0.005) * (k % 3 ? 1 : -1) * cfg.speed;
+    S.a[k] += (0.004 + energy * 0.008 + dropE * 0.012) * sgn * cfg.speed * fs;
+    S.b[k] += (0.0026 + energy * 0.005) * (k % 3 ? 1 : -1) * cfg.speed * fs;
 
     const bin = Math.min(bins - 1, 3 + k * 6);
     const spec = ((freq[bin] ?? 0) / 255) ** 1.4;

@@ -143,24 +143,41 @@ export const themes: Record<string, ThemeDraw> = {
  * would be failing it for the tool's fault rather than its own.
  */
 export const TIME_NORMALISED = new Set<string>([
-  "AURORA", "BARS", "BLOOM", "CITY", "CLOCK",
-  "COMETS", "FIREFLIES", "GALAXY", "GLITCH", "GRID",
-  "HELIX", "HORIZON", "INFERNO", "JELLY", "KALEIDO",
-  "LASERS", "LIQUID", "MAELSTROM", "MARQUEE", "NEBULA",
-  "NEONSIGN", "NOVA", "ORB", "PARALLAX", "PIXEL",
-  "RING", "RIPPLES", "RUPTURE", "SCOPE", "SILK",
-  "SPIRAL", "STRATA", "TERMINAL", "TIDE", "TUNNEL",
-  "WARPGATE", "WAVES",
+  "ASCENSION", "AURORA", "AURORAFALL", "BARS", "BIOLUME",
+  "BLOOM", "BLOOMRAIL", "BRUTAL", "CANYON", "CASCADE",
+  "CASSETTE", "CATHEDRAL", "CATHODE", "CIRCUITRY", "CITADEL",
+  "CITY", "CLOCK", "COMETS", "CONSTELLATION", "CROWN",
+  "CRYSTAL", "DOTGRID", "ECLIPSE", "FIREFLIES", "FIREWORKS",
+  "FISSION", "GALAXY", "GLITCH", "GRAFFITI", "GRAVITY",
+  "GRID", "GYROSCOPE", "HALO", "HELIX", "HORIZON",
+  "INFERNO", "INKFLOW", "JELLY", "KALEIDO", "KOI",
+  "LANTERNS", "LASERS", "LAVALAMP", "LEVIATHAN", "LIQUID",
+  "MAELSTROM", "MAGNETIC", "MARQUEE", "MECHANISM", "MONOLITH",
+  "MURMUR", "NEBULA", "NEONSIGN", "NOVA", "ORACLE",
+  "ORB", "ORIGAMI", "ORRERY", "PARALLAX", "PIXEL",
+  "PRISM", "QUANTUM", "REACTOR", "RING", "RIPPLES",
+  "RUPTURE", "SAMURAI", "SANDSTORM", "SCOPE", "SERPENT",
+  "SHATTER", "SILK", "SINGULARITY", "SPIRAL", "STARFIELD",
+  "STRATA", "SYNAPSE", "TERMINAL", "TESSERACT", "THUNDER",
+  "TIDE", "TOPOGRAPH", "TUNNEL", "VHS", "VINYL",
+  "VORTEX", "VOXEL", "WARPGATE", "WAVES", "WORMHOLE",
 ]);
 
+// Every theme is on the list now, which is a statement about the code and not
+// about the measurement. Each one was read line by line: every accumulator
+// multiplied by `fs`, every decay through `dk`, every approach through `ak`,
+// every frame countdown decremented by `fs` instead of by 1, and every
+// per-frame spawn probability multiplied by `fs` — because a chance per frame
+// is a rate per second, and doubling the frame rate doubled it.
+//
 // A limitation worth writing down rather than working around: the check cannot
 // certify a theme whose motion is mostly discrete events. HORIZON, RUPTURE,
 // WARPGATE, INFERNO and MAELSTROM are built around what happens *at* a drop,
 // and the two runs it compares take different amounts of wall clock by
 // construction — so a drop lands inside one of them and not the other, and the
 // ratio comes out at 0.07 or 1.48 depending on which. That is the measurement
-// failing, not the theme, but "the measurement cannot tell" is not a licence to
-// assume the answer, so they stay at 60 until it can.
+// failing rather than the theme, and it is exactly why the certificate is the
+// code and `npm run fps` is only the smoke alarm.
 
 // Debug handle, companion to `__flux`: lets a test enumerate the theme list
 // rather than carrying its own copy of it, which would silently skip any

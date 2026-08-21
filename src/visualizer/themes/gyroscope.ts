@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { ak } from "../rate";
 
 // GYROSCOPE — nested rotating gimbal rings around a suspended core, each ring
 // spinning on its own axis. Fully 3D: ring points are built in their own plane,
@@ -25,7 +26,7 @@ interface State {
 }
 
 export const GYROSCOPE: ThemeDraw = (x) => {
-  const { c, cx, cy, R, vt, freq, beat, beatE, energy, dropE, hit, hitE, cfg, bassV, midV, trebV, TK, C1, C2, CMix, glow, noGlow, L } = x;
+  const { c, fs, cx, cy, R, vt, freq, beat, beatE, energy, dropE, hit, hitE, cfg, bassV, midV, trebV, TK, C1, C2, CMix, glow, noGlow, L } = x;
 
   const S = (L.scratch.gyroscope ??= {
     rings: [] as Ring[],
@@ -50,8 +51,8 @@ export const GYROSCOPE: ThemeDraw = (x) => {
 
   const t2 = cl01((energy - 0.28) / 0.28);
   const t3 = cl01((energy - 0.54) / 0.28);
-  S.w2 += (t2 - S.w2) * 0.03;
-  S.w3 += (t3 - S.w3) * 0.03;
+  S.w2 += (t2 - S.w2) * ak(0.03, fs);
+  S.w3 += (t3 - S.w3) * ak(0.03, fs);
   S.surge = Math.max(S.surge * 0.93, dropE);
 
   const camZ = 2.6 - energy * 0.15 - dropE * 0.5;
@@ -84,8 +85,8 @@ export const GYROSCOPE: ThemeDraw = (x) => {
   for (let i = 0; i < MAX_RINGS; i++) {
     const ring = S.rings[i];
     const spinK = 1 + energy * 1.6 + S.surge * 6;
-    ring.ax += ring.sx * cfg.speed * spinK;
-    ring.ay += ring.sy * cfg.speed * spinK;
+    ring.ax += ring.sx * cfg.speed * spinK * fs;
+    ring.ay += ring.sy * cfg.speed * spinK * fs;
   }
 
   // ── core ───────────────────────────────────────────────────────────────

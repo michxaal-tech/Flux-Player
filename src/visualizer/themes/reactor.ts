@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk, ak } from "../rate";
 
 interface Ring {
   /** tilt phase — drives the ellipse squash */
@@ -38,7 +39,7 @@ const ARC_SEGS = 7;
 // boils, the rings wobble and fight their orbits, warning flares hammer out of
 // the vessel and arcs tear free of the field on every beat.
 export const REACTOR: ThemeDraw = ({
-  c, w, h, cx, cy, R, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, cx, cy, R, fs, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.reactor ??= {
     rings: [] as Ring[],
@@ -67,17 +68,17 @@ export const REACTOR: ThemeDraw = ({
 
   const E = energy;
   // overload creeps up with sustained energy and spikes on hits
-  S.overload += ((E * 0.85 + bassV * 0.15) - S.overload) * 0.06;
+  S.overload += ((E * 0.85 + bassV * 0.15) - S.overload) * ak(0.06, fs);
   const OV = S.overload;
-  S.spin += (0.004 + E * 0.03) * cfg.speed;
-  S.pulse += (0.02 + E * 0.06) * cfg.speed;
+  S.spin += (0.004 + E * 0.03) * cfg.speed * fs;
+  S.pulse += (0.02 + E * 0.06) * cfg.speed * fs;
 
   // ── plasma core ───────────────────────────────────────────────────────────
   // The core never moves, so it is *painted* (source-over) rather than added:
   // a static additive disc would clip to white against a slow trail buffer.
   c.globalCompositeOperation = "source-over";
   const target = R * (0.15 + OV * 0.1 + bassV * 0.05) * (1 + beatE * (0.12 + OV * 0.3));
-  S.coreR += (target - S.coreR) * 0.18;
+  S.coreR += (target - S.coreR) * ak(0.18, fs);
   const cr = S.coreR || target;
 
   const halo = cr * (2.6 + OV * 1.4 + beatE * 0.8);
@@ -160,11 +161,11 @@ export const REACTOR: ThemeDraw = ({
   glow(Math.min(24, 8 + OV * 10 + beatE * 8), C1());
   for (let i = 0; i < RINGS; i++) {
     const rg = rings[i];
-    rg.rot += rg.dir * (0.006 + OV * 0.05 + beatE * 0.03 * OV) * cfg.speed;
-    rg.tilt += rg.dir * (0.004 + OV * 0.024) * cfg.speed;
+    rg.rot += rg.dir * (0.006 + OV * 0.05 + beatE * 0.03 * OV) * cfg.speed * fs;
+    rg.tilt += rg.dir * (0.004 + OV * 0.024) * cfg.speed * fs;
     // strain: rings shudder and lose their circle as the core pushes out
     const want = OV * (0.4 + (i / RINGS) * 0.6) + beatE * OV * 0.7;
-    rg.strain += (want - rg.strain) * 0.12;
+    rg.strain += (want - rg.strain) * ak(0.12, fs);
 
     const rr = R * rg.rad * (1 + beatE * 0.05 + OV * 0.06);
     const squash = 0.16 + Math.abs(Math.cos(rg.tilt)) * 0.84;
@@ -203,8 +204,8 @@ export const REACTOR: ThemeDraw = ({
     c.lineWidth = (1.4 + OV * 2.4) * TK;
     for (let i = flares.length - 1; i >= 0; i--) {
       const fl = flares[i];
-      fl.r += R * (0.012 + OV * 0.045) * cfg.speed;
-      fl.a *= 0.9 - OV * 0.03;
+      fl.r += R * (0.012 + OV * 0.045) * cfg.speed * fs;
+      fl.a *= dk(0.9 - OV * 0.03, fs);
       if (fl.a < 0.04 || fl.r > R * 1.2) { flares.splice(i, 1); continue; }
       c.strokeStyle = C2(fl.a * 0.42, 64);
       c.beginPath();
@@ -232,7 +233,7 @@ export const REACTOR: ThemeDraw = ({
     c.beginPath();
     for (let i = arcs.length - 1; i >= 0; i--) {
       const ar = arcs[i];
-      ar.a *= 0.86;
+      ar.a *= dk(0.86, fs);
       if (ar.a < 0.06) { arcs.splice(i, 1); continue; }
       const co = Math.cos(ar.ang), si = Math.sin(ar.ang);
       let px = cx + co * cr, py = cy + si * cr;

@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk, ak } from "../rate";
 
 interface Neuron {
   id: number;
@@ -121,7 +122,7 @@ function applyLayout(n: Neuron, m: number) {
 //   • drop    — one cell fires, a wavefront sweeps the whole net and every
 //               connection lights at once, then the tissue settles back to dark
 export const SYNAPSE: ThemeDraw = ({
-  c, w, h, cx, cy, R, freq, liveAudio, vt, beat, beatE, hit, hitE, energy, dropE, section,
+  c, w, h, cx, cy, R, fs, freq, liveAudio, vt, beat, beatE, hit, hitE, energy, dropE, section,
   cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S: SynState = (L.scratch.synapse ??= {
@@ -211,8 +212,8 @@ export const SYNAPSE: ThemeDraw = ({
   }
 
   // ── smoothed layer weights ───────────────────────────────────────────────
-  S.w2 += (cl01((energy - 0.22) / 0.26) - S.w2) * 0.035;
-  S.w3 += (cl01((energy - 0.5) / 0.3) - S.w3) * 0.025;
+  S.w2 += (cl01((energy - 0.22) / 0.26) - S.w2) * ak(0.035, fs);
+  S.w3 += (cl01((energy - 0.5) / 0.3) - S.w3) * ak(0.025, fs);
   const w2 = S.w2, w3 = S.w3;
 
   const K = R * 0.45;
@@ -257,17 +258,20 @@ export const SYNAPSE: ThemeDraw = ({
   }
 
   // ── neuron update ────────────────────────────────────────────────────────
-  const drift = (0.0016 + energy * 0.0022) * cfg.speed;
+  const drift = (0.0016 + energy * 0.0022) * cfg.speed * fs;
+  const settle = ak(0.02, fs);
+  const actEase = ak(0.03, fs);
+  const fireFade = dk(0.87, fs);
   for (let i = 0; i < NODE_N; i++) {
     const n = S.n[i];
     const tgt = cl01((liveN - i) * 0.4);
-    n.act += (tgt - n.act) * 0.03;
-    n.ux += (n.ax - n.ux) * 0.02 + Math.sin(vt * 0.011 + n.ph) * drift;
-    n.uy += (n.ay - n.uy) * 0.02 + Math.cos(vt * 0.009 + n.ph * 1.7) * drift;
+    n.act += (tgt - n.act) * actEase;
+    n.ux += (n.ax - n.ux) * settle + Math.sin(vt * 0.011 + n.ph) * drift;
+    n.uy += (n.ay - n.uy) * settle + Math.cos(vt * 0.009 + n.ph * 1.7) * drift;
     n.x = cx + n.ux * K;
     n.y = cy + n.uy * K;
-    n.fire *= 0.87;
-    if (n.refr > 0) n.refr--;
+    n.fire *= fireFade;
+    if (n.refr > 0) n.refr -= fs;
   }
 
   // percussive onsets fire scattered cells; the tempo grid fires a small burst
@@ -280,7 +284,7 @@ export const SYNAPSE: ThemeDraw = ({
       const k = 2 + ((w3 * 4) | 0);
       for (let i = 0; i < k; i++) fireNode(S.n[(Math.random() * liveN) | 0], 0, -1);
     }
-    S.amb -= 1;
+    S.amb -= fs;
     if (S.amb <= 0) {
       S.amb = 26 - w2 * 14;
       fireNode(S.n[(Math.random() * liveN) | 0], 0, -1);
@@ -290,7 +294,7 @@ export const SYNAPSE: ThemeDraw = ({
   // ── cascade wavefront ────────────────────────────────────────────────────
   let waveR = 0;
   if (S.casc > 0) {
-    S.casc += 0.017 * cfg.speed;
+    S.casc += 0.017 * cfg.speed * fs;
     waveR = S.casc * 2.6;
     for (let i = 0; i < NODE_N; i++) {
       const n = S.n[i];
@@ -303,7 +307,7 @@ export const SYNAPSE: ThemeDraw = ({
   }
 
   // ── pulse travel ─────────────────────────────────────────────────────────
-  const psp = (0.55 + energy * 0.85) * cfg.speed;
+  const psp = (0.55 + energy * 0.85) * cfg.speed * fs;
   for (let i = S.pl.length - 1; i >= 0; i--) {
     const p = S.pl[i];
     p.p += p.sp * psp;
@@ -331,11 +335,12 @@ export const SYNAPSE: ThemeDraw = ({
   const dimA = new Path2D();
   const dimB = new Path2D();
   const grow = new Path2D();
+  const ehFade = dk(0.9, fs);
   const hotP = new Path2D();
   for (let e = 0; e < S.ec; e++) {
     const a = S.n[S.ea[e]], b = S.n[S.eb[e]];
     const av = a.act < b.act ? a.act : b.act;
-    S.eh[e] *= 0.9;
+    S.eh[e] *= ehFade;
     if (av < 0.06) continue;
     const branch = S.et[e] === 1;
     if (branch && w3 < 0.04) continue;
@@ -446,7 +451,7 @@ export const SYNAPSE: ThemeDraw = ({
     c.stroke();
     noGlow();
   }
-  S.flash *= 0.9;
+  S.flash *= dk(0.9, fs);
   if (S.flash > 0.03) {
     c.fillStyle = C1(S.flash * 0.07, 70);
     c.fillRect(0, 0, w, h);

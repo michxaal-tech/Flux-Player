@@ -24,6 +24,7 @@
 // runs away — and the edges bloom.
 // ─────────────────────────────────────────────────────────────────────────────
 import type { ThemeDraw } from "../themeTypes";
+import { dk, ak } from "../rate";
 
 interface TessState {
   /** rotation angles in the XY, ZW and XW planes, and their angular velocities */
@@ -99,7 +100,7 @@ const ORDER: number[] = Array.from({ length: EDGES_ALL }, (_, i) => i);
 const cl01 = (v: number) => (v > 0 ? (v < 1 ? v : 1) : 0);   // also maps NaN → 0
 
 export const TESSERACT: ThemeDraw = ({
-  c, cx, cy, R, freq, liveAudio, vt, beat, beatE, hit, hitE, energy, dropE,
+  c, cx, cy, R, fs, freq, liveAudio, vt, beat, beatE, hit, hitE, energy, dropE,
   cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S: TessState = (L.scratch.tesseract ??= {
@@ -119,23 +120,24 @@ export const TESSERACT: ThemeDraw = ({
   // ── tumble: velocities ease toward an energy-driven baseline, beats kick them ─
   // (velocities, not angles, so a kick decays instead of snapping the pose back)
   const base = 0.002 + E * 0.0065;
-  S.vxy += (base - S.vxy) * 0.06;
-  S.vzw += (base * 1.45 - S.vzw) * 0.06;
-  S.vxw += (base * 0.72 - S.vxw) * 0.06;
+  const relax = ak(0.06, fs);
+  S.vxy += (base - S.vxy) * relax;
+  S.vzw += (base * 1.45 - S.vzw) * relax;
+  S.vxw += (base * 0.72 - S.vxw) * relax;
   if (beat) { S.vxy += 0.003 + E * 0.005; S.vzw += 0.004 + E * 0.007; }
   if (hit) S.vxw += 0.002 + HE_ * 0.004;
   // hard ceiling: stacked kicks in a dense passage must never blur it to mush
   if (S.vxy > 0.03) S.vxy = 0.03;
   if (S.vzw > 0.036) S.vzw = 0.036;
   if (S.vxw > 0.028) S.vxw = 0.028;
-  S.axy += S.vxy * spd;
-  S.azw += S.vzw * spd;
-  S.axw += S.vxw * spd;
-  S.yaw += (0.0012 + E * 0.0026) * spd;
-  S.shell -= (0.0008 + E * 0.0015) * spd;
+  S.axy += S.vxy * spd * fs;
+  S.azw += S.vzw * spd * fs;
+  S.axw += S.vxw * spd * fs;
+  S.yaw += (0.0012 + E * 0.0026) * spd * fs;
+  S.shell -= (0.0008 + E * 0.0015) * spd * fs;
 
   // ── drop: charge, then a one-shot collapse of both projection distances ─────
-  S.chg += (D - S.chg) * 0.12;
+  S.chg += (D - S.chg) * ak(0.12, fs);
   if (D > 0.55) { S.arm = 1; if (D > S.peak) S.peak = D; }
   if (S.arm && (D < S.peak * 0.8 || D < 0.28)) {
     S.arm = 0; S.peak = 0;
@@ -143,8 +145,8 @@ export const TESSERACT: ThemeDraw = ({
     S.flash = 1;
     S.vzw += 0.05;                 // the tumble runs away as it falls through
   }
-  S.col *= 0.945;
-  S.flash *= 0.9;
+  S.col *= dk(0.945, fs);
+  S.flash *= dk(0.9, fs);
   const CH = cl01(S.chg);
   const CO = cl01(S.col);
   const FL = cl01(S.flash);

@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk, ak } from "../rate";
 
 interface Track {
   x: number; y: number;
@@ -54,7 +55,7 @@ function getDep(i: number, hot: string, mid: string): HTMLCanvasElement {
 // detector. A loud passage never stops: collisions stack on top of each other,
 // the tracking volume fills with curling spray and the calorimeter saturates.
 export const QUANTUM: ThemeDraw = ({
-  c, w, h, cx, cy, R, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
+  c, w, h, cx, cy, R, fs, every, vt, beat, beatE, energy, cfg, bassV, midV, trebV, I, TK, C1, C2, CMix, glow, noGlow, L,
 }) => {
   const S = (L.scratch.quantum ??= {
     tr: [] as Track[],
@@ -92,9 +93,9 @@ export const QUANTUM: ThemeDraw = ({
   c.fillRect(0, 0, w, h);
 
   // --- fire collision events -----------------------------------------------
-  S.idle -= 1;
-  S.flash *= 0.86;
-  S.sat = S.sat * 0.93 + E * 0.07;
+  S.idle -= fs;
+  S.flash *= dk(0.86, fs);
+  S.sat += (E - S.sat) * ak(0.07, fs);
 
   const fire = (mult: number) => {
     const n = Math.round((4 + E * 26) * mult);
@@ -128,7 +129,8 @@ export const QUANTUM: ThemeDraw = ({
       if (E > 0.7 && Math.random() < E) fire(0.7);
     }
   }
-  if (E > 0.5 && Math.random() < (E - 0.5) * 0.6) fire(0.35);
+  // a per-frame chance is a rate per second once the frame rate can vary
+  if (E > 0.5 && Math.random() < (E - 0.5) * 0.6 * fs) fire(0.35);
 
   // --- detector geometry ----------------------------------------------------
   const satL = Math.min(64, 34 + S.sat * 20 + beatE * 10);
@@ -175,19 +177,27 @@ export const QUANTUM: ThemeDraw = ({
     const t = tr[i];
     if (!t.live) continue;
     // bend in the field
-    const ct = Math.cos(t.curl * spd), stt = Math.sin(t.curl * spd);
+    const ct = Math.cos(t.curl * spd * fs), stt = Math.sin(t.curl * spd * fs);
     const nvx = t.vx * ct - t.vy * stt;
     const nvy = t.vx * stt + t.vy * ct;
-    t.vx = nvx * t.loss;
-    t.vy = nvy * t.loss;
-    t.x += t.vx;
-    t.y += t.vy;
-    t.a *= 0.988 - E * 0.012;
-    // push the trail down one slot, newest first
-    t.pts.copyWithin(2, 0, (SEG - 1) * 2);
-    t.pts[0] = t.x;
-    t.pts[1] = t.y;
-    if (t.n < SEG) t.n++;
+    t.vx = nvx * dk(t.loss, fs);
+    t.vy = nvy * dk(t.loss, fs);
+    t.x += t.vx * fs;
+    t.y += t.vy * fs;
+    t.a *= dk(0.988 - E * 0.012, fs);
+    // Push the trail down one slot, newest first — but on a fixed 60Hz cadence
+    // rather than once per frame. The buffer holds a *count* of points, so at
+    // 120fps a per-frame push would hold half as much travel and the track
+    // would grow a visibly shorter tail at the higher frame rate.
+    if (every(1)) {
+      t.pts.copyWithin(2, 0, (SEG - 1) * 2);
+      t.pts[0] = t.x;
+      t.pts[1] = t.y;
+      if (t.n < SEG) t.n++;
+    } else {
+      t.pts[0] = t.x;
+      t.pts[1] = t.y;
+    }
 
     const dx = t.x - cx, dy = t.y - cy;
     const d2 = dx * dx + dy * dy;
@@ -239,8 +249,8 @@ export const QUANTUM: ThemeDraw = ({
     c.globalCompositeOperation = "lighter";
     for (let i = dep.length - 1; i >= 0; i--) {
       const d = dep[i];
-      d.a *= 0.9 - E * 0.03;
-      d.r *= 1.02;
+      d.a *= dk(0.9 - E * 0.03, fs);
+      d.r *= dk(1.02, fs);
       if (d.a < 0.05) { dep.splice(i, 1); continue; }
       c.globalAlpha = Math.min(0.75, d.a * 0.7);
       c.drawImage(depCv[d.tier], d.x - d.r, d.y - d.r, d.r * 2, d.r * 2);
