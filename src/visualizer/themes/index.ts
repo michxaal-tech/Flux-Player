@@ -90,12 +90,13 @@ import { CASCADE } from "./cascade";
 import { FISSION } from "./fission";
 import { PARALLAX } from "./parallax";
 
-// beauty-first themes, written against the clock so they run at the panel rate
-import { CAUSTICS } from "./caustics";
-import { PLUME } from "./plume";
+// Set-piece themes: each is built around what its drops do, not around a
+// swell. Written against the clock so they can run at the panel rate.
 import { HORIZON } from "./horizon";
-import { FILAMENT } from "./filament";
-import { VEIL } from "./veil";
+import { RUPTURE } from "./rupture";
+import { WARPGATE } from "./warpgate";
+import { INFERNO } from "./inferno";
+import { MAELSTROM } from "./maelstrom";
 
 export const themes: Record<string, ThemeDraw> = {
   RING, KALEIDO, HELIX, WAVES, LASERS, GRID, ORB, RIPPLES, SPIRAL, FIREFLIES,
@@ -111,7 +112,7 @@ export const themes: Record<string, ThemeDraw> = {
   VOXEL, TESSERACT,
   MONOLITH, ORRERY, CANYON, GYROSCOPE, SINGULARITY,
   STRATA, CROWN, CASCADE, FISSION, PARALLAX,
-  CAUSTICS, PLUME, HORIZON, FILAMENT, VEIL,
+  HORIZON, RUPTURE, WARPGATE, INFERNO, MAELSTROM,
 };
 
 /**
@@ -141,9 +142,17 @@ export const themes: Record<string, ThemeDraw> = {
  * animates at double speed for everyone who picks it.
  */
 export const TIME_NORMALISED = new Set<string>([
-  "CITY", "COMETS", "FILAMENT", "GLITCH", "HELIX",
-  "HORIZON", "ORB", "PIXEL", "RING", "VEIL",
+  "CITY", "COMETS", "GLITCH", "HELIX", "ORB", "PIXEL", "RING",
 ]);
+
+// A limitation worth writing down rather than working around: the check cannot
+// certify a theme whose motion is mostly discrete events. HORIZON, RUPTURE,
+// WARPGATE, INFERNO and MAELSTROM are built around what happens *at* a drop,
+// and the two runs it compares take different amounts of wall clock by
+// construction — so a drop lands inside one of them and not the other, and the
+// ratio comes out at 0.07 or 1.48 depending on which. That is the measurement
+// failing, not the theme, but "the measurement cannot tell" is not a licence to
+// assume the answer, so they stay at 60 until it can.
 
 // Debug handle, companion to `__flux`: lets a test enumerate the theme list
 // rather than carrying its own copy of it, which would silently skip any

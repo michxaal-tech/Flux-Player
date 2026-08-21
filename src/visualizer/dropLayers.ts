@@ -801,11 +801,11 @@ export const THEME_LAYERS: Record<string, string[]> = {
 
   // beauty-first themes: sets that add depth and light rather than structure,
   // since these are the ones people leave running
-  CAUSTICS: ["TIDEWASH", "SHAFTS", "CAUSTICS", "DUST", "VEIL", "HALO", "ECHOES"],
-  PLUME: ["EMBERS", "PLUMES", "SPARKS", "SHAFTS", "HALO", "DUST", "ORBITS"],
   HORIZON: ["HORIZON", "TIDEWASH", "BEAM", "SCANS", "PILLARS", "HALO", "PETALS"],
-  FILAMENT: ["SPARKS", "WEB", "LATTICE", "BEAM", "ORBITS", "HALO", "GLYPHS"],
-  VEIL: ["VEIL", "SHAFTS", "RAINFALL", "DUST", "ECHOES", "HALO", "PETALS"],
+  RUPTURE: ["RIFT", "SHARDS", "GLYPHS", "WEB", "SPARKS", "HALO", "ECHOES"],
+  WARPGATE: ["ORBITS", "LATTICE", "BEAM", "SCANS", "SPARKS", "HALO", "RIFT"],
+  INFERNO: ["EMBERS", "PLUMES", "SPARKS", "SHAFTS", "PILLARS", "HALO", "DUST"],
+  MAELSTROM: ["SPIRALARM", "RAINFALL", "FLOCK", "TIDEWASH", "WEB", "HALO", "SHARDS"],
 };
 
 /** The layer list for a theme, falling back to a sensible general set. */
