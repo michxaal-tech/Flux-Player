@@ -22,7 +22,8 @@
     "seekbar": "node scripts/seekbar-check.mjs",
     "impacts": "node scripts/impact-check.mjs",
     "deepbeats": "node --experimental-strip-types scripts/deepbeats-check.mjs",
-    "deep": "node scripts/deep-analyze-check.mjs"
+    "deep": "node scripts/deep-analyze-check.mjs",
+    "visualsui": "node scripts/visuals-ui-check.mjs"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",

@@ -16,6 +16,7 @@ import { LYRIC_STYLES } from "../visualizer/lyricRenderer";
 import { chip, NewTag, NextIcon, PauseIcon, playBtn, PlayIcon, PrevIcon, skipBtn, Slider, Toggle } from "./ui";
 import { vibeToVisuals } from "../ai/features";
 import { AiPrompt } from "./ai/AiBits";
+import { MiniTimeline } from "./Timeline";
 
 /**
  * Live cost readout. Frame time and the adaptive resolution scale come straight
@@ -194,7 +195,10 @@ export function VisualizerOverlay() {
     // unreadable — the type shrinks to fit. The ◈ prefix counts toward the
     // length since it takes the same room as two characters.
     const len = v.length + (STAGED_THEMES.has(v) ? 2 : 0);
-    const fs = len > 12 ? 8.2 : len > 10 ? 9 : len > 8 ? 9.8 : 10.5;
+    // Smaller across the board than it was: five columns instead of four means
+    // roughly 108px a cell, and the long names (CONSTELLATION, SINGULARITY)
+    // have to fit rather than ellipsis away into ambiguity.
+    const fs = len > 12 ? 7.4 : len > 10 ? 8.1 : len > 8 ? 8.8 : 9.4;
     return (
       <div
         data-th={fav ? undefined : v}
@@ -204,7 +208,7 @@ export function VisualizerOverlay() {
           position: "relative",
           // right padding clears the star's 18px column, and the long names
           // (CONSTELLATION, SINGULARITY) ellipsis rather than running under it
-          padding: "9px 17px 9px 4px", borderRadius: 9, fontSize: fs, fontWeight: 700,
+          padding: "7px 15px 7px 3px", borderRadius: 8, fontSize: fs, fontWeight: 700,
           letterSpacing: len > 10 ? "0" : "0.04em",
           cursor: "pointer", textAlign: "center", whiteSpace: "nowrap",
           overflow: "hidden", textOverflow: "ellipsis",
@@ -229,7 +233,7 @@ export function VisualizerOverlay() {
           // the star must not also pick the theme, or favouriting closes the menu
           onClick={(e) => { e.stopPropagation(); toggleFavTheme(v); }}
           style={{
-            position: "absolute", top: 0, right: 0, width: 18, height: "100%",
+            position: "absolute", top: 0, right: 0, width: 16, height: "100%",
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 10, lineHeight: 1, cursor: "pointer",
             color: starred ? (on ? BG : MAG) : on ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.25)",
@@ -313,10 +317,32 @@ export function VisualizerOverlay() {
             <div
               className="dropin"
               style={{
-                position: "absolute", top: 46, left: 0, width: "min(94vw, 540px)",
-                display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 2,
-                background: "rgba(10,12,18,0.95)", border: BORDER, borderRadius: 14, padding: 8,
-                backdropFilter: "blur(20px)", zIndex: 6, boxShadow: "0 14px 40px rgba(0,0,0,0.6)",
+                position: "absolute", top: 46, left: 0, width: "min(94vw, 620px)",
+                // The menu is a column: a scrolling list of themes, then a
+                // footer that stays put. It used to be one long grid with no
+                // height limit at all, so with ninety themes the end of the
+                // list was simply off the bottom of the screen and unreachable
+                // — nothing to scroll, because nothing knew it had overflowed.
+                display: "flex", flexDirection: "column",
+                maxHeight: "min(72vh, 560px)",
+                // Translucent enough to see the visuals moving through it.
+                // The blur is what keeps the text legible over a bright frame;
+                // without it this alpha would be unreadable on a pale theme.
+                background: "rgba(10,12,18,0.55)", border: BORDER, borderRadius: 14, padding: 8,
+                backdropFilter: "blur(26px) saturate(1.3)", WebkitBackdropFilter: "blur(26px) saturate(1.3)",
+                zIndex: 6, boxShadow: "0 14px 40px rgba(0,0,0,0.6)",
+              }}
+            >
+            <div
+              data-themescroll
+              style={{
+                display: "grid",
+                // Five across at full width, and fewer as the window narrows,
+                // rather than five everywhere — five columns on a phone is
+                // 60px a cell, which no theme name fits in.
+                gridTemplateColumns: "repeat(auto-fill, minmax(108px, 1fr))",
+                gap: 2, overflowY: "auto", overscrollBehavior: "contain",
+                WebkitOverflowScrolling: "touch", minHeight: 0, paddingRight: 2,
               }}
             >
               {/* Favourites are pinned above the full list. With 80 themes the
@@ -344,8 +370,11 @@ export function VisualizerOverlay() {
                   Tap a theme's ☆ to favourite it — favourites get pinned to the top of this list.
                 </div>
               )}
-              {/* auto-advance mode — OFF keeps the current theme forever */}
-              <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 6, padding: "8px 4px 2px", borderTop: BORDER, marginTop: 6 }}>
+            </div>
+              {/* auto-advance mode — OFF keeps the current theme forever.
+                  Outside the scrolling region: it is the one control here that
+                  should not require scrolling ninety themes to reach. */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 4px 2px", borderTop: BORDER, marginTop: 6, flexShrink: 0 }}>
                 <span style={{ fontSize: 9.5, letterSpacing: "0.18em", color: "rgba(255,255,255,0.45)", flexShrink: 0 }}>AUTO</span>
                 {(["off", "cycle", "shuffle"] as const).map((m) => (
                   <button
@@ -357,10 +386,10 @@ export function VisualizerOverlay() {
                   </button>
                 ))}
               </div>
-              <div style={{ gridColumn: "1 / -1", fontSize: 9, color: "rgba(255,255,255,0.35)", padding: "2px 4px 0" }}>
+              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", padding: "2px 4px 0", flexShrink: 0 }}>
                 CYCLE / SHUFFLE change the theme every ~16s while playing. OFF stays put.
               </div>
-              <div style={{ gridColumn: "1 / -1", fontSize: 9, color: "rgba(255,255,255,0.35)", padding: "4px 4px 0" }}>
+              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", padding: "4px 4px 0", flexShrink: 0 }}>
                 <span style={{ color: MAG }}>{STAGED_MARK}</span> STAGED — effects layer in as instruments and vocals
                 enter, with a big set-piece on every drop. Best with SYNC MODE → ANALYZED.
               </div>
@@ -1044,6 +1073,10 @@ export function VisualizerOverlay() {
             {track ? track.name : ""}
           </div>
         )}
+        {/* Somewhere to move through the track from. Before this the overlay
+            could skip to the next song or be closed, which is a lot of
+            ceremony for "play that bit again". */}
+        <MiniTimeline />
         <div style={{ display: "flex", gap: 20, pointerEvents: "auto" }}>
           <button onClick={prevTrack} style={skipBtn}><PrevIcon /></button>
           <button onClick={togglePlay} style={playBtn(52)}>{playing ? <PauseIcon size={21} /> : <PlayIcon size={21} />}</button>
