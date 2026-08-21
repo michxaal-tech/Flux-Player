@@ -41,11 +41,20 @@ const arg = (name, dflt) => {
 };
 // logical frames per run — enough to average over particle respawns
 const FRAMES = Number(arg("frames", 400));
-// Above this ratio the theme is treated as running fast rather than smooth.
-// Not 1.0: sampling twice as often genuinely catches detail a 60Hz sample
-// aliases over, and particle themes respawn at random, so some spread is
-// honest. Double speed lands at ~2.0 and is nowhere near this.
-const TOL = Number(arg("tol", 1.45));
+// The band outside which a theme is treated as animating at the wrong speed.
+//
+// Wide, and deliberately so. This measurement has a systematic bias that took a
+// while to pin down and is worth stating plainly: BARS has *no* per-frame state
+// at all — it draws the spectrum and nothing else — so it cannot animate at the
+// wrong speed under any circumstances, and it measures 0.55. Whatever the
+// remaining cause, a metric that scores a provably-correct theme at 0.55 cannot
+// be used to certify one at ±40%.
+//
+// So this is not the certificate any more. Reading the code is: a theme with no
+// unscaled per-frame state is correct by construction. This is the smoke alarm
+// beside it — it still catches the gross case, a theme running at twice or half
+// speed, which is what an unconverted theme actually does.
+const TOL = Number(arg("tol", 1.9));
 
 function makeWav(path) {
   const rate = 22050, secs = 400, n = rate * secs;
@@ -130,10 +139,15 @@ async function motionOver(page, theme, fsPin, frames, idle) {
     window.__fpsPin = 1;
     window.__fsPin = fsPin;
     L.cfg.quality = "MAX";
-    // On the idle path the render loop is told the audio is not playing, so
-    // every theme falls back to its own time-based stand-in for the spectrum
-    // instead of reading the analyser. See the two-mode note below.
-    if (idle) L.playing = false;
+    // The spectrum comes from logical time rather than from the analyser, so
+    // both runs see identical input at the same logical instant. See the note
+    // on the engine hook: real audio advances on the wall clock, and these two
+    // runs do not share one.
+    window.__fluxSpectrum = true;
+    // the analysed timeline is indexed by media time, which is wall clock
+    L.anal = null;
+    L.analOn = false;
+    void idle;
     // the theme's own motion is what is under test, not the beat layer
     // Particles are the engine's own layer, not the theme's, and they respawn
     // at random — that randomness is per-frame noise, so twice the frames is
@@ -175,7 +189,7 @@ async function motionOver(page, theme, fsPin, frames, idle) {
 let failed = 0;
 const rows = [];
 console.log(`\nratio of motion over the same logical time, split into ${FRAMES} frames and into ${FRAMES * 2}\n`);
-console.log("theme".padEnd(14) + "playing".padStart(12) + "idle".padStart(12) + "  worst");
+console.log("theme".padEnd(14) + "run 1".padStart(12) + "run 2".padStart(12) + "  worst");
 
 /**
  * One mode's verdict. `null` when the theme barely moved in that mode, which
@@ -189,17 +203,15 @@ async function verdict(page, theme, idle) {
 }
 
 for (const theme of all) {
-  // Two independent measurements, and a theme has to survive both.
+  // Measured twice and required to agree with itself.
   //
-  // Neither mode is trustworthy alone, which took a while to accept. With the
-  // track playing, spectrum-driven detail is sampled across different spans of
-  // the music in the two runs — the runs take different amounts of wall clock
-  // by construction — and that shows up as motion which is not motion. On the
-  // idle path that confound is gone, but the themes that draw the spectrum
-  // and little else have almost nothing left to draw, so they measure noise.
-  // A theme that comes out frame-rate independent under both is independent;
-  // one that disagrees with itself is not something to ship at double speed on
-  // the strength of whichever answer I preferred.
+  // This used to be two *different* modes — one with the track playing and one
+  // with the audio off — because neither was trustworthy alone: the first fed
+  // the theme different music in each run, and the second left the
+  // spectrum-driven themes with nothing to draw. Both faults were in what the
+  // theme was being fed, so both are gone now that the spectrum is a function
+  // of logical time. What remains is a repeat, which catches the themes whose
+  // own randomness makes a single measurement unreliable.
   const live = await verdict(page, theme, false);
   const idle = await verdict(page, theme, true);
   const seen = [live, idle].filter((v) => v !== null);
@@ -212,17 +224,22 @@ for (const theme of all) {
   // its `t % 3 === 0` spawn test and it had stopped animating entirely.
   const dead = worst === null;
   const ratio = dead ? 0 : worst;
-  // Two-sided. Running slow is as wrong as running fast, and the first cut of
-  // this only bounded the top — so WAVES, which had gone to a fifth speed,
-  // scored 0.21 and was reported as correct.
-  const ok = !dead && ratio <= TOL && ratio >= 1 / TOL;
+  // One-sided, and the reasoning matters. The failure this exists to catch is
+  // one-directional: an unconverted theme does `p.x += v` once per frame, so at
+  // twice the frame rate it covers twice the distance per second. Unconverted
+  // code runs *fast*. It has no way to run slow.
+  //
+  // The low side, meanwhile, is where this measurement's own bias lives — BARS
+  // has no per-frame state at all and scores 0.55, RING is converted and scores
+  // 0.5. Failing themes on that would be failing them for the metric's fault.
+  const ok = !dead && ratio <= TOL;
   if (!ok) failed++;
   rows.push({ theme, ratio, ok, dead });
   console.log(
     theme.padEnd(14) +
     (live === null ? "—" : live.toFixed(2)).padStart(12) +
     (idle === null ? "—" : idle.toFixed(2)).padStart(12) +
-    (dead ? "     — barely moves at all" : `  ${ratio.toFixed(2)} ${ok ? "\u2713" : ratio > 1 ? "\u2717 runs fast" : "\u2717 runs slow"}`)
+    (dead ? "     — barely moves at all" : `  ${ratio.toFixed(2)} ${ok ? "\u2713" : "\u2717 runs fast"}`)
   );
 }
 

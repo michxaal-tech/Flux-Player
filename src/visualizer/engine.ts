@@ -510,7 +510,50 @@ export function startRenderLoop(): void {
     let bass = 0.08 + Math.sin(t * 0.01) * 0.03, mid = bass * 0.8, treb = bass * 0.5;
     let liveAudio = false, rms = 0, beat = false, hit = false;
 
-    if (n && L.playing) {
+    // Test hook: drive the audio side from logical time instead of from the
+    // analyser.
+    //
+    // The frame-rate check compares two runs over the same logical span, and
+    // those runs take different amounts of wall clock by construction — so any
+    // input that advances on the wall clock is different in each of them. Real
+    // audio is exactly that: the two runs hear different parts of the track,
+    // and the difference lands in the measurement as motion that is not motion.
+    // Turning the audio off instead leaves the spectrum-driven themes with
+    // nothing to draw, which is not better.
+    //
+    // A spectrum synthesised from `t` is the same at the same logical instant
+    // in both runs, and rich enough that every theme has something to react to.
+    if ((window as unknown as Record<string, unknown>).__fluxSpectrum) {
+      const ph = t * 0.021;
+      let bAcc = 0, mAcc = 0, tAcc = 0;
+      for (let i = 0; i < freq.length; i++) {
+        const f = i / freq.length;
+        const v =
+          0.42 +
+          0.3 * Math.sin(ph + f * 9) +
+          0.2 * Math.sin(ph * 0.37 + f * 23) +
+          0.16 * Math.sin(ph * 1.7 - f * 4.5);
+        // a downward tilt, so it has the shape of music rather than of noise
+        const val = Math.max(0, Math.min(1, v * Math.pow(1 - f, 1.5) * 1.7));
+        freq[i] = Math.round(val * 255);
+        if (i < 16) bAcc += freq[i];
+        else if (i < 128) mAcc += freq[i];
+        else if (i < 380) tAcc += freq[i];
+      }
+      for (let i = 0; i < wave.length; i++) {
+        wave[i] = Math.round(128 + Math.sin(ph * 3 + (i / wave.length) * 26) * 90);
+      }
+      bass = bAcc / 4080;
+      mid = mAcc / 28560;
+      treb = tAcc / 64260;
+      rms = 0.35 + Math.sin(ph * 0.9) * 0.15;
+      liveAudio = true;
+      // a steady pulse on the logical clock, so the beat layer runs and runs
+      // identically in both runs
+      beat = every(30);
+      hit = every(15);
+      L.bpm = 120;
+    } else if (n && L.playing) {
       n.analyser.getByteFrequencyData(freq);
       n.analyser.getByteTimeDomainData(wave);
       bass = 0; for (let i = 0; i < 16; i++) bass += freq[i]; bass /= 4080;
@@ -753,7 +796,15 @@ export function startRenderLoop(): void {
     // ~1s loop running beside the track rather than with it. `beatStep` is how
     // much of a beat this frame covered, so one unit of envelope = one beat at
     // any BPM and any refresh rate.
-    const dtSec = Math.min(0.1, delta / 1000); // clamp: tab-switch gaps aren't music
+    // Under the frame-rate test hook the musical clock runs on logical time
+    // too. Leaving it on the wall clock was a confound of its own and a subtle
+    // one: the beat *events* fire on the logical clock, so at half the frame
+    // factor there is twice as much real time between them for every envelope
+    // to decay through — and every beat-driven theme measured about 40% quieter
+    // for a reason that had nothing to do with the theme.
+    const dtSec = (window as unknown as Record<string, unknown>).__fluxSpectrum
+      ? fs / 60
+      : Math.min(0.1, delta / 1000); // clamp: tab-switch gaps aren't music
     const bps = L.bpm > 0 ? (L.bpm * (L.speed || 1)) / 60 : 2;
     const beatStep = L.playing ? dtSec * bps : dtSec * 2;
     const decay = (k: number) => Math.exp(-beatStep * k);

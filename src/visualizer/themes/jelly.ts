@@ -1,4 +1,5 @@
 import type { ThemeDraw } from "../themeTypes";
+import { dk } from "../rate";
 
 interface Jelly {
   x: number; y: number; vy: number; ph: number; sz: number; hue: number;
@@ -33,7 +34,7 @@ export const JELLY: ThemeDraw = ({ c, fs, w, h, vt, beat, beatE, cfg, bassV, mid
     // constant gentle rise plus a swim pulse on the beat; wrap top → bottom
     // so the school flows upward through the frame forever
     if (beat) j.vy -= 0.0016 * j.sz;
-    j.vy = j.vy * 0.95 - 0.000012;
+    j.vy = j.vy * dk(0.95, fs) - 0.000012 * fs;
     j.vy = Math.max(j.vy, -0.004);
     j.y += j.vy * cfg.speed * fs;
     j.x += Math.sin(vt * 0.006 + j.ph) * 0.0004 * fs;

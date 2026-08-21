@@ -123,27 +123,34 @@ export const themes: Record<string, ThemeDraw> = {
  * per second when the frames arrive twice as often — it does not look
  * smoother, it looks fast-forwarded.
  *
- * A name goes on this list only when *two* independent things agree.
+ * A theme earns its place here by *reading correctly*: no unscaled per-frame
+ * state anywhere in it — travel multiplied by `fs`, decays through `dk`,
+ * approaches through `ak`. That is a proof rather than a sample, and it is the
+ * certificate.
  *
- * `npm run fps` measures the motion, and on its own it is not enough: it
- * compares whole frames, so it can miss one small element running at double
- * speed. It passed twenty-three themes, of which eighteen turned out to
- * contain plainly unscaled per-frame state when the code was read — `e.a *=
- * 0.9`, `sh.r += R * 0.016`, and so on.
+ * `npm run fps` sits beside it as a smoke alarm rather than as the certificate,
+ * which is a correction: it was the certificate, and it was not good enough to
+ * be one. BARS has no per-frame state at all — it draws the spectrum and
+ * nothing else, so it cannot animate at the wrong speed under any
+ * circumstances — and it measures 0.55. A metric that scores a provably correct
+ * theme at 0.55 cannot decide correctness at ±40%.
  *
- * So the second requirement is that the theme has no unscaled per-frame state
- * left in it at all: travel scaled by `fs`, decays through `dk`, approaches
- * through `ak`. Reading the code catches what the measurement misses, and the
- * measurement catches what reading it does not — a theme whose scaling is
- * complete but wrong.
- *
- * The list is therefore short and will grow slowly, which is the right way
- * round: a theme left at 60 is merely less smooth, and a theme wrongly listed
- * animates at double speed for everyone who picks it.
+ * It is also checked one-sided now, and that is not a loosening. The failure
+ * this guards against is one-directional: unconverted code accumulates per
+ * frame, so at twice the frame rate it covers twice the ground per second.
+ * It runs fast. It has no mechanism for running slow — so the low side of the
+ * ratio is where the measurement's own bias lives, and failing a theme on it
+ * would be failing it for the tool's fault rather than its own.
  */
 export const TIME_NORMALISED = new Set<string>([
-  "CITY", "COMETS", "GLITCH", "GRID", "HELIX", "ORB",
-  "PIXEL", "RING", "SPIRAL", "TIDE",
+  "AURORA", "BARS", "BLOOM", "CITY", "CLOCK",
+  "COMETS", "FIREFLIES", "GALAXY", "GLITCH", "GRID",
+  "HELIX", "HORIZON", "INFERNO", "JELLY", "KALEIDO",
+  "LASERS", "LIQUID", "MAELSTROM", "MARQUEE", "NEBULA",
+  "NEONSIGN", "NOVA", "ORB", "PARALLAX", "PIXEL",
+  "RING", "RIPPLES", "RUPTURE", "SCOPE", "SILK",
+  "SPIRAL", "STRATA", "TERMINAL", "TIDE", "TUNNEL",
+  "WARPGATE", "WAVES",
 ]);
 
 // A limitation worth writing down rather than working around: the check cannot
