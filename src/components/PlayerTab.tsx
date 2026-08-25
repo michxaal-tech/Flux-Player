@@ -68,7 +68,7 @@ export function PlayerTab() {
 
   // Scrubbing lives in Timeline.tsx, so the overlay's slim bar and this one
   // cannot drift apart in how they behave.
-  const waveSeek = (e: React.MouseEvent | React.TouchEvent) => beginScrub(e, waveRef.current, duration);
+  const waveSeek = (e: React.PointerEvent) => beginScrub(e, waveRef.current, duration);
 
   const minutes = Math.floor(stats.seconds / 60);
   let lvlIdx = 0;
@@ -242,7 +242,7 @@ export function PlayerTab() {
 
         <div style={{ width: "100%", maxWidth: 620 }}>
           <div style={{ position: "relative" }}>
-            <canvas ref={waveRef} data-seekbar onMouseDown={waveSeek} onTouchStart={waveSeek} style={{ width: "100%", height: 50, cursor: "ew-resize", display: "block", touchAction: "none" }} />
+            <canvas ref={waveRef} data-seekbar onPointerDown={waveSeek} style={{ width: "100%", height: 50, cursor: "ew-resize", display: "block", touchAction: "none" }} />
             <DropMarkers duration={duration} onSeek={seek} />
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3 }}>

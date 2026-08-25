@@ -64,8 +64,7 @@ export function DropMarkers({
           <button
             key={i}
             title={`drop at ${fmt(d)}`}
-            onMouseDown={(e) => { e.stopPropagation(); onSeek(at); }}
-            onTouchStart={(e) => { e.stopPropagation(); onSeek(at); }}
+            onPointerDown={(e) => { e.stopPropagation(); onSeek(at); }}
             style={{
               position: "absolute",
               left: `${left}%`,
@@ -106,29 +105,58 @@ export function DropMarkers({
  * timeline is a few pixels tall, so every real drag leaves it, and listening on
  * the element itself stops the scrub dead and strands the pointer in a dragging
  * state with nothing to end it.
+ *
+ * Pointer events rather than a mouse path and a touch path side by side, which
+ * is what this was and why scrubbing was broken on Android. A tap there fires
+ * `touchstart` — scrub, seek, release — and *then* the browser synthesises a
+ * `mousedown`/`mouseup` pair at the position the finger first landed on. That
+ * second, phantom press ran the whole thing again and seeked back to where the
+ * drag started, so every scrub snapped home the instant you lifted your thumb.
+ * One pointer path has no compatibility events to be fired twice by.
+ *
+ * `setPointerCapture` then routes every move to this element even once the
+ * finger leaves it, and guarantees a final `pointerup`/`pointercancel` — so a
+ * drag can't be stranded mid-scrub by the gesture being taken over.
  */
 export function beginScrub(
-  e: React.MouseEvent | React.TouchEvent,
+  e: React.PointerEvent,
   el: HTMLElement | null,
   duration: number
 ): void {
   if (!el || !duration) return;
+  // Ignore secondary mouse buttons; a right-click should not scrub.
+  if (e.pointerType === "mouse" && e.button !== 0) return;
+
   const at = (clientX: number) => {
     const r = el.getBoundingClientRect();
+    if (!r.width) return;
     seek(Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * duration);
   };
-  const touch = "touches" in e;
-  at(touch ? e.touches[0].clientX : e.clientX);
-  const move = (ev: MouseEvent | TouchEvent) =>
-    at("touches" in ev ? ev.touches[0].clientX : (ev as MouseEvent).clientX);
-  const up = () => {
-    window.removeEventListener(touch ? "touchmove" : "mousemove", move as EventListener);
-    window.removeEventListener(touch ? "touchend" : "mouseup", up);
-    window.removeEventListener("touchcancel", up);
+  at(e.clientX);
+
+  const id = e.pointerId;
+  const target = e.currentTarget as HTMLElement;
+  try {
+    target.setPointerCapture(id);
+  } catch {
+    // capture is best-effort; the window listeners below still carry the drag
+  }
+
+  const move = (ev: PointerEvent) => { if (ev.pointerId === id) at(ev.clientX); };
+  const up = (ev: PointerEvent) => {
+    if (ev.pointerId !== id) return;
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    window.removeEventListener("pointercancel", up);
+    try {
+      target.releasePointerCapture(id);
+    } catch {
+      // already released — the capture was best-effort to begin with
+    }
   };
-  window.addEventListener(touch ? "touchmove" : "mousemove", move as EventListener);
-  window.addEventListener(touch ? "touchend" : "mouseup", up);
-  window.addEventListener("touchcancel", up);
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+  window.addEventListener("pointercancel", up);
 }
 
 /**
@@ -149,8 +177,7 @@ export function MiniTimeline() {
     <div style={{ width: "min(86vw, 620px)", pointerEvents: "auto" }}>
       <div
         ref={setEl}
-        onMouseDown={(e) => beginScrub(e, el, duration)}
-        onTouchStart={(e) => beginScrub(e, el, duration)}
+        onPointerDown={(e) => beginScrub(e, el, duration)}
         style={{
           position: "relative",
           height: 22,

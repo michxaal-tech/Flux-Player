@@ -11,6 +11,7 @@ import { themes, TIME_NORMALISED } from "./themes";
 import { ak } from "./rate";
 import type { ThemeCtx } from "./themeTypes";
 import { drawLyricOverlay } from "./lyricRenderer";
+import { dprCap, isMobile, maxEdge } from "./device";
 import { project3d, type Mode3D } from "./project3d";
 import { drawDropLayers, stepDropLayers, MAX_SLOTS } from "./dropLayers";
 import { DRIFT_FRAMES, hueRamp, lighting, rampPos, stopsOf } from "../palette";
@@ -29,42 +30,6 @@ const SIG_SET = new Set<string>(SIGNATURE_IMPACTS);
  * The adaptive quality signal still scales this down if the machine turns out
  * not to keep up, so raising the ceiling cannot cost frames, only sharpness.
  */
-// Three device profiles, not two. The desktop app (Electron, __fluxDesktop) and
-// a laptop browser were the only cases the ceilings were tuned for; a phone
-// GPU inside the Android WebView fell into the "browser" bucket and got a
-// laptop's settings — an 1800px backing store, a device-pixel-ratio of 2, and
-// the 120fps attempt below — which is precisely how a canvas-2D visualiser with
-// shadowBlur and full-screen `lighter` compositing turns to slideshow on a
-// phone. The adaptive governor would eventually claw it back, but only by
-// thrashing resolution and the 60/120 target, and the thrash is itself the
-// stutter. So mobile starts where the others end up: fewer pixels, dpr capped,
-// and no 120fps attempt at all.
-//
-// Detected once, with a test override (__fluxMobile) so the headless perf
-// harness can force the profile and measure it. Electron always reads as
-// desktop; a real touch phone or a Capacitor native shell reads as mobile.
-function isMobile(): boolean {
-  if (typeof window === "undefined") return false;
-  const o = (window as any).__fluxMobile;
-  if (o != null) return !!o;
-  if ((window as any).__fluxDesktop) return false;
-  const cap = (window as any).Capacitor;
-  if (cap && typeof cap.isNativePlatform === "function" && cap.isNativePlatform()) return true;
-  const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
-  const small = Math.min(screen.width, screen.height) <= 820;
-  return coarse && small;
-}
-
-/** Longest backing-store edge allowed, before the adaptive resScale multiplies it. */
-function maxEdge(): number {
-  if (typeof window !== "undefined" && (window as any).__fluxDesktop) return 2560;
-  return isMobile() ? 1200 : 1800;
-}
-
-/** Cap on the device-pixel-ratio the backing store is drawn at. */
-function dprCap(): number {
-  return isMobile() ? 1.5 : 2;
-}
 
 // Which themes actually ask for glow, learned the first time each one draws.
 const glowThemes: Record<string, boolean> = {};

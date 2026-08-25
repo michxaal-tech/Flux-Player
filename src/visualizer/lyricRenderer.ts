@@ -11,8 +11,56 @@
 // screen is short and large; halves still wrap to ≤3 rows and are never shrunk
 // into a tiny strip.
 import type { LiveState } from "./live";
+import { blurCap } from "./device";
 import { LYRIC_FX, letterFx, makeRamp, type LetterFxCtx, type LetterStyle } from "./lyricFx";
 import { styleFor, type CharMotion, type StyleArg } from "./lyricStyles";
+
+/**
+ * Memoised text width.
+ *
+ * `measureText` is the quiet cost in here. Nothing calls it once: the wrap
+ * search measures every candidate row at up to four sizes, and the
+ * per-character path then measures every single glyph — all of that per frame,
+ * for text that changes a few times a minute. Metrics are a pure function of
+ * the font and the text, so the answer can be kept.
+ *
+ * The key is the tracked font string, *not* `c.font`, and that distinction is
+ * the whole optimisation. `c.font` is a getter that re-serialises the font
+ * descriptor on every read, and it costs more than the measurement it was meant
+ * to save: keyed on the getter this memo benchmarked at 0.62x — a regression —
+ * and keyed on the string we already have, at 2.71x. So font changes go through
+ * `setFont`, which is the only thing allowed to touch `c.font` here.
+ *
+ * Cleared wholesale when it grows past a bound. Entries are cheap to rebuild
+ * and the working set is one song's worth of rows plus an alphabet.
+ */
+const widthMemo = new Map<string, number>();
+let curFont = "";
+
+/**
+ * Set the canvas font and remember it, so `mw` never reads the `c.font` getter.
+ *
+ * Always assigns rather than skipping when the string looks unchanged: a
+ * `restore()` can put the context's font back to an earlier value without this
+ * module hearing about it, and a tracked string that has silently drifted from
+ * the real one would hand out measurements for the wrong font. Assignment is a
+ * few calls per block against dozens of lookups per glyph, so the safe order is
+ * also the cheap one.
+ */
+function setFont(c: CanvasRenderingContext2D, font: string): void {
+  curFont = font;
+  c.font = font;
+}
+
+function mw(c: CanvasRenderingContext2D, text: string): number {
+  const key = `${curFont}\u0000${text}`;
+  const hit = widthMemo.get(key);
+  if (hit !== undefined) return hit;
+  const v = c.measureText(text).width;
+  if (widthMemo.size > 4000) widthMemo.clear();
+  widthMemo.set(key, v);
+  return v;
+}
 
 export interface LyricCtx {
   c: CanvasRenderingContext2D;
@@ -124,7 +172,7 @@ function wrapRows(c: CanvasRenderingContext2D, text: string, maxW: number): stri
   let row = "";
   for (const wd of words) {
     const tryRow = row ? `${row} ${wd}` : wd;
-    if (c.measureText(tryRow).width <= maxW || !row) row = tryRow;
+    if (mw(c, tryRow) <= maxW || !row) row = tryRow;
     else {
       rows.push(row);
       row = wd;
@@ -137,12 +185,12 @@ function wrapRows(c: CanvasRenderingContext2D, text: string, maxW: number): stri
 /** wrap into ≤3 rows, only shrinking as a last resort (never below 0.68×) */
 function layoutBlock(c: CanvasRenderingContext2D, text: string, sizePx: number, maxW: number): Block {
   for (const s of [1, 0.9, 0.8, 0.68]) {
-    c.font = `700 ${Math.floor(sizePx * s)}px 'Space Grotesk', sans-serif`;
+    setFont(c, `700 ${Math.floor(sizePx * s)}px 'Space Grotesk', sans-serif`);
     const rows = wrapRows(c, text, maxW);
-    const widest = Math.max(...rows.map((r) => c.measureText(r).width));
+    const widest = Math.max(...rows.map((r) => mw(c, r)));
     if (rows.length <= 3 && widest <= maxW) return { rows, scale: s };
   }
-  c.font = `700 ${Math.floor(sizePx * 0.68)}px 'Space Grotesk', sans-serif`;
+  setFont(c, `700 ${Math.floor(sizePx * 0.68)}px 'Space Grotesk', sans-serif`);
   return { rows: wrapRows(c, text, maxW).slice(0, 3), scale: 0.68 };
 }
 
@@ -199,9 +247,9 @@ function blockMetrics(
 ): BlockMetrics {
   const block = layoutBlock(c, text, o.size, o.maxW);
   const sizePx = o.size * block.scale;
-  c.font = `700 ${Math.floor(sizePx)}px 'Space Grotesk', sans-serif`;
+  setFont(c, `700 ${Math.floor(sizePx)}px 'Space Grotesk', sans-serif`);
   let widest = 0;
-  for (const r of block.rows) widest = Math.max(widest, c.measureText(r).width);
+  for (const r of block.rows) widest = Math.max(widest, mw(c, r));
   widest *= o.scale;
   const lo = widest / 2 + 14;
   const hi = w - widest / 2 - 14;
@@ -227,7 +275,7 @@ function drawBlock(c: CanvasRenderingContext2D, text: string, o: BlockOpts, w: n
   c.translate(m.x, o.y);
   if (o.rot) c.rotate(o.rot);
   c.scale(o.scale, o.scale * (o.scaleY ?? 1));
-  c.shadowBlur = o.glowAmt;
+  c.shadowBlur = Math.min(o.glowAmt, blurCap());
   c.shadowColor = o.glowColor;
   c.fillStyle = o.color ?? `rgba(255,255,255,${o.alpha})`;
   c.textAlign = "center";
@@ -257,7 +305,7 @@ function drawBlock(c: CanvasRenderingContext2D, text: string, o: BlockOpts, w: n
       const part = Math.min(1, Math.max(0, sung / Math.max(1, row.length)));
       sung -= row.length;
       if (part <= 0) return;
-      const rw = c.measureText(row).width;
+      const rw = mw(c, row);
       c.save();
       c.beginPath();
       c.rect(-rw / 2, rowY(i) - m.lineH / 2, rw * part, m.lineH);
@@ -295,13 +343,13 @@ function drawBlockLetters(
   let seen = 0;
 
   m.rows.forEach((row, ri) => {
-    const rowW = c.measureText(row).width;
+    const rowW = mw(c, row);
     let x = -rowW / 2;
     const y = (ri - (m.rows.length - 1) / 2) * m.lineH;
 
     for (let ci = 0; ci < row.length; ci++) {
       const ch = row[ci];
-      const adv = c.measureText(ch).width;
+      const adv = mw(c, ch);
       if (ch !== " ") {
         // The style moves the character first; letter effects then compose on
         // top of that, so picking an effect never cancels the style's motion.
@@ -356,8 +404,13 @@ function drawBlockLetters(
           // A matched effect that sets no glow of its own still gets a soft
           // palette bloom, which is what stops translucent letters reading as
           // washed out and gives them the WAVE style's halo.
-          if (st.glow !== undefined) c.shadowBlur = st.glow;
-          else if (lc?.match && base) c.shadowBlur = Math.max(o.glowAmt, 13 + base.beatE * 16);
+          // Capped on mobile. This is the per-*character* blur: on a line of
+          // forty glyphs it is forty blurred fills a frame, and blur cost
+          // climbs with the radius, so the radius is the lever that decides
+          // whether a phone lands the frame. Uncapped elsewhere.
+          const bc = blurCap();
+          if (st.glow !== undefined) c.shadowBlur = Math.min(st.glow, bc);
+          else if (lc?.match && base) c.shadowBlur = Math.min(Math.max(o.glowAmt, 13 + base.beatE * 16), bc);
           if (st.glowColor) c.shadowColor = st.glowColor;
           else if (lc?.match) c.shadowColor = lc.glowColor;
           c.textBaseline = "middle";

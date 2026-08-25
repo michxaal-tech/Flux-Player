@@ -57,7 +57,13 @@ async function run(mobile) {
   await page.evaluate((th) => {
     const L = window.__flux;
     L.visTheme = th;
-    Object.assign(L.cfg, { glow: 1, trail: 0.82, particles: 1, quality: "AUTO", hiFps: true, vis3d: "OFF" });
+    // quality MAX pins resScale at 1, which is what makes this comparison mean
+    // anything: under AUTO both profiles are adaptive and settle wherever the
+    // machine's noise puts them that run, so the measured "reduction" swung
+    // between +37% and -36% across runs of identical code. Pinned, the only
+    // thing left between the two numbers is the deterministic ceiling this
+    // change actually moved — maxEdge and the dpr cap.
+    Object.assign(L.cfg, { glow: 1, trail: 0.82, particles: 1, quality: "MAX", hiFps: true, vis3d: "OFF" });
   }, THEME);
   await page.waitForTimeout(2500); // let the governor settle
 
