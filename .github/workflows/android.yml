@@ -1,0 +1,97 @@
+name: Android build (APK)
+
+# Run by hand from the Actions tab. It builds the same web app that deploys to
+# Pages, wraps it in the Capacitor Android shell in android/, and publishes the
+# APK to the `android-latest` release so it has a plain download link rather
+# than living behind a workflow-artifact login.
+#
+# The output is a *debug* APK: Gradle signs it with the standard debug key, so
+# it installs straight onto a phone with no Play account and no signing setup.
+# (A Play-Store release APK needs your own upload key — see the notes at the
+# bottom of this file.)
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Attach the APK to the android-latest release"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Temurin 17 is what the current Android Gradle Plugin expects.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Build the web app
+        run: |
+          npm ci
+          npm run build
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+      # Copies dist/ into the native project's assets and refreshes the plugin
+      # list. capacitor.config.ts drives it.
+      - name: Sync the web build into the Android shell
+        run: npx cap sync android
+
+      - name: Assemble the debug APK
+        working-directory: android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Name the APK
+        id: apk
+        run: |
+          src=android/app/build/outputs/apk/debug/app-debug.apk
+          test -f "$src" || { echo "gradle produced no APK"; exit 1; }
+          out="flux-player-debug.apk"
+          cp "$src" "$out"
+          echo "path=$out" >> "$GITHUB_OUTPUT"
+
+      # Always kept, so a run that cannot publish still leaves something
+      # downloadable.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flux-player-android
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+
+      - name: Publish to the android-latest release
+        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          file="${{ steps.apk.outputs.path }}"
+          if gh release view android-latest >/dev/null 2>&1; then
+            gh release upload android-latest "$file" --clobber
+          else
+            gh release create android-latest "$file" \
+              --target "$GITHUB_SHA" \
+              --title "FLUX Player — Android" \
+              --notes "Android build of FLUX Player. Download the .apk and open it on your phone to install. It is a debug build, so Android will warn once about installing from an unknown source — allow it for your browser/files app and open the APK again. Unrelated to Google Play."
+          fi
+
+# ── Turning this into a Play-Store release ──────────────────────────────────
+# The debug APK above is for sideloading. A Store build additionally needs:
+#   1. An upload keystore (keytool -genkey -v -keystore flux.keystore ...).
+#   2. That keystore + its passwords stored as GitHub Actions secrets.
+#   3. A signingConfig in android/app/build.gradle reading those secrets, and
+#      `./gradlew bundleRelease` to produce an .aab.
+# Kept out of here on purpose: it needs a secret only the repo owner should
+# create, and this workflow stays runnable by anyone with no setup.

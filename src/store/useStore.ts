@@ -131,6 +131,8 @@ export interface StoreState {
   // ui
   tab: TabId;
   shortcutsOpen: boolean;
+  /** bumped whenever the user edits a connector, so pickers reload the list */
+  connectorRev: number;
 
   // actions
   set: (partial: Partial<StoreState>) => void;
@@ -248,6 +250,7 @@ export const useStore = create<StoreState>()(
         fullOnly: true,
         tab: "player",
         shortcutsOpen: false,
+        connectorRev: 0,
 
         set: (partial) => set(partial),
 

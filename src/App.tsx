@@ -6,6 +6,7 @@ import { useKeyboard } from "./hooks/useKeyboard";
 import { useMediaSession } from "./hooks/useMediaSession";
 import { useSleepLeft } from "./hooks/useSleepLeft";
 import { useStore } from "./store/useStore";
+import { refreshConnectorSources } from "./connectors";
 import { canvasRefs } from "./visualizer/live";
 import type { TabId } from "./types";
 import { fmt } from "./utils";
@@ -72,6 +73,12 @@ export default function App() {
     const t = window.setTimeout(() => setLeaving(null), 320);
     return () => window.clearTimeout(t);
   }, [leaving]);
+
+  // register any saved connectors (Subsonic servers, etc.) so they appear in
+  // the Discover picker on launch, not only after the settings panel is opened
+  useEffect(() => {
+    void refreshConnectorSources().then(() => useStore.setState({ connectorRev: Date.now() }));
+  }, []);
 
   // keep the accent bar aligned when the window resizes
   useEffect(() => {

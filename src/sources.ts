@@ -364,4 +364,16 @@ export const archive: Source = {
 
 export const SOURCES: Source[] = [apple, archive, audius];
 
-export const sourceById = (id: string): Source => SOURCES.find((s) => s.id === id) ?? SOURCES[0];
+// User-configured connectors (Subsonic servers, etc.) are registered at runtime
+// rather than baked in — see connectors.ts. sources.ts still imports nothing:
+// the finished Source objects are handed in from outside.
+let connectorRegistry: Source[] = [];
+
+export function setConnectorSources(list: Source[]): void {
+  connectorRegistry = list;
+}
+
+/** The built-in catalogues followed by any connectors the user has added. */
+export const allSources = (): Source[] => [...SOURCES, ...connectorRegistry];
+
+export const sourceById = (id: string): Source => allSources().find((s) => s.id === id) ?? SOURCES[0];

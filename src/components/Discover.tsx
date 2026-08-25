@@ -3,7 +3,7 @@ import { BORDER, CYAN, MAG, MONO } from "../constants";
 import { useStore } from "../store/useStore";
 import { chip, Module, NewTag } from "./ui";
 import { mix } from "../theme";
-import { importTrack, SOURCES, sourceById, type CatTrack } from "../catalogue";
+import { allSources, importTrack, SOURCES, sourceById, type CatTrack } from "../catalogue";
 import { fmt } from "../utils";
 
 /**
@@ -22,6 +22,12 @@ export function Discover() {
   const playlists = useStore((s) => s.playlists);
   const viewMode = useStore((s) => s.viewMode);
   const fullOnly = useStore((s) => s.fullOnly);
+
+  // subscribing to connectorRev re-renders (and re-derives the list) whenever
+  // the user adds or removes a connector
+  const connectorRev = useStore((s) => s.connectorRev);
+  void connectorRev;
+  const sources = allSources();
 
   const [open, setOpen] = useState(false);
   const [srcId, setSrcId] = useState(SOURCES[0].id);
@@ -94,7 +100,7 @@ export function Discover() {
       {open && (
         <div style={{ marginTop: 10 }}>
           <div style={{ display: "flex", gap: 5, marginBottom: 6 }}>
-            {SOURCES.map((s) => (
+            {sources.map((s) => (
               <button
                 key={s.id}
                 data-src={s.id}

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FLUX Player</string>
+    <string name="title_activity_main">FLUX Player</string>
+    <string name="package_name">tech.michxaal.fluxplayer</string>
+    <string name="custom_url_scheme">tech.michxaal.fluxplayer</string>
+</resources>

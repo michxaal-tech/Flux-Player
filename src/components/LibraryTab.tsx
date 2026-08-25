@@ -9,6 +9,7 @@ import { chip } from "./ui";
 import { Cover } from "./ai/Cover";
 import { EmojiSearch, LibraryAiBar, TrackAiMenu } from "./ai/LibraryAi";
 import { Discover } from "./Discover";
+import { ConnectionsPanel } from "./ConnectionsPanel";
 import { SpotifyImport } from "./SpotifyImport";
 
 export function LibraryTab({ onLoadClick, onAnyFileClick }: { onLoadClick: () => void; onAnyFileClick?: () => void }) {
@@ -67,6 +68,7 @@ export function LibraryTab({ onLoadClick, onAnyFileClick }: { onLoadClick: () =>
       {aiReady && <EmojiSearch />}
       {aiReady && <LibraryAiBar />}
       <div style={{ marginBottom: 10 }}><Discover /></div>
+      <div style={{ marginBottom: 10 }}><ConnectionsPanel /></div>
       <div style={{ marginBottom: 10 }}><SpotifyImport onLoadClick={onLoadClick} /></div>
 
       <div className="hscroll" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8 }}>
