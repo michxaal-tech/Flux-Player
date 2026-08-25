@@ -29,7 +29,42 @@ const SIG_SET = new Set<string>(SIGNATURE_IMPACTS);
  * The adaptive quality signal still scales this down if the machine turns out
  * not to keep up, so raising the ceiling cannot cost frames, only sharpness.
  */
-const MAX_EDGE = typeof window !== "undefined" && (window as any).__fluxDesktop ? 2560 : 1800;
+// Three device profiles, not two. The desktop app (Electron, __fluxDesktop) and
+// a laptop browser were the only cases the ceilings were tuned for; a phone
+// GPU inside the Android WebView fell into the "browser" bucket and got a
+// laptop's settings — an 1800px backing store, a device-pixel-ratio of 2, and
+// the 120fps attempt below — which is precisely how a canvas-2D visualiser with
+// shadowBlur and full-screen `lighter` compositing turns to slideshow on a
+// phone. The adaptive governor would eventually claw it back, but only by
+// thrashing resolution and the 60/120 target, and the thrash is itself the
+// stutter. So mobile starts where the others end up: fewer pixels, dpr capped,
+// and no 120fps attempt at all.
+//
+// Detected once, with a test override (__fluxMobile) so the headless perf
+// harness can force the profile and measure it. Electron always reads as
+// desktop; a real touch phone or a Capacitor native shell reads as mobile.
+function isMobile(): boolean {
+  if (typeof window === "undefined") return false;
+  const o = (window as any).__fluxMobile;
+  if (o != null) return !!o;
+  if ((window as any).__fluxDesktop) return false;
+  const cap = (window as any).Capacitor;
+  if (cap && typeof cap.isNativePlatform === "function" && cap.isNativePlatform()) return true;
+  const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  const small = Math.min(screen.width, screen.height) <= 820;
+  return coarse && small;
+}
+
+/** Longest backing-store edge allowed, before the adaptive resScale multiplies it. */
+function maxEdge(): number {
+  if (typeof window !== "undefined" && (window as any).__fluxDesktop) return 2560;
+  return isMobile() ? 1200 : 1800;
+}
+
+/** Cap on the device-pixel-ratio the backing store is drawn at. */
+function dprCap(): number {
+  return isMobile() ? 1.5 : 2;
+}
 
 // Which themes actually ask for glow, learned the first time each one draws.
 const glowThemes: Record<string, boolean> = {};
@@ -254,7 +289,7 @@ function syncLive(): void {
 const snapCv = document.createElement("canvas"); // scratch for resize-preserve
 
 function sizeCanvas(cv: HTMLCanvasElement, maxEdge = Infinity, preserve = false): [number, number] {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = Math.min(window.devicePixelRatio || 1, dprCap());
   const cw = cv.clientWidth, chh = cv.clientHeight;
   let scale = dpr;
   const long = Math.max(cw, chh) * dpr;
@@ -340,8 +375,14 @@ export function startRenderLoop(): void {
   // Below this the picture reads as soft rather than merely small — which is
   // a different kind of broken from "fewer sparks", and a worse one. So it is
   // the last thing given up rather than the first; see the ladder in `draw`.
-  const SHARP_RES = typeof window !== "undefined" && (window as any).__fluxDesktop ? 0.62 : 0.5;
-  let quality = 1;
+  // On mobile the sharp floor sits a touch lower and, more to the point, it is
+  // multiplied by a smaller maxEdge — so "held sharp" is already far fewer
+  // pixels than on the laptop path, which is the whole intent.
+  const SHARP_RES = typeof window !== "undefined" && (window as any).__fluxDesktop ? 0.62 : isMobile() ? 0.46 : 0.5;
+  // Mobile starts soft and lets AUTO creep it up only if the phone can afford
+  // it, rather than opening at full cost and being dragged down over the first
+  // laggy second. On desktop/web this stays 1 (the governor takes it from there).
+  let quality = isMobile() ? 0.5 : 1;
   let resScale = 1;
   let frameEma = 16.7;
   let lastResChange = 0;
@@ -449,7 +490,10 @@ export function startRenderLoop(): void {
     // 60: the rest still accumulate per frame and would simply animate at
     // double speed (see TIME_NORMALISED in themes/index.ts).
     const panel = Math.max(rafPeriod, 1000 / 120);
-    const wantFast = panel < 13 && TIME_NORMALISED.has(live.visTheme) && (live.cfg.hiFps ?? true);
+    // Never chase 120 on a phone. Even a 120Hz Android panel can't sustain a
+    // shadowBlur'd canvas at that rate inside the WebView, and the attempt →
+    // starve → back-off → retry loop is a worse stutter than simply holding 60.
+    const wantFast = !isMobile() && panel < 13 && TIME_NORMALISED.has(live.visTheme) && (live.cfg.hiFps ?? true);
     // Test hook: pin the rate so a theme's motion can be measured at 60 and at
     // the panel rate without the governor moving the goalposts mid-measurement,
     // and without the opt-in list deciding the answer in advance — the whole
@@ -1008,7 +1052,7 @@ export function startRenderLoop(): void {
       const offscreen = use3d || glowThemes[L.visTheme] !== false;
       // The visible canvas is then only ever a blit target, so it must not carry
       // the trail — preserve-on-resize moves to the scene buffer instead.
-      const [w, h] = sizeCanvas(vc, MAX_EDGE * resScale, !offscreen);
+      const [w, h] = sizeCanvas(vc, maxEdge() * resScale, !offscreen);
       // The scene buffer mirrors vc's backing store and transform so themes see
       // exactly the geometry they'd see drawing straight to the screen.
       let c = vc.getContext("2d")!;
@@ -1726,7 +1770,7 @@ export function startRenderLoop(): void {
       const lc = canvasRefs.lyr;
       const lyricActive = !!(L.lyricsOn && L.lyricLines && !LYRIC_NATIVE_THEMES.has(TH));
       if (lc && (lyricActive || lyricWasActive)) {
-        const [lw2, lh2] = sizeCanvas(lc, MAX_EDGE * resScale);
+        const [lw2, lh2] = sizeCanvas(lc, maxEdge() * resScale);
         const c2 = lc.getContext("2d")!;
         c2.clearRect(0, 0, lw2, lh2);
         if (lyricActive) {

@@ -25,6 +25,7 @@
     "deep": "node scripts/deep-analyze-check.mjs",
     "visualsui": "node scripts/visuals-ui-check.mjs",
     "connectors": "node scripts/connectors-check.mjs",
+    "mobileperf": "node scripts/mobile-perf-check.mjs",
     "android:sync": "npm run build && npx cap sync android"
   },
   "dependencies": {
