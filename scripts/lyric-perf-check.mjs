@@ -23,7 +23,10 @@ import { chromium } from "playwright";
 
 const PORT = 4191;
 const BASE = `http://localhost:${PORT}`;
-const THEME = "BARS";        // cheap theme, so the lyrics dominate the measurement
+const THEME = "PULSEBARS";   // a mobile-native theme; on a phone the engine
+                             // coerces anything else to one anyway, so naming a
+                             // desktop theme here measured something that was not
+                             // actually being drawn
 const PERCHAR_MAX = 2.2;     // per-char may cost more than row, but not 3x more
 
 function makeWav(path) {
@@ -93,10 +96,12 @@ async function run(mode) {
       if (now - t0 < 3500) requestAnimationFrame(tick);
       else {
         const a = out.slice(5).sort((x, y) => x - y);
+        const lc = window.__fluxCanvases.lyr;
         res({
           med: +a[a.length >> 1].toFixed(1),
           p90: +a[Math.floor(a.length * 0.9)].toFixed(1),
           fps: Math.round(1000 / a[a.length >> 1]),
+          lw: lc?.width ?? 0, lh: lc?.height ?? 0,
         });
       }
     };
@@ -113,10 +118,10 @@ await browser.close();
 preview.kill();
 
 console.log(`\ntheme ${THEME}, mobile profile, phone viewport 390x844 @dpr3\n`);
-console.log(`mode       med     p90     fps`);
-console.log(`off        ${off.med}    ${off.p90}    ${off.fps}`);
-console.log(`row        ${row.med}    ${row.p90}    ${row.fps}`);
-console.log(`perchar    ${perchar.med}    ${perchar.p90}    ${perchar.fps}`);
+console.log(`mode       med     p90     fps    lyric canvas`);
+console.log(`off        ${off.med}    ${off.p90}    ${off.fps}    ${off.lw}x${off.lh}`);
+console.log(`row        ${row.med}    ${row.p90}    ${row.fps}    ${row.lw}x${row.lh}`);
+console.log(`perchar    ${perchar.med}    ${perchar.p90}    ${perchar.fps}    ${perchar.lw}x${perchar.lh}`);
 
 const ratio = perchar.med / row.med;
 console.log(`\nper-char / row cost ratio: ${ratio.toFixed(2)}x  (max ${PERCHAR_MAX})`);
