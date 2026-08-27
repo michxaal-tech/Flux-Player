@@ -92,6 +92,8 @@ export interface StoreState {
   aiModel: string;
   /** base URL for the OpenAI-compatible provider */
   aiBaseUrl: string;
+  /** speech-to-text model for lyric transcription (OpenAI-compatible providers) */
+  aiSttModel: string;
   /** a request is in flight (drives the ✦ spinner) */
   aiBusy: boolean;
   aiLabel: string;
@@ -230,6 +232,7 @@ export const useStore = create<StoreState>()(
         aiProvider: DEFAULT_PROVIDER,
         aiModel: "",
         aiBaseUrl: "",
+        aiSttModel: "whisper-large-v3",
         aiBusy: false,
         aiLabel: "",
         aiPanel: false,
@@ -484,6 +487,7 @@ export const useStore = create<StoreState>()(
           aiProvider: s.aiProvider,
           aiModel: s.aiModel,
           aiBaseUrl: s.aiBaseUrl,
+          aiSttModel: s.aiSttModel,
         }),
         merge: (persisted, current) => {
           const p = (persisted ?? {}) as Partial<StoreState>;

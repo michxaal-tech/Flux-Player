@@ -948,6 +948,24 @@ export function VisualizerOverlay() {
               }}
               style={{ ...chip(false, MAG), padding: "7px 11px", fontSize: 9.5, opacity: track ? 1 : 0.4 }}
             >🔍 FIND LYRICS</button>
+            <button
+              title="Read the lyrics stored inside the audio file itself — instant, offline, and how AI-generated tracks (Suno, Udio) carry their words"
+              onClick={async () => {
+                if (!track) return;
+                const { lyricsFromTrackFile } = await import("../lyrics");
+                lyricsFromTrackFile(track);
+              }}
+              style={{ ...chip(false, CYAN), padding: "7px 11px", fontSize: 9.5, opacity: track ? 1 : 0.4 }}
+            >🏷 FROM FILE</button>
+            <button
+              title="Transcribe the singing with your own API key. Run stem separation first for a far better result."
+              onClick={async () => {
+                if (!track) return;
+                const { transcribeTrack } = await import("../lyrics");
+                transcribeTrack(track);
+              }}
+              style={{ ...chip(false, CYAN), padding: "7px 11px", fontSize: 9.5, opacity: track ? 1 : 0.4 }}
+            >🎙 TRANSCRIBE</button>
             <button onClick={() => lrcInputRef.current?.click()} style={{ ...chip(false), padding: "7px 11px", fontSize: 9.5, opacity: track ? 1 : 0.4 }}>＋ .LRC FILE</button>
             <button
               onClick={() => { setFixOpen((v) => !v); if (track) { setFixTitle(track.name); setFixArtist(""); } }}

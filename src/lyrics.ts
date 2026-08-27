@@ -1,5 +1,7 @@
 // Synced lyrics: LRC parsing plus free lookup via lrclib.net (no key, CORS).
 import { useStore, getCurrentTrack } from "./store/useStore";
+import { blobStore } from "./store/blobStore";
+import { lyricsFromFile } from "./audio/tagLyrics";
 import type { Track } from "./types";
 
 export interface LyricLine {
@@ -80,9 +82,123 @@ function scoreHit(h: LrclibHit, fileTokens: string[], dur: number): number {
  * strategies, then scores every candidate on name overlap + duration fit
  * and picks the best confident match. With `artistHint` (typed by the user
  * after a failed search) it searches that artist's songs for the track name. */
+/**
+ * Lyrics from the track's own file.
+ *
+ * Tried before any online lookup, because it is exact when it works: the words
+ * came from whoever made the file rather than from a database's best guess at
+ * which song this is. For an AI-generated track it is also the only thing that
+ * can work at all — Suno and Udio write the lyrics into the export, and no
+ * lookup service has ever heard the song.
+ *
+ * `quiet` suppresses the status line so the automatic path can try this first
+ * without narrating a miss.
+ */
+export async function lyricsFromTrackFile(tr: Track, quiet = false): Promise<boolean> {
+  const set = (lyricStatus: string) => { if (!quiet) useStore.setState({ lyricStatus }); };
+  try {
+    const blob = await blobStore.get(tr.fileId);
+    if (!blob) { set("That track's audio isn't stored on this device"); return false; }
+    // Track carries no duration of its own; the store has it for whatever is
+    // loaded, and the fallback only affects where *untimed* prose is placed.
+    const dur = useStore.getState().duration || 180;
+    const got = await lyricsFromFile(blob, dur);
+    if (!got) {
+      set("No lyrics inside that file");
+      if (!quiet) setTimeout(() => useStore.setState({ lyricStatus: "" }), 4000);
+      return false;
+    }
+    useStore.getState().updateTrack(tr.id, { lyrics: got.lines });
+    // The synced/estimated distinction is surfaced rather than smoothed over.
+    // Evenly-spread prose drifts against the song, and a user who knows that is
+    // reading along; one who doesn't thinks the player is broken.
+    useStore.setState({
+      lyricPicks: [], lyricAskArtist: false,
+      lyricStatus: got.synced
+        ? `\u2713 ${got.lines.length} lines from the file (${got.source})`
+        : `\u2713 ${got.lines.length} lines from the file — not timed, spaced evenly`,
+    });
+    setTimeout(() => useStore.setState({ lyricStatus: "" }), 5000);
+    return true;
+  } catch {
+    set("Couldn't read that file's tags");
+    return false;
+  }
+}
+
+/**
+ * Lyrics transcribed from the audio.
+ *
+ * The last resort, for a track whose file carries nothing and which no lookup
+ * service has ever heard — which is every song you generated yourself.
+ *
+ * Where an instrumental exists it is *subtracted* from the mix first. The stem
+ * separator produces an instrumental rather than a vocal, and mix minus
+ * instrumental is the vocal: a residual that Whisper can actually read, where
+ * a full mix is mostly drums and synths and comes back as confident nonsense.
+ * That costs nothing extra — the separation has already been paid for.
+ */
+export async function transcribeTrack(tr: Track): Promise<void> {
+  const set = (lyricStatus: string) => useStore.setState({ lyricStatus });
+  const clearSoon = (ms = 6000) => setTimeout(() => useStore.setState({ lyricStatus: "" }), ms);
+  try {
+    const mixBlob = await blobStore.get(tr.fileId);
+    if (!mixBlob) { set("That track's audio isn't stored on this device"); clearSoon(4000); return; }
+
+    set("Decoding audio…");
+    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new Ctx();
+    let buffer: AudioBuffer;
+    let isolated = false;
+    try {
+      buffer = await ctx.decodeAudioData(await mixBlob.arrayBuffer());
+      const instBlob = tr.hasInst ? await blobStore.get(`inst-${tr.fileId}`) : null;
+      if (instBlob) {
+        const inst = await ctx.decodeAudioData(await instBlob.arrayBuffer());
+        // Only subtract when the two really are the same recording; a length
+        // mismatch means they are not aligned and the residual would be noise.
+        if (Math.abs(inst.length - buffer.length) < buffer.sampleRate * 0.5 && inst.sampleRate === buffer.sampleRate) {
+          const n = Math.min(inst.length, buffer.length);
+          const voc = ctx.createBuffer(1, n, buffer.sampleRate);
+          const out = voc.getChannelData(0);
+          const chans = Math.min(buffer.numberOfChannels, inst.numberOfChannels);
+          for (let c = 0; c < chans; c++) {
+            const m = buffer.getChannelData(c);
+            const i = inst.getChannelData(c);
+            for (let k = 0; k < n; k++) out[k] += (m[k] - i[k]) / chans;
+          }
+          buffer = voc;
+          isolated = true;
+        }
+      }
+    } finally {
+      void ctx.close();
+    }
+
+    const { transcribeLyrics } = await import("./audio/transcribeLyrics");
+    const res = await transcribeLyrics({
+      buffer,
+      isolated,
+      title: tr.name,
+      onStage: (st) => set(`${st}…`),
+    });
+    useStore.getState().updateTrack(tr.id, { lyrics: res.lines });
+    useStore.setState({
+      lyricPicks: [], lyricAskArtist: false,
+      lyricStatus: `\u2713 ${res.lines.length} lines transcribed${isolated ? " from the isolated vocal" : " (full mix — separate stems for better accuracy)"}`,
+    });
+    clearSoon();
+  } catch (e) {
+    set(e instanceof Error ? e.message : "Transcription failed");
+    clearSoon(9000);
+  }
+}
+
 export async function fetchLyrics(tr: Track, artistHint?: string): Promise<void> {
   const set = (lyricStatus: string) => useStore.setState({ lyricStatus });
   try {
+    // the file itself first: instant, offline, and exact when present
+    if (await lyricsFromTrackFile(tr, true)) return;
     set("Searching lyrics…");
     const cleaned = cleanQuery(tr.name);
     const attempts = new Set<string>();
