@@ -1029,7 +1029,13 @@ export function startRenderLoop(): void {
       // offscreen buffer, the bloom and the blit — which is what buys the
       // resolution back. Set before the canvas is sized, because that is what
       // reads maxEdge()/dprCap().
-      setSharp(isMobile() && MOBILE_THEME_SET.has(L.visTheme));
+      //
+      // `!use3d` is the load-bearing half. A 3D projection mode forces the
+      // offscreen path regardless of what the theme asks for (see `offscreen`
+      // just below), so the saving that pays for the pixels is not there — and
+      // granting the higher resolution anyway would hand a phone the original
+      // problem with more pixels in it. In 3D, mobile keeps the old ceiling.
+      setSharp(isMobile() && !use3d && MOBILE_THEME_SET.has(L.visTheme));
       const offscreen = use3d || glowThemes[L.visTheme] !== false;
       // The visible canvas is then only ever a blit target, so it must not carry
       // the trail — preserve-on-resize moves to the scene buffer instead.
