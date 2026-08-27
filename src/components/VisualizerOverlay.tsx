@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { BG, BORDER, CYAN, IMPACTS, MAG, NEW_ITEMS, P_SHAPES, P_SIZES, P_STYLES, PALETTES, QUALITY_MODES, STAGED_MARK, STAGED_THEMES, VIS_THEMES } from "../constants";
+import { isMobile } from "../visualizer/device";
+import { MOBILE_THEMES } from "../visualizer/mobile";
 import { nextTrack, prevTrack, togglePlay } from "../audio/transport";
 import { getCurrentTrack, useStore } from "../store/useStore";
 import { mix } from "../theme";
@@ -243,9 +245,15 @@ export function VisualizerOverlay() {
     );
   };
 
+  // Which themes this device is offered. On a phone the desktop set is not
+  // shrunk down, it is simply not shown: those themes were written for a
+  // machine with a GPU to spare, and the mobile-native set replaces them
+  // wholesale. Web and desktop are untouched.
+  const themeList = isMobile() ? MOBILE_THEMES : VIS_THEMES;
+
   const stepTheme = (dir: 1 | -1) => {
-    const i = VIS_THEMES.indexOf(visTheme);
-    set({ visTheme: VIS_THEMES[(i + dir + VIS_THEMES.length) % VIS_THEMES.length] });
+    const i = themeList.indexOf(visTheme);
+    set({ visTheme: themeList[(i + dir + themeList.length) % themeList.length] });
   };
 
   return (
@@ -353,7 +361,7 @@ export function VisualizerOverlay() {
                   <div style={{ gridColumn: "1 / -1", fontSize: 9, letterSpacing: "0.18em", color: MAG, padding: "1px 4px 4px" }}>
                     ★ FAVORITES <NewTag />
                   </div>
-                  {favThemes.filter((v) => VIS_THEMES.includes(v)).map((v) => (
+                  {favThemes.filter((v) => themeList.includes(v)).map((v) => (
                     <ThemeCell key={`fav-${v}`} v={v} fav />
                   ))}
                   <div style={{ gridColumn: "1 / -1", borderTop: BORDER, margin: "6px 0 2px" }} />
@@ -362,7 +370,7 @@ export function VisualizerOverlay() {
                   </div>
                 </>
               )}
-              {VIS_THEMES.map((v) => (
+              {themeList.map((v) => (
                 <ThemeCell key={v} v={v} />
               ))}
               {favThemes.length === 0 && (

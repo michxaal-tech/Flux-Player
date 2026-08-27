@@ -33,15 +33,42 @@ export function isMobile(): boolean {
   return (mobileMemo = coarse && small);
 }
 
+/**
+ * Sharp mode: this frame's theme is cheap enough to draw at nearly native
+ * resolution.
+ *
+ * The phone complaint was two complaints — laggy *and* blurry — and they are
+ * the same fact seen from both ends. The canvas was rendered at 1200px and CSS
+ * stretched to a 1080x2400 screen, so every frame was upscaled about 2x, and
+ * the fix for the lag (fewer pixels) is the cause of the blur. Tuning could
+ * only trade one for the other.
+ *
+ * What breaks the trade is the *theme*. A theme that never calls `glow()` skips
+ * the offscreen scene buffer, the bloom pass and the blit entirely (see the
+ * `offscreen` decision in engine.ts) — several full-screen passes a frame that
+ * simply do not happen. That buys back far more than the extra pixels cost, so
+ * the mobile-native themes can be drawn close to native and be sharp *and*
+ * fast. Legacy themes keep the old conservative ceilings.
+ *
+ * Set per frame by the engine before the canvas is sized.
+ */
+let sharp = false;
+
+export function setSharp(on: boolean): void {
+  sharp = on;
+}
+
 /** Longest backing-store edge allowed, before the adaptive resScale multiplies it. */
 export function maxEdge(): number {
   if (typeof window !== "undefined" && (window as any).__fluxDesktop) return 2560;
-  return isMobile() ? 1200 : 1800;
+  if (!isMobile()) return 1800;
+  return sharp ? 2000 : 1200;
 }
 
 /** Cap on the device-pixel-ratio the backing store is drawn at. */
 export function dprCap(): number {
-  return isMobile() ? 1.5 : 2;
+  if (!isMobile()) return 2;
+  return sharp ? 2.5 : 1.5;
 }
 
 /**

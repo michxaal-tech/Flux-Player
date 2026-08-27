@@ -8,10 +8,11 @@ import { shallow } from "zustand/shallow";
 import { ac1, ac2 } from "../theme";
 import { canvasRefs, live } from "./live";
 import { themes, TIME_NORMALISED } from "./themes";
+import { MOBILE_THEMES, MOBILE_THEME_SET } from "./mobile";
 import { ak } from "./rate";
 import type { ThemeCtx } from "./themeTypes";
 import { drawLyricOverlay } from "./lyricRenderer";
-import { dprCap, isMobile, maxEdge } from "./device";
+import { dprCap, isMobile, maxEdge, setSharp } from "./device";
 import { project3d, type Mode3D } from "./project3d";
 import { drawDropLayers, stepDropLayers, MAX_SLOTS } from "./dropLayers";
 import { DRIFT_FRAMES, hueRamp, lighting, rampPos, stopsOf } from "../palette";
@@ -499,7 +500,10 @@ export function startRenderLoop(): void {
     if (quality > 0.06 || frameEma < targetPeriod * 1.2) starvedSince = 0;
     else if (!starvedSince) starvedSince = nowMs;
     const resFloor = starvedSince && nowMs - starvedSince > 2000 ? MIN_RES : SHARP_RES;
-    const wantRes = Math.round((resFloor + (1 - resFloor) * quality) / 0.06) * 0.06;
+    // Test hook: pin the backing-store scale so a diagnostic can hold the theme
+    // constant and vary only the pixel count.
+    const forced = (window as any).__forceRes as number | undefined;
+    const wantRes = forced ?? Math.round((resFloor + (1 - resFloor) * quality) / 0.06) * 0.06;
     if (Math.abs(wantRes - resScale) > 0.03 && nowMs - lastResChange > 900) {
       resScale = Math.min(1, Math.max(MIN_RES, wantRes));
       lastResChange = nowMs;
@@ -1014,6 +1018,18 @@ export function startRenderLoop(): void {
       // theme has drawn once, so it is remembered per theme and assumed true
       // for one not seen yet — the conservative way round, since the cost of
       // guessing wrong is one blit rather than a white screen.
+      // On a phone, a theme saved from the desktop set would still draw even
+      // though the picker no longer offers it — so coerce once, here, rather
+      // than trusting every entry point to have done it.
+      if (isMobile() && !MOBILE_THEME_SET.has(L.visTheme)) {
+        useStore.setState({ visTheme: MOBILE_THEMES[0] });
+        L.visTheme = MOBILE_THEMES[0];
+      }
+      // Sharp mode: a mobile-native theme never calls glow(), so it skips the
+      // offscreen buffer, the bloom and the blit — which is what buys the
+      // resolution back. Set before the canvas is sized, because that is what
+      // reads maxEdge()/dprCap().
+      setSharp(isMobile() && MOBILE_THEME_SET.has(L.visTheme));
       const offscreen = use3d || glowThemes[L.visTheme] !== false;
       // The visible canvas is then only ever a blit target, so it must not carry
       // the trail — preserve-on-resize moves to the scene buffer instead.
@@ -1116,7 +1132,8 @@ export function startRenderLoop(): void {
         L.cycleT++;
         if (L.cycleT > 60 * 16) {
           L.cycleT = 0;
-          const cyc = VIS_THEMES.filter((th) => th !== "CLOCK");
+          // auto-cycle walks whatever set this device is actually offered
+          const cyc = (isMobile() ? MOBILE_THEMES : VIS_THEMES).filter((th) => th !== "CLOCK");
           const next =
             cfg.autoMode === "shuffle"
               ? cyc.filter((th) => th !== L.visTheme)[Math.floor(Math.random() * (cyc.length - 1))]
@@ -1343,6 +1360,10 @@ export function startRenderLoop(): void {
       // between rendering offscreen and rendering direct, and the trail lives
       // in whichever buffer that is — so it would flicker on every beat.
       glowThemes[TH] = glowThemes[TH] || glowWant > 0.01;
+      // Test hook: the mobile set is defined by never asking for glow, and a
+      // theme that quietly starts asking would lose the whole saving without
+      // looking any different. This is what the sweep asserts on.
+      (window as any).__fluxGlowed = !!glowThemes[TH];
       if (offscreen && (glowWant > 0.01 || lit.bloom > 0)) {
         const asked = Math.min(1, glowWant / 34);
         // The halo is still the first thing to go on a machine that cannot

@@ -98,6 +98,11 @@ import { WARPGATE } from "./warpgate";
 import { INFERNO } from "./inferno";
 import { MAELSTROM } from "./maelstrom";
 
+// The mobile-native set. Registered in the same map so `themes[name]` resolves
+// identically whichever platform is drawing; which *names* are offered is the
+// picker's decision, not this map's.
+import { MOBILE_THEME_MAP, MOBILE_THEMES } from "../mobile";
+
 export const themes: Record<string, ThemeDraw> = {
   RING, KALEIDO, HELIX, WAVES, LASERS, GRID, ORB, RIPPLES, SPIRAL, FIREFLIES,
   CITY, VORTEX, SCOPE, AURORA, DOTGRID, BARS, NEBULA, TUNNEL, STARFIELD,
@@ -113,6 +118,7 @@ export const themes: Record<string, ThemeDraw> = {
   MONOLITH, ORRERY, CANYON, GYROSCOPE, SINGULARITY,
   STRATA, CROWN, CASCADE, FISSION, PARALLAX,
   HORIZON, RUPTURE, WARPGATE, INFERNO, MAELSTROM,
+  ...MOBILE_THEME_MAP,
 };
 
 /**
@@ -161,6 +167,9 @@ export const TIME_NORMALISED = new Set<string>([
   "STRATA", "SYNAPSE", "TERMINAL", "TESSERACT", "THUNDER",
   "TIDE", "TOPOGRAPH", "TUNNEL", "VHS", "VINYL",
   "VORTEX", "VOXEL", "WARPGATE", "WAVES", "WORMHOLE",
+  // the mobile-native set: written against the clock from the first line,
+  // so they are certified as a group rather than one at a time
+  ...MOBILE_THEMES,
 ]);
 
 // Every theme is on the list now, which is a statement about the code and not
