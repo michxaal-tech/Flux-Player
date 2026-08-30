@@ -4,6 +4,7 @@ import { blobStore, cacheUrl, dropUrl, getUrl } from "../store/blobStore";
 import { getPlayingList, useStore } from "../store/useStore";
 import type { Track } from "../types";
 import { cleanName, isAudioFile, uid } from "../utils";
+import { isYouTube, ytLoad, ytPause, ytPlay, ytSeek, ytStop } from "../youtube";
 
 const S = () => useStore.getState();
 
@@ -12,6 +13,24 @@ export async function playAt(plId: string, i: number): Promise<void> {
   const pl = s.playlists.find((p) => p.id === plId);
   const tr = pl?.tracks[i];
   if (!pl || !tr) return;
+  // A YouTube track has no stored audio — it plays in YouTube's own iframe.
+  // Branching here rather than in every caller keeps the one entry point.
+  if (isYouTube(tr)) {
+    engine.audio.pause();
+    ytLoad(tr.sourceId!);
+    ytPlay();
+    useStore.setState({
+      playPl: plId, current: i, playing: true,
+      loopA: null, loopB: null, cues: [null, null, null, null],
+      // the reactive features work from decoded samples, which a cross-origin
+      // iframe does not expose; say so once rather than looking broken
+      ytStatus: "Playing in YouTube's player — the visualizer won't react to it.",
+    });
+    S().updateTrack(tr.id, { plays: (tr.plays || 0) + 1, lastPlayedAt: Date.now() });
+    useStore.setState((st) => ({ stats: { ...st.stats, plays: st.stats.plays + 1 } }));
+    return;
+  }
+  ytStop();
   engine.ensure();
   const wantInst = s.instMode && tr.hasInst;
   const url = (wantInst ? await getUrl(`inst-${tr.fileId}`) : null) ?? (await getUrl(tr.fileId));
@@ -94,6 +113,12 @@ export function togglePlay(): void {
     if (getPlayingList(s).tracks.length) playAt(s.playPl, 0);
     return;
   }
+  const cur = getPlayingList(s).tracks[s.current];
+  if (isYouTube(cur)) {
+    if (s.playing) { ytPause(); useStore.setState({ playing: false }); }
+    else { ytPlay(); useStore.setState({ playing: true }); }
+    return;
+  }
   engine.ensure();
   const el = engine.audio;
   if (el.paused) {
@@ -133,7 +158,10 @@ export function prevTrack(): void {
   const s = S();
   const list = s.playlists.find((p) => p.id === s.playPl);
   if (!list || !list.tracks.length) return;
-  if (engine.audio.currentTime > 3) {
+  const cur = list.tracks[s.current];
+  if (isYouTube(cur)) {
+    if (s.progress * s.duration > 3) { ytSeek(0); return; }
+  } else if (engine.audio.currentTime > 3) {
     engine.audio.currentTime = 0;
     return;
   }
@@ -141,6 +169,12 @@ export function prevTrack(): void {
 }
 
 export function seek(t: number): void {
+  const s = S();
+  if (isYouTube(getPlayingList(s).tracks[s.current])) {
+    ytSeek(t);
+    if (s.duration > 0) useStore.setState({ progress: t / s.duration });
+    return;
+  }
   engine.audio.currentTime = t;
   useStore.setState({ progress: t });
 }
@@ -273,4 +307,9 @@ export function deletePlaylist(plId: string): void {
       blobStore.del(`inst-${tr.fileId}`);
     }
   }
+}
+
+/** Alias used by the YouTube player when a video ends. */
+export function next(): void {
+  nextTrack(true);
 }

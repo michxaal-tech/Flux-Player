@@ -124,6 +124,10 @@ export interface StoreState {
   revoiceDuck: number;
   /** a Spotify session exists in this browser (import is metadata-only) */
   spotifyReady: boolean;
+  /** a YouTube Data API key is stored in this browser */
+  ytReady: boolean;
+  /** transient progress/error line for the YOUTUBE panel */
+  ytStatus: string;
   /** hide 30-second excerpts in DISCOVER, so a tap can't import one by mistake */
   fullOnly: boolean;
   /** float a mini player when the app is backgrounded */
@@ -250,6 +254,8 @@ export const useStore = create<StoreState>()(
         catStatus: "",
         revoiceDuck: 1,
         spotifyReady: false,
+        ytReady: false,
+        ytStatus: "",
         fullOnly: true,
         tab: "player",
         shortcutsOpen: false,

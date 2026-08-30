@@ -65,7 +65,7 @@ export type ViewMode =
   | { type: "artist"; artist: string };
 
 export type RepeatMode = "off" | "all" | "one";
-export type TabId = "player" | "visuals" | "dj" | "fx" | "library" | "me";
+export type TabId = "player" | "visuals" | "dj" | "fx" | "library" | "yt" | "me";
 export type SortBy = "added" | "name" | "plays";
 
 export interface AmbState {

@@ -14,6 +14,7 @@ import { DJTab } from "./components/DJTab";
 import { FXRackTab } from "./components/FXRackTab";
 import { LibraryTab } from "./components/LibraryTab";
 import { MeTab } from "./components/MeTab";
+import { YouTubeTab } from "./components/YouTubeTab";
 import { PlayerTab } from "./components/PlayerTab";
 import { ShortcutsPanel } from "./components/ShortcutsPanel";
 import { VisualizerOverlay } from "./components/VisualizerOverlay";
@@ -37,7 +38,7 @@ export default function App() {
 
   // ── tab motion: remember where we came from so the incoming panel slides
   // in from that side, and slide the accent bar to the active tab ──
-  const TAB_ORDER: TabId[] = ["player", "visuals", "dj", "fx", "library", "me"];
+  const TAB_ORDER: TabId[] = ["player", "visuals", "dj", "fx", "library", "yt", "me"];
   const prevTab = useRef<TabId>(tab);
   const [dir, setDir] = useState<1 | -1>(1);
   const tabBarRef = useRef<HTMLDivElement>(null);
@@ -51,6 +52,7 @@ export default function App() {
       {id === "dj" && <DJTab />}
       {id === "fx" && <FXRackTab />}
       {id === "library" && <LibraryTab onLoadClick={() => fileInputRef.current?.click()} onAnyFileClick={() => anyInputRef.current?.click()} />}
+      {id === "yt" && <YouTubeTab />}
       {id === "me" && <MeTab />}
     </>
   );
@@ -186,6 +188,7 @@ export default function App() {
           ["dj", "🎧", "DJ"],
           ["fx", "🎛", "FX"],
           ["library", "≡", "LIBRARY"],
+          ["yt", "▶", "YT"],
           ["me", "👤", "ME"],
         ] as [TabId, React.ReactNode, string][]).map(([id, icon, label]) => (
           <button

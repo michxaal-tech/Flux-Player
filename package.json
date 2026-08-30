@@ -28,7 +28,8 @@
     "mobileperf": "node scripts/mobile-perf-check.mjs",
     "android:sync": "npm run build && npx cap sync android",
     "taglyrics": "node --experimental-strip-types scripts/taglyrics-check.mjs",
-    "taglyrics:e2e": "node scripts/taglyrics-e2e.mjs"
+    "taglyrics:e2e": "node scripts/taglyrics-e2e.mjs",
+    "youtube": "node scripts/youtube-check.mjs"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
