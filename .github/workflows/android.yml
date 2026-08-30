@@ -64,14 +64,6 @@ jobs:
           cp "$src" "$out"
           echo "path=$out" >> "$GITHUB_OUTPUT"
 
-      # Always kept, so a run that cannot publish still leaves something
-      # downloadable.
-      - uses: actions/upload-artifact@v4
-        with:
-          name: flux-player-android
-          path: ${{ steps.apk.outputs.path }}
-          if-no-files-found: error
-
       - name: Publish to the android-latest release
         if: ${{ inputs.publish }}
         env:
@@ -86,6 +78,20 @@ jobs:
               --title "FLUX Player — Android" \
               --notes "Android build of FLUX Player. Download the .apk and open it on your phone to install. It is a debug build, so Android will warn once about installing from an unknown source — allow it for your browser/files app and open the APK again. Unrelated to Google Play."
           fi
+
+      # Secondary copy, and deliberately not allowed to fail the job. A run once
+      # went red here with a perfectly good APK already built, because the
+      # account's Actions artifact storage was full — and because this step then
+      # sat *before* the release publish, a storage quota stopped the actual
+      # delivery. The release is the delivery path; this is a convenience.
+      - uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: flux-player-android
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+          # short, so these stop accumulating against the quota
+          retention-days: 5
 
 # ── Turning this into a Play-Store release ──────────────────────────────────
 # The debug APK above is for sideloading. A Store build additionally needs:

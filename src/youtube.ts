@@ -230,6 +230,23 @@ function loadApi(): Promise<void> {
 export async function ensurePlayer(host: HTMLElement): Promise<void> {
   if (player) return;
   await loadApi();
+  // The desktop shell serves the app from `flux://app`. That is a proper
+  // origin — the scheme is registered standard+secure, which is what lets
+  // IndexedDB and workers run — but it is not http(s), and YouTube's player
+  // completes its handshake by postMessage back to the embedding origin. If it
+  // declines a custom scheme, `onReady` simply never fires and the panel sits
+  // there looking broken with nothing to explain it. So the wait is bounded and
+  // the failure is named; `openOnYouTube` is then the way out.
+  const guard = window.setTimeout(() => {
+    if (!ready) {
+      useStore.setState({
+        ytStatus: (window as unknown as { __fluxDesktop?: boolean }).__fluxDesktop
+          ? "YouTube's player didn't start in the desktop app. Use “Open on YouTube” to play it in your browser."
+          : "YouTube's player didn't start — check your connection.",
+      });
+    }
+  }, 9000);
+  const clearGuard = () => window.clearTimeout(guard);
   const YT = (window as unknown as { YT: { Player: new (el: HTMLElement, o: unknown) => YtPlayer } }).YT;
   await new Promise<void>((resolve) => {
     player = new YT.Player(host, {
@@ -238,6 +255,7 @@ export async function ensurePlayer(host: HTMLElement): Promise<void> {
       playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
       events: {
         onReady: () => {
+          clearGuard();
           ready = true;
           player?.setVolume(Math.round(useStore.getState().volume * 100));
           if (pending) { player?.loadVideoById(pending); pending = null; }
@@ -298,4 +316,16 @@ function startPoll(): void {
 
 function stopPoll(): void {
   if (poll) { window.clearInterval(poll); poll = 0; }
+}
+
+/**
+ * Open the video on YouTube in the real browser.
+ *
+ * The escape hatch for the case above, and also just a reasonable thing to
+ * want. In the desktop shell `window.open` of an https URL is routed to the
+ * system browser by the shell's window-open handler; in a normal browser it is
+ * an ordinary new tab.
+ */
+export function openOnYouTube(videoId: string): void {
+  window.open(`https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`, "_blank", "noopener");
 }

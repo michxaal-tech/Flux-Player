@@ -62,13 +62,16 @@ jobs:
         working-directory: desktop
         run: node pack-check.cjs
 
-      # Always kept, so a run that cannot publish still leaves something
-      # downloadable.
+      # Secondary copy, and deliberately not allowed to fail the job — see the
+      # note in android.yml: a full artifact store must not block the release,
+      # which is the actual delivery path.
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: flux-player-windows
           path: desktop/out/*.exe
           if-no-files-found: error
+          retention-days: 5
 
       - name: Publish to the desktop-latest release
         if: ${{ inputs.publish }}

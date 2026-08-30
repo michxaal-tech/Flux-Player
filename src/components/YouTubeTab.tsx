@@ -6,7 +6,7 @@ import { mix } from "../theme";
 import { fmt } from "../utils";
 import { playAt } from "../audio/transport";
 import {
-  ensurePlayer, loadYtKey, saveYtKey, searchYouTube, ytTrack, type YtHit,
+  ensurePlayer, loadYtKey, openOnYouTube, saveYtKey, searchYouTube, ytTrack, type YtHit,
 } from "../youtube";
 
 const input: React.CSSProperties = {
@@ -220,6 +220,14 @@ export function YouTubeTab() {
                     onClick={() => queue(h, false)}
                     style={{ ...chip(false), padding: "6px 9px", fontSize: 9 }}
                   >＋ QUEUE</button>
+                  {/* always available, and the way out when the embedded player
+                      cannot run — a video with embedding disabled, or the
+                      desktop shell's non-http origin */}
+                  <button
+                    title="Open on YouTube in your browser"
+                    onClick={() => openOnYouTube(h.id)}
+                    style={{ ...chip(false), padding: "6px 9px", fontSize: 9 }}
+                  >↗</button>
                 </div>
               </div>
             ))}
