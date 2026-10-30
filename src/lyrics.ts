@@ -1,25 +1,14 @@
 // Synced lyrics: LRC parsing plus free lookup via lrclib.net (no key, CORS).
 import { useStore, getCurrentTrack } from "./store/useStore";
 import { blobStore } from "./store/blobStore";
-import { lyricsFromFile } from "./audio/tagLyrics";
-import type { Track } from "./types";
+import { lyricsFromFile, parseLrcText } from "./audio/tagLyrics";
+import type { LyricLineData, Track } from "./types";
 
-export interface LyricLine {
-  /** seconds */
-  t: number;
-  text: string;
-}
+export type LyricLine = LyricLineData;
 
+/** LRC (plain or enhanced, with per-word tags) → sorted timed lines. */
 export function parseLrc(src: string): LyricLine[] {
-  const out: LyricLine[] = [];
-  for (const raw of src.split(/\r?\n/)) {
-    const tags = [...raw.matchAll(/\[(\d+):(\d+(?:\.\d+)?)\]/g)];
-    if (!tags.length) continue;
-    const text = raw.replace(/\[[^\]]*\]/g, "").trim();
-    if (!text) continue;
-    for (const m of tags) out.push({ t: +m[1] * 60 + +m[2], text });
-  }
-  return out.sort((a, b) => a.t - b.t);
+  return parseLrcText(src);
 }
 
 interface LrclibHit {
@@ -108,7 +97,7 @@ export async function lyricsFromTrackFile(tr: Track, quiet = false): Promise<boo
       if (!quiet) setTimeout(() => useStore.setState({ lyricStatus: "" }), 4000);
       return false;
     }
-    useStore.getState().updateTrack(tr.id, { lyrics: got.lines });
+    useStore.getState().updateTrack(tr.id, { lyrics: got.lines, lyricsTimed: got.synced });
     // The synced/estimated distinction is surfaced rather than smoothed over.
     // Evenly-spread prose drifts against the song, and a user who knows that is
     // reading along; one who doesn't thinks the player is broken.
@@ -182,7 +171,7 @@ export async function transcribeTrack(tr: Track): Promise<void> {
       title: tr.name,
       onStage: (st) => set(`${st}…`),
     });
-    useStore.getState().updateTrack(tr.id, { lyrics: res.lines });
+    useStore.getState().updateTrack(tr.id, { lyrics: res.lines, lyricsTimed: true });
     useStore.setState({
       lyricPicks: [], lyricAskArtist: false,
       lyricStatus: `\u2713 ${res.lines.length} lines transcribed${isolated ? " from the isolated vocal" : " (full mix — separate stems for better accuracy)"}`,
@@ -196,9 +185,11 @@ export async function transcribeTrack(tr: Track): Promise<void> {
 
 export async function fetchLyrics(tr: Track, artistHint?: string): Promise<void> {
   const set = (lyricStatus: string) => useStore.setState({ lyricStatus });
+  const mark = (state: "searching" | "missing" | "error" | "") => useStore.setState({ lyricState: { id: tr.id, state } });
+  mark("searching");
   try {
     // the file itself first: instant, offline, and exact when present
-    if (await lyricsFromTrackFile(tr, true)) return;
+    if (await lyricsFromTrackFile(tr, true)) { mark(""); return; }
     set("Searching lyrics…");
     const cleaned = cleanQuery(tr.name);
     const attempts = new Set<string>();
@@ -233,9 +224,18 @@ export async function fetchLyrics(tr: Track, artistHint?: string): Promise<void>
     const seen = new Set<string>();
     let best: LrclibHit | null = null;
     let bestScore = 0;
+    let plain: LrclibHit | null = null;
+    let plainScore = 0;
     for (const params of attempts) {
       for (const h of await search(params)) {
-        if (!h.syncedLyrics) continue;
+        if (!h.syncedLyrics) {
+          // untimed text is still worth having when nothing timed matches
+          if (h.plainLyrics) {
+            const sc = scoreHit(h, fileTokens, dur);
+            if (sc > plainScore) { plainScore = sc; plain = h; }
+          }
+          continue;
+        }
         const key = `${h.artistName}∷${h.trackName}∷${h.duration}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -247,7 +247,16 @@ export async function fetchLyrics(tr: Track, artistHint?: string): Promise<void>
       }
       if (best && bestScore >= 1.0) break; // confident — stop early
     }
+    if ((!best?.syncedLyrics || bestScore < 0.4) && plain?.plainLyrics && plainScore >= 0.6) {
+      const lines = plain.plainLyrics.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((text, i) => ({ t: i, text }));
+      useStore.getState().updateTrack(tr.id, { lyrics: lines, lyricsTimed: false });
+      mark("");
+      set(`✓ ${plain.trackName ?? "matched"} · not timed`);
+      setTimeout(() => useStore.setState({ lyricStatus: "" }), 4000);
+      return;
+    }
     if (!best?.syncedLyrics || bestScore < 0.4) {
+      mark("missing");
       useStore.setState({ lyricAskArtist: true });
       set(hint
         ? `No match in ${hint}'s songs — check the spelling?`
@@ -257,12 +266,14 @@ export async function fetchLyrics(tr: Track, artistHint?: string): Promise<void>
     }
     const lines = parseLrc(best.syncedLyrics);
     if (!lines.length) throw new Error("empty lyrics");
-    useStore.getState().updateTrack(tr.id, { lyrics: lines });
+    useStore.getState().updateTrack(tr.id, { lyrics: lines, lyricsTimed: true });
     useStore.setState({ lyricAskArtist: false });
+    mark("");
     set(`✓ ${best.trackName ?? "matched"} · ${lines.length} lines`);
     setTimeout(() => useStore.setState({ lyricStatus: "" }), 4000);
   } catch (e) {
     console.warn("lyrics fetch failed:", e);
+    mark("error");
     set("Lyrics lookup failed (offline?)");
     setTimeout(() => useStore.setState({ lyricStatus: "" }), 4000);
   }
@@ -276,7 +287,7 @@ export async function importLrcFile(tr: Track, file: File): Promise<void> {
     setTimeout(() => useStore.setState({ lyricStatus: "" }), 4000);
     return;
   }
-  useStore.getState().updateTrack(tr.id, { lyrics: lines });
+  useStore.getState().updateTrack(tr.id, { lyrics: lines, lyricsTimed: true });
   useStore.setState({ lyricStatus: `✓ ${lines.length} lines imported` });
   setTimeout(() => useStore.setState({ lyricStatus: "" }), 3000);
 }
@@ -344,7 +355,7 @@ export async function searchLyricPicks(title: string, artist: string): Promise<v
 export function applyLyricPick(tr: Track, pick: LyricPick): void {
   const lines = parseLrc(pick.synced);
   if (!lines.length) return;
-  useStore.getState().updateTrack(tr.id, { lyrics: lines });
+  useStore.getState().updateTrack(tr.id, { lyrics: lines, lyricsTimed: true });
   useStore.setState({
     lyricPicks: [], lyricAskArtist: false,
     lyricStatus: `\u2713 ${pick.title} — ${pick.artist} · ${lines.length} lines`,
@@ -354,7 +365,7 @@ export function applyLyricPick(tr: Track, pick: LyricPick): void {
 
 /** Drops the lyrics attached to a track, so a wrong match can simply be removed. */
 export function clearLyrics(tr: Track): void {
-  useStore.getState().updateTrack(tr.id, { lyrics: undefined });
+  useStore.getState().updateTrack(tr.id, { lyrics: undefined, lyricsTimed: undefined });
   useStore.setState({ lyricPicks: [], lyricStatus: "Lyrics cleared" });
   setTimeout(() => useStore.setState({ lyricStatus: "" }), 3000);
 }

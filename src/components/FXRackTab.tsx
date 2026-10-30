@@ -41,7 +41,7 @@ export function FXRackTab() {
         <Module title="🎙 PITCH" extra={<span style={{ fontSize: 9.5, color: "rgba(255,255,255,0.4)" }}>SPEED STAYS PUT</span>}>
           <div className="hscroll" style={{ display: "flex", gap: 5, overflowX: "auto", paddingBottom: 8 }}>
             {([["DEMON", -7], ["DEEP", -3], ["OFF", 0], ["BRIGHT", 3], ["CHIPMUNK", 7]] as const).map(([lbl, st]) => (
-              <button key={lbl} onClick={() => setFxKey("pitch", st)} style={{ padding: "6px 10px", borderRadius: 999, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer", flexShrink: 0, background: fx.pitch === st ? "var(--ac1)" : "rgba(255,255,255,0.06)", color: fx.pitch === st ? "#08090D" : "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.09)" }}>{lbl}</button>
+              <button key={lbl} onClick={() => setFxKey("pitch", st)} style={{ padding: "6px 10px", borderRadius: 999, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer", flexShrink: 0, background: fx.pitch === st ? "var(--accent)" : "rgba(255,255,255,0.06)", color: fx.pitch === st ? "#08090D" : "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.09)" }}>{lbl}</button>
             ))}
           </div>
           <Slider label="SEMITONES" value={fx.pitch} min={-12} max={12} step={1} format={(v) => (v === 0 ? "OFF" : `${v > 0 ? "+" : ""}${v} st`)} onChange={(v) => setFxKey("pitch", v)} />

@@ -155,5 +155,19 @@ console.log("\nno lyrics present");
   check("garbage input returns null", r2 === null);
 }
 
+console.log("\nword timing");
+{
+  // enhanced LRC: inline <mm:ss.xx> tags time each word
+  const lines = parseLrcText("[00:10.00]<00:10.00>hold <00:10.50>the <00:10.80>line <00:11.40>\n[00:12.00]plain line");
+  check("enhanced LRC keeps per-word times", lines[0]?.words?.length === 3 && lines[0].words[1].t === 10.5, JSON.stringify(lines[0]?.words));
+  check("  the last word ends at the closing tag", lines[0]?.words?.[2]?.e === 11.4);
+  check("  a plain line gets no invented word timing", !lines[1]?.words);
+  check("  the inline tags are stripped from the text", lines[0]?.text === "hold the line", lines[0]?.text);
+  // karaoke SYLT: one entry per syllable, a line break starts each line
+  const r = await lyricsFromFile(blobOf(id3(4, [sylt([[5000, "hel"], [5300, "lo "], [5600, "world"], [8000, "\nsec"], [8400, "ond"]])])), 180);
+  check("karaoke SYLT groups syllables into lines", r?.lines.length === 2 && r.lines[0].text === "hello world", JSON.stringify(r?.lines.map((l) => l.text)));
+  check("  and keeps word times from the syllables", r?.lines[0].words?.length === 2 && r.lines[0].words[1].t === 5.6);
+}
+
 console.log(failed ? "\nFAILED" : "\nOK");
 process.exit(failed);

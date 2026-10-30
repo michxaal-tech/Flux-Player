@@ -47,8 +47,31 @@ export interface Track {
   peaks?: number[];
   /** an on-device AI instrumental exists as blob `inst-<fileId>` */
   hasInst?: boolean;
-  /** synced lyrics (LRC), sorted by time */
-  lyrics?: { t: number; text: string }[];
+  /** remote artwork URL from the catalogue it came from (local files carry
+   * theirs inside the audio — see flux/art.ts) */
+  art?: string;
+  /** synced lyrics, sorted by time. `words` is present only when the source
+   * carried real per-word timing (enhanced LRC, word-level transcription) */
+  lyrics?: LyricLineData[];
+  /** false when the lyrics are untimed prose spread evenly — shown as static
+   * text rather than pretending to follow the song */
+  lyricsTimed?: boolean;
+}
+
+export interface LyricWord {
+  /** start, seconds */
+  t: number;
+  /** end, seconds (optional — the next word's start otherwise) */
+  e?: number;
+  text: string;
+}
+
+export interface LyricLineData {
+  t: number;
+  text: string;
+  /** line end when the source knows it */
+  e?: number;
+  words?: LyricWord[];
 }
 
 export interface Playlist {
@@ -65,6 +88,8 @@ export type ViewMode =
   | { type: "artist"; artist: string };
 
 export type RepeatMode = "off" | "all" | "one";
+export type ViewId = "listen" | "library" | "search" | "sound" | "studio" | "settings";
+/** @deprecated legacy tab ids, still accepted from the AI "ui" action */
 export type TabId = "player" | "visuals" | "dj" | "fx" | "library" | "yt" | "me";
 export type SortBy = "added" | "name" | "plays";
 
@@ -74,63 +99,6 @@ export interface AmbState {
   wind: number;
 }
 
-export interface VisCfg {
-  palette: string;
-  h1: number;
-  h2: number;
-  glow: number;
-  trail: number;
-  particles: number;
-  pStyle: string;
-  /** particle silhouette (see P_SHAPES); MIXED varies it per particle */
-  pShape: string;
-  /** how widely particle sizes vary within one drift (see P_SIZES) */
-  pSize: string;
-  /** overall particle size multiplier */
-  pScale: number;
-  speed: number;
-  intensity: number;
-  zoom: number;
-  spinV: number;
-  bgWash: number;
-  thick: number;
-  mirror: boolean;
-  shake: boolean;
-  flash: boolean;
-  /** additional per-beat impact effects, by name (see IMPACTS) */
-  impacts: string[];
-  /** theme auto-advance every ~16s: off (stay put), cycle (in order), shuffle (random) */
-  autoMode: "off" | "cycle" | "shuffle";
-  /** force maximum backing resolution, disabling adaptive quality scaling.
-   * Superseded by `quality`; kept so saved looks and presets still load. */
-  hiRes: boolean;
-  /** AUTO adapts to the measured frame time, MAX pins full quality, FAST pins a
-   * low one for machines that cannot keep up (see engine.ts) */
-  quality: string;
-  /** draw at the display's own refresh rate where the machine can hold it,
-   * rather than capping at 60 (see the governor in visualizer/engine.ts) */
-  hiFps: boolean;
-  /** turns the whole palette around the colour wheel, in passes per ~36s at
-   * speed 1; 0 leaves every palette where it is (see engine.ts) */
-  hueSpin: number;
-  /** flash on every percussive hit, not just the tempo grid (analyzed mode) */
-  fastBeats: boolean;
-  /** 3D projection applied to whatever the theme drew: OFF renders it flat,
-   * the rest map it onto a perspective surface (see project3d.ts) */
-  vis3d: string;
-  /** 0..1 — how aggressive the 3D perspective is */
-  vis3dAmt: number;
-  /** how the palette becomes actual colour (see palette.ts LIGHT_FX):
-   * NORMAL is the plain mapping, WAVE is the WAVES theme's glowing translucent
-   * treatment applied to whatever theme is running */
-  lightFx: string;
-  /** 0..1 — drop escalation strength. 0 disables it; higher also allows more
-   * of the theme's layer set to be unlocked (see dropLayers.ts) */
-  dropFx: number;
-  /** extra A/V sync offset in ms on top of the measured output latency —
-   * raise it for Bluetooth headphones, which delay sound but not the screen */
-  syncMs: number;
-}
 
 export interface Stats {
   plays: number;

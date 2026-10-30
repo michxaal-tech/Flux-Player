@@ -1,7 +1,9 @@
 // Builds the compact snapshot of app state that every AI feature sends as
 // context. Kept terse on purpose — a large library must still fit comfortably
 // in one request, so tracks are one line each.
-import { PALETTES, P_STYLES, TAGS, VIS_THEMES } from "../constants";
+import { TAGS } from "../constants";
+import { PALETTES } from "../flux/look";
+import { MODES } from "../stage/modes";
 import { getCurrentTrack, getPlayingList, useStore } from "../store/useStore";
 import { FX_RANGES } from "./commands";
 import type { StoreState } from "../store/useStore";
@@ -91,9 +93,9 @@ export function buildContext(o: CtxOpts = {}): string {
   }
 
   if (o.visuals !== false) {
-    const v = s.visCfg;
+    const L = s.look;
     parts.push(
-      `CURRENT VISUALS: theme=${s.visTheme} palette=${v.palette} h1=${v.h1} h2=${v.h2} glow=${v.glow} trail=${v.trail} particles=${v.particles} pStyle=${v.pStyle} speed=${v.speed} intensity=${v.intensity} zoom=${v.zoom} mirror=${v.mirror} shake=${v.shake} flash=${v.flash}`
+      `CURRENT VISUALS: mode=${L.style.mode} palette=${L.color.source} a=${L.style.a} b=${L.style.b} speed=${L.motion.speed} drift=${L.motion.drift} react=${L.intensity.react} accents=${L.intensity.accents} texture=${L.intensity.texture} warmth=${L.color.warmth} vivid=${L.color.vivid} rhythm=${L.intensity.rhythm}`
     );
   }
 
@@ -119,12 +121,11 @@ tone: 400-20000 Hz — lowpass (20000 = open); highpass: 20-1200 Hz — thins th
 vocalCut: boolean — mid-side vocal cancel (karaoke)
 boost: 0.5-2 — output gain`;
 
-export const VIS_REFERENCE = `VISUAL THEMES: ${VIS_THEMES.join(", ")}
-PALETTES: ${PALETTES.map((p) => p.id).join(", ")} (CUSTOM uses h1/h2 hue degrees 0-360)
-PARTICLE STYLES: ${P_STYLES.join(", ")}
-TUNE RANGES: glow 0-1.6, trail 0-0.95 (motion blur), particles 0-1 (density),
-speed 0.2-2.5, intensity 0.3-2 (audio reactivity), zoom 0.6-1.6, spinV -1..1
-(scene rotation; keep 0 unless asked), bgWash 0-1, thick 0.4-2.6 (line weight),
-mirror/shake/flash booleans`;
+export const VIS_REFERENCE = `STAGE MODES (id — what it is, what dials a/b do):
+${MODES.map((m) => `${m.id} — ${m.line}; a=${m.dials[0]}, b=${m.dials[1]}`).join("\n")}
+PALETTES: artwork (follows the playing track's cover), ${PALETTES.map((p) => `${p.id} (${p.name})`).join(", ")}
+RANGES: a/b 0-1, speed 0.2-2 (scene motion), drift 0-1 (self-motion when quiet),
+react 0-1.5 (audio reactivity), accents 0-1 (beat/transient flashes), texture 0-1 (grain),
+warmth -1..1, vivid 0-1.4 (saturation), rhythm auto|beat|energy`;
 
 export const FX_FIELD_LIST = Object.keys(FX_RANGES).join(", ");

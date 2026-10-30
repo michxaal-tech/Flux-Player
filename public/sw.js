@@ -1,6 +1,6 @@
 // FLUX PRO service worker: cache-first app shell so the player works offline.
 // Bump the version to invalidate old caches on deploy.
-const CACHE = "flux-v29";
+const CACHE = "flux-v30";
 
 self.addEventListener("install", () => {
   self.skipWaiting();

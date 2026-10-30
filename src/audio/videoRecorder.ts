@@ -8,7 +8,10 @@
 import { engine } from "./engine";
 import { blobStore, cacheUrl } from "../store/blobStore";
 import { getCurrentTrack, useStore } from "../store/useStore";
-import { canvasRefs } from "../visualizer/live";
+import { stage } from "../stage/engine";
+import { modeById } from "../stage/modes";
+import { sig } from "../flux/signals";
+import { lineAt } from "../flux/lyricTime";
 import { uid } from "../utils";
 import { seek } from "./transport";
 
@@ -65,9 +68,9 @@ export async function startVideoExport(fromStart = true): Promise<void> {
   }
   engine.ensure();
   const n = engine.nodes;
-  const vis = canvasRefs.vis;
+  const vis = stage.canvas;
   if (!n || !vis) {
-    fail("Open the visualizer first");
+    fail("The stage isn't running");
     return;
   }
   const track = getCurrentTrack(useStore.getState());
@@ -99,9 +102,29 @@ export async function startVideoExport(fromStart = true): Promise<void> {
     // visualizer overlay is opaque and covers it on screen, so including it
     // would put something in the recording that the viewer never saw — and the
     // render loop now skips drawing it while the visualizer is open anyway.
-    for (const layer of [canvasRefs.vis, canvasRefs.lyr]) {
-      if (layer && layer.width > 0 && layer.height > 0) {
-        try { cx.drawImage(layer, 0, 0, cw, ch); } catch { /* mid-resize */ }
+    const layer = stage.canvas;
+    if (layer && layer.width > 0 && layer.height > 0) {
+      try { cx.drawImage(layer, 0, 0, cw, ch); } catch { /* mid-resize */ }
+    }
+    // the on-screen lyrics are DOM text, so the recording draws its own copy
+    // of the active line — unless the mode already sets the lyrics itself
+    const st = useStore.getState();
+    const tr = getCurrentTrack(st);
+    if (st.lyricsOn && st.lyricPrefs.show && tr?.lyrics && tr.lyricsTimed !== false && !modeById(st.look.style.mode).ownsLyrics) {
+      const at = lineAt(tr.lyrics, sig.t + st.lyricPrefs.offsetMs / 1000);
+      if (at.index >= 0) {
+        const text = tr.lyrics[at.index].text;
+        const size = Math.round(ch * 0.055);
+        cx.font = `700 ${size}px "Bricolage Grotesque Variable", sans-serif`;
+        cx.textAlign = "center";
+        const g = cx.createLinearGradient(0, ch * 0.62, 0, ch);
+        g.addColorStop(0, "rgba(0,0,0,0)");
+        g.addColorStop(1, "rgba(0,0,0,0.55)");
+        cx.fillStyle = g;
+        cx.fillRect(0, ch * 0.62, cw, ch * 0.38);
+        cx.fillStyle = "#fbf7f0";
+        cx.fillText(text, cw / 2, ch * 0.86, cw * 0.9);
+        cx.textAlign = "start";
       }
     }
     raf = requestAnimationFrame(composite);
@@ -146,7 +169,7 @@ export async function startVideoExport(fromStart = true): Promise<void> {
     if (blob.size < 1000) { fail("Recording produced no data"); return; }
 
     const id = uid();
-    const base = `${track.name.replace(/\.[^.]+$/, "")} · ${s.visTheme}`.slice(0, 60);
+    const base = `${track.name.replace(/\.[^.]+$/, "")} · ${s.look.style.mode}`.slice(0, 60);
     const name = `${base}.${ext}`;
     const url = cacheUrl(`take-${id}`, blob);
     await blobStore.put(`take-${id}`, blob).catch(() => {});
@@ -160,9 +183,9 @@ export async function startVideoExport(fromStart = true): Promise<void> {
       document.body.appendChild(a);
       a.click();
       a.remove();
-      useStore.setState({ vidMsg: `✓ Saved “${name}” — also in ME → takes` });
+      useStore.setState({ vidMsg: `✓ Saved “${name}” — also in Settings → takes` });
     } catch {
-      useStore.setState({ vidMsg: `✓ Saved to ME → takes: ${name}` });
+      useStore.setState({ vidMsg: `✓ Saved to Settings → takes: ${name}` });
     }
     setTimeout(() => useStore.setState({ vidMsg: "" }), 7000);
   };

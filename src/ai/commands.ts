@@ -2,10 +2,12 @@
 // executes it. Adding a feature should mean writing a prompt, not new plumbing,
 // so the action set is deliberately broad and each executor is defensive about
 // whatever a model actually sends.
-import { DEFAULT_FX, DEFAULT_VIS_CFG, PALETTES, P_STYLES, VIS_THEMES } from "../constants";
+import { DEFAULT_FX } from "../constants";
+import { PALETTES as LOOK_PALETTES, modeForOldTheme, sanitizeLook, type Look } from "../flux/look";
+import { MODE_IDS } from "../stage/modeIds";
 import { playAt } from "../audio/transport";
 import { useStore } from "../store/useStore";
-import type { FxState, TabId, Track, VisCfg } from "../types";
+import type { FxState, Track, ViewId } from "../types";
 import { uid } from "../utils";
 import { speak } from "./speech";
 import { saveCover } from "./covers";
@@ -66,43 +68,37 @@ export function sanitizeFx(raw: unknown): Partial<FxState> {
   return out;
 }
 
-const VIS_NUM: Partial<Record<keyof VisCfg, [number, number]>> = {
-  h1: [0, 360], h2: [0, 360], glow: [0, 1.6], trail: [0, 0.95], particles: [0, 1],
-  speed: [0.2, 2.5], intensity: [0.3, 2], zoom: [0.6, 1.6], spinV: [-1, 1],
-  bgWash: [0, 1], thick: [0.4, 2.6],
-};
-
-export function sanitizeVis(raw: unknown): { cfg: Partial<VisCfg>; theme?: string } {
-  if (!raw || typeof raw !== "object") return { cfg: {} };
+/**
+ * An AI "visuals" payload → a partial look. Accepts the new vocabulary (mode,
+ * palette, the dials) and, for older prompts, the old theme names, which are
+ * mapped onto the nearest mode.
+ */
+export function sanitizeVis(raw: unknown): Partial<Look> | null {
+  if (!raw || typeof raw !== "object") return null;
   const src = raw as Record<string, unknown>;
-  const cfg: Partial<VisCfg> = {};
-  for (const k of Object.keys(VIS_NUM) as (keyof VisCfg)[]) {
-    const r = VIS_NUM[k]!;
-    if (k in src) (cfg as Record<string, unknown>)[k] = num(src[k], r[0], r[1], DEFAULT_VIS_CFG[k] as number);
-  }
-  for (const k of ["mirror", "shake", "flash"] as const) {
-    if (k in src) cfg[k] = bool(src[k], DEFAULT_VIS_CFG[k]);
+  const cur = useStore.getState().look;
+  const out: Look = JSON.parse(JSON.stringify(cur));
+  const m = (src.mode ?? src.theme ?? src.visTheme) as unknown;
+  if (typeof m === "string") {
+    const id = m.toLowerCase();
+    out.style.mode = MODE_IDS.includes(id) ? id : modeForOldTheme(m.toUpperCase());
   }
   if (typeof src.palette === "string") {
-    const p = PALETTES.find((x) => x.id.toLowerCase() === (src.palette as string).toLowerCase());
-    if (p) cfg.palette = p.id;
+    const id = src.palette.toLowerCase();
+    if (id === "artwork" || LOOK_PALETTES.some((p) => p.id === id)) out.color.source = id;
   }
-  if (typeof src.pStyle === "string") {
-    const s = P_STYLES.find((x) => x.toLowerCase() === (src.pStyle as string).toLowerCase());
-    if (s) cfg.pStyle = s;
-  }
-  if (typeof src.autoMode === "string" && ["off", "cycle", "shuffle"].includes(src.autoMode)) {
-    cfg.autoMode = src.autoMode as VisCfg["autoMode"];
-  }
-  // custom hues only mean something on the CUSTOM palette
-  if ((("h1" in src) || ("h2" in src)) && !("palette" in src)) cfg.palette = "CUSTOM";
-
-  let theme: string | undefined;
-  const t = src.theme ?? src.visTheme;
-  if (typeof t === "string") {
-    theme = VIS_THEMES.find((x) => x.toLowerCase() === t.toLowerCase());
-  }
-  return { cfg, theme };
+  const n = (k: string, lo: number, hi: number) => (typeof src[k] === "number" ? Math.min(hi, Math.max(lo, src[k] as number)) : undefined);
+  out.style.a = n("a", 0, 1) ?? out.style.a;
+  out.style.b = n("b", 0, 1) ?? out.style.b;
+  out.motion.speed = n("speed", 0.2, 2) ?? out.motion.speed;
+  out.motion.drift = n("drift", 0, 1) ?? out.motion.drift;
+  out.intensity.react = n("react", 0, 1.5) ?? n("intensity", 0, 1.5) ?? out.intensity.react;
+  out.intensity.accents = n("accents", 0, 1) ?? out.intensity.accents;
+  out.intensity.texture = n("texture", 0, 1) ?? out.intensity.texture;
+  out.color.warmth = n("warmth", -1, 1) ?? out.color.warmth;
+  out.color.vivid = n("vivid", 0, 1.4) ?? out.color.vivid;
+  if (src.rhythm === "auto" || src.rhythm === "beat" || src.rhythm === "energy") out.intensity.rhythm = src.rhythm;
+  return sanitizeLook(out, MODE_IDS);
 }
 
 const allTracks = (): Track[] => useStore.getState().playlists.flatMap((p) => p.tracks);
@@ -163,12 +159,11 @@ export async function executeCommand(cmd: Command): Promise<ExecResult> {
           break;
         }
         case "visuals": {
-          const { cfg, theme } = sanitizeVis(p.visuals ?? p);
-          const patch: Record<string, unknown> = {};
-          if (Object.keys(cfg).length) patch.visCfg = { ...useStore.getState().visCfg, ...cfg };
-          if (theme) patch.visTheme = theme;
-          if (Object.keys(patch).length) useStore.setState(patch);
-          notes.push(theme ? `visuals → ${theme}` : "visuals updated");
+          const look = sanitizeVis(p.visuals ?? p);
+          if (look) {
+            useStore.setState({ look: look as Look, lookFrom: "" });
+            notes.push(`visuals → ${(look as Look).style.mode}`);
+          }
           break;
         }
         case "queue": {
@@ -260,9 +255,13 @@ export async function executeCommand(cmd: Command): Promise<ExecResult> {
         }
         case "ui": {
           const patch: Record<string, unknown> = {};
-          const tabs: TabId[] = ["player", "dj", "fx", "library", "me"];
-          if (typeof p.tab === "string" && tabs.includes(p.tab as TabId)) patch.tab = p.tab;
-          if ("visOpen" in p) patch.visOpen = bool(p.visOpen, false);
+          const legacy: Record<string, ViewId> = { player: "listen", dj: "sound", fx: "sound", library: "library", me: "settings", yt: "search" };
+          const views: ViewId[] = ["listen", "library", "search", "sound", "studio", "settings"];
+          const v = typeof p.view === "string" ? p.view : typeof p.tab === "string" ? p.tab : "";
+          if (views.includes(v as ViewId)) patch.view = v;
+          else if (legacy[v]) patch.view = legacy[v];
+          if ("stage" in p) patch.stage = bool(p.stage, false);
+          else if ("visOpen" in p) patch.stage = bool(p.visOpen, false);
           if (Object.keys(patch).length) { useStore.setState(patch); notes.push("view changed"); }
           break;
         }
@@ -281,9 +280,9 @@ export const COMMAND_SPEC = `You control a music player by returning JSON of exa
 Every action is {"type": "<type>", "payload": {...}}. Available types:
 - "fx": payload {name: string, fx: {<any FX fields>}, merge?: boolean}
    Audio effects. merge=false (default) starts from a clean rack.
-- "visuals": payload {theme?: string, palette?: string, h1?: number, h2?: number,
-   glow?, trail?, particles?, pStyle?, speed?, intensity?, zoom?, spinV?, bgWash?,
-   thick?, mirror?, shake?, flash?, autoMode?: "off"|"cycle"|"shuffle"}
+- "visuals": payload {mode?: string, palette?: string, a?: 0-1, b?: 0-1, speed?: 0.2-2,
+   drift?: 0-1, react?: 0-1.5, accents?: 0-1, texture?: 0-1, warmth?: -1..1,
+   vivid?: 0-1.4, rhythm?: "auto"|"beat"|"energy"}
 - "queue": payload {trackIds: string[], mode?: "replace"|"append"|"next",
    playlistName?: string, play?: boolean}
 - "playlist": payload {name: string, trackIds: string[], activate?: boolean, play?: boolean}
@@ -292,7 +291,7 @@ Every action is {"type": "<type>", "payload": {...}}. Available types:
 - "tags": payload {updates: [{trackId: string, tags: string[]}]}
 - "note": payload {trackId: string, note: string}
 - "preset": payload {presets: [{name: string, fx: {...}}]} — saved to the FX rack
-- "ui": payload {tab?: "player"|"dj"|"fx"|"library"|"me", visOpen?: boolean}
+- "ui": payload {view?: "listen"|"library"|"search"|"sound"|"studio"|"settings", stage?: boolean}
 
 Use an empty actions array when nothing should change. Always use real track ids
 from the provided library context. Never invent tracks that are not listed.`;

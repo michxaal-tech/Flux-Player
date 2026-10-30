@@ -2,7 +2,7 @@
 import { engine } from "./engine";
 import { nextTrack } from "./transport";
 import { getCurrentTrack, useStore } from "../store/useStore";
-import { live } from "../visualizer/live";
+import { sig } from "../flux/signals";
 
 let wired = false;
 
@@ -99,8 +99,8 @@ export function wireAudio(): void {
       bpmTimer = setTimeout(() => {
         const s = useStore.getState();
         const tr = getCurrentTrack(s);
-        const bpm = live.bpm;
-        if (tr && tr.id === id && bpm >= 50 && bpm <= 220) {
+        const bpm = Math.round(sig.bpm);
+        if (tr && tr.id === id && sig.confidence > 0.4 && bpm >= 50 && bpm <= 220) {
           useStore.setState({ trackBpm: { ...s.trackBpm, [tr.id]: bpm } });
         }
       }, 12000);

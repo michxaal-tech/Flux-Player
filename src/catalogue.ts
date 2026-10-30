@@ -51,6 +51,7 @@ export async function fetchAsTrack(t: CatTrack): Promise<Track | null> {
       artist: t.artist,
       source: t.source,
       sourceId: t.id,
+      art: t.artwork,
       plays: 0,
       fav: false,
       tags: [],

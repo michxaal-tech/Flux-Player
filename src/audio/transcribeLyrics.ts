@@ -24,7 +24,7 @@ import { loadKey } from "../ai/client";
 import { useStore } from "../store/useStore";
 
 export interface TranscribeResult {
-  lines: { t: number; text: string }[];
+  lines: import("../types").LyricLineData[];
   /** the model actually used, for the status line */
   model: string;
   /** true when the vocal was isolated before sending */
@@ -107,7 +107,7 @@ function normalise(d: Float32Array): void {
   for (let i = 0; i < d.length; i++) d[i] *= g;
 }
 
-interface VerboseSegment { start?: number; text?: string }
+interface VerboseSegment { start?: number; end?: number; text?: string }
 
 /**
  * Transcribe, returning timed lines.
@@ -150,6 +150,9 @@ export async function transcribeLyrics(o: TranscribeOpts): Promise<TranscribeRes
   // sync to and the result is a text blob
   form.append("response_format", "verbose_json");
   form.append("timestamp_granularities[]", "segment");
+  // word timestamps let the lyric view highlight each word as it is sung;
+  // endpoints that don't support them simply return segments alone
+  form.append("timestamp_granularities[]", "word");
   if (o.title) {
     // the prompt biases spelling of names the model would otherwise invent
     form.append("prompt", `Song lyrics${o.title ? ` from the track "${o.title}"` : ""}.`);
@@ -178,10 +181,19 @@ export async function transcribeLyrics(o: TranscribeOpts): Promise<TranscribeRes
     throw new Error(`Transcription failed (${resp.status}). ${body.slice(0, 160)}`);
   }
 
-  const j = (await resp.json()) as { segments?: VerboseSegment[]; text?: string };
+  const j = (await resp.json()) as { segments?: VerboseSegment[]; text?: string; words?: { word?: string; start?: number; end?: number }[] };
   const segs = j.segments ?? [];
+  const allWords = (j.words ?? []).filter((w) => w.word?.trim() && typeof w.start === "number");
   const lines = segs
-    .map((s) => ({ t: Math.max(0, s.start ?? 0), text: (s.text ?? "").trim() }))
+    .map((s) => {
+      const t = Math.max(0, s.start ?? 0);
+      const end = s.end ?? Infinity;
+      // words belong to the segment their start falls inside
+      const ws = allWords
+        .filter((w) => (w.start as number) >= t - 0.05 && (w.start as number) < end)
+        .map((w) => ({ t: w.start as number, e: w.end, text: (w.word as string).trim() }));
+      return { t, e: s.end, text: (s.text ?? "").trim(), ...(ws.length > 1 ? { words: ws } : {}) };
+    })
     .filter((l) => l.text)
     .sort((a, b) => a.t - b.t);
 

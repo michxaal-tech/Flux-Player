@@ -19,7 +19,7 @@ export interface Analysis extends AnalysisResult {
 }
 
 const KEY = (fileId: string) => `anal-${fileId}`;
-const VERSION = 6; // bump invalidates cached analyses after a detector change
+const VERSION = 9; // bump invalidates cached analyses after a detector change
 
 export async function loadAnalysis(fileId: string): Promise<Analysis | null> {
   try {

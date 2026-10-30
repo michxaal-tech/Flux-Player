@@ -75,9 +75,9 @@ export async function vibeToVisuals(vibe: string): Promise<string> {
     ctx: { library: false, queue: false, fx: false },
     extraSystem: `${VIS_REFERENCE}
 
-Return exactly one "visuals" action. Choose the theme whose actual look best
-matches the request, then tune glow/trail/particles/intensity/colors to match.
-Use a named palette when one fits; otherwise set palette CUSTOM with h1/h2.`,
+Return exactly one "visuals" action. Choose the mode whose composition best
+matches the request, a palette (or "artwork"), then tune a/b, speed, react,
+accents, warmth and vivid to match.`,
   });
   return r.reply;
 }

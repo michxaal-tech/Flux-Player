@@ -291,6 +291,10 @@ export function ytPlay(): void { player?.playVideo(); startPoll(); }
 export function ytPause(): void { player?.pauseVideo(); }
 export function ytSeek(sec: number): void { player?.seekTo(sec, true); }
 export function ytVolume(v: number): void { player?.setVolume(Math.round(v * 100)); }
+/** Current position of the iframe player, seconds (0 when none is loaded). */
+export function ytTime(): number {
+  try { return player && ready ? player.getCurrentTime() || 0 : 0; } catch { return 0; }
+}
 
 export function ytStop(): void {
   player?.pauseVideo();
@@ -310,7 +314,7 @@ function startPoll(): void {
     if (!player || !ready) return;
     const d = player.getDuration() || 0;
     const t = player.getCurrentTime() || 0;
-    if (d > 0) useStore.setState({ duration: d, progress: Math.min(1, t / d) });
+    if (d > 0) useStore.setState({ duration: d, progress: Math.min(d, t) });
   }, 250);
 }
 

@@ -21,9 +21,11 @@
  * which one it got.
  */
 
+import type { LyricLineData, LyricWord } from "../types";
+
 export interface TagLyrics {
   /** the lines, timed if the file carried timings */
-  lines: { t: number; text: string }[];
+  lines: LyricLineData[];
   /** true when the timings came from the file rather than being estimated */
   synced: boolean;
   /** which container/frame it came from, for the status line */
@@ -45,7 +47,7 @@ const dec = (enc: string, b: Uint8Array): string => {
  * and terminate on a *double* null, which is the detail that turns a lyric
  * sheet into one line of mojibake if you get it wrong.
  */
-function id3Text(encoding: number, b: Uint8Array): string {
+export function id3Text(encoding: number, b: Uint8Array): string {
   switch (encoding) {
     case 0: return dec("iso-8859-1", b);
     case 1: return dec("utf-16", b);      // has a BOM
@@ -57,7 +59,7 @@ function id3Text(encoding: number, b: Uint8Array): string {
 const wide = (encoding: number): boolean => encoding === 1 || encoding === 2;
 
 /** Index just past the terminator, and the bytes before it. */
-function splitTerminated(b: Uint8Array, start: number, encoding: number): [Uint8Array, number] {
+export function splitTerminated(b: Uint8Array, start: number, encoding: number): [Uint8Array, number] {
   if (wide(encoding)) {
     for (let i = start; i + 1 < b.length; i += 2) {
       if (b[i] === 0 && b[i + 1] === 0) return [b.subarray(start, i), i + 2];
@@ -96,22 +98,59 @@ export function looksLikeLrc(s: string): boolean {
 
 /**
  * Parse LRC, including the several-timestamps-on-one-line form that repeated
- * choruses use.
+ * choruses use, and the enhanced ("A2") form whose inline `<mm:ss.xx>` tags
+ * time each word. Word timing is kept only when it is really there — a line
+ * without inline tags gets no `words`, so nothing downstream can mistake an
+ * even split for measured timing.
  */
-export function parseLrcText(src: string): { t: number; text: string }[] {
-  const out: { t: number; text: string }[] = [];
+export function parseLrcText(src: string): LyricLineData[] {
+  const out: LyricLineData[] = [];
   // fresh per call, so nothing another caller did can move where it starts
   const re = new RegExp(LRC_TAG_SRC, "g");
+  const wordRe = /<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>/g;
+  const secs = (m: RegExpMatchArray) => Number(m[1]) * 60 + Number(m[2]) + (m[3] ? Number(m[3]) / Math.pow(10, m[3].length) : 0);
   for (const raw of src.split(/\r?\n/)) {
     const tags = [...raw.matchAll(re)];
     if (!tags.length) continue;
-    const text = raw.replace(re, "").trim();
+    const body = raw.replace(re, "");
+    const text = body.replace(wordRe, "").replace(/\s+/g, " ").trim();
     if (!text) continue;
+    // inline word tags: each one starts the text that follows it
+    let words: LyricWord[] | undefined;
+    const wtags = [...body.matchAll(wordRe)];
+    if (wtags.length >= 2 || (wtags.length === 1 && body.replace(wordRe, "").trim().split(/\s+/).length === 1)) {
+      const parts: LyricWord[] = [];
+      let endT: number | undefined;
+      wtags.forEach((m, i) => {
+        const from = (m.index ?? 0) + m[0].length;
+        const to = i + 1 < wtags.length ? wtags[i + 1].index ?? body.length : body.length;
+        const chunk = body.slice(from, to);
+        const t = secs(m);
+        if (!chunk.trim()) { endT = t; return; } // a trailing tag closes the last word
+        for (const w of chunk.trim().split(/\s+/)) parts.push({ t, text: w });
+      });
+      // several words sharing one tag split that tag's span evenly between them
+      for (let i = 0; i < parts.length; i++) {
+        let j = i;
+        while (j + 1 < parts.length && parts[j + 1].t === parts[i].t) j++;
+        if (j > i) {
+          const next = j + 1 < parts.length ? parts[j + 1].t : endT ?? parts[i].t + 0.3 * (j - i + 1);
+          const step = (next - parts[i].t) / (j - i + 1);
+          for (let k = i; k <= j; k++) parts[k].t = parts[i].t + step * (k - i);
+        }
+        i = j;
+      }
+      for (let i = 0; i < parts.length; i++) parts[i].e = i + 1 < parts.length ? parts[i + 1].t : endT;
+      if (parts.length) words = parts;
+    }
     for (const m of tags) {
-      // the fraction may be centiseconds or milliseconds depending on who wrote
-      // the file, so scale by its own digit count rather than assuming
-      const frac = m[3] ? Number(m[3]) / Math.pow(10, m[3].length) : 0;
-      out.push({ t: Number(m[1]) * 60 + Number(m[2]) + frac, text });
+      const t = secs(m);
+      // a repeated chorus line carries the word offsets relative to its first time
+      const shift = words ? t - words[0].t : 0;
+      const ws = words && (Math.abs(shift) < 0.05 || tags.length > 1)
+        ? words.map((w) => ({ t: w.t + shift, e: w.e !== undefined ? w.e + shift : undefined, text: w.text }))
+        : words;
+      out.push(ws ? { t, text, words: ws } : { t, text });
     }
   }
   return out.sort((a, b) => a.t - b.t);
@@ -142,13 +181,13 @@ export function spreadPlain(text: string, duration: number): { t: number; text: 
 const syncsafe = (b: Uint8Array, o: number): number =>
   ((b[o] & 0x7f) << 21) | ((b[o + 1] & 0x7f) << 14) | ((b[o + 2] & 0x7f) << 7) | (b[o + 3] & 0x7f);
 
-const plain32 = (b: Uint8Array, o: number): number =>
+export const plain32 = (b: Uint8Array, o: number): number =>
   ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0;
 
-interface Frame { id: string; body: Uint8Array; }
+export interface Frame { id: string; body: Uint8Array; }
 
 /** Walk the ID3v2 frame list. Returns [] when there is no ID3 header. */
-function id3Frames(b: Uint8Array): Frame[] {
+export function id3Frames(b: Uint8Array): Frame[] {
   if (b.length < 10 || b[0] !== 0x49 || b[1] !== 0x44 || b[2] !== 0x33) return []; // "ID3"
   const major = b[3];
   const flags = b[5];
@@ -182,24 +221,69 @@ function id3Frames(b: Uint8Array): Frame[] {
   return out;
 }
 
-/** SYLT: timed syllables/lines, each terminated then followed by a timestamp. */
-function readSylt(body: Uint8Array): { t: number; text: string }[] | null {
+/**
+ * SYLT: timed text, each entry terminated then followed by a timestamp.
+ *
+ * Taggers use it two ways. Some write one entry per *line*; karaoke taggers
+ * write one per word or syllable and start each new line with a line break.
+ * Treating every entry as a line (as this did) turned a karaoke file into a
+ * wall of one-syllable "lines". So: if any entry carries a line break, entries
+ * are grouped into lines on those breaks and keep their own times as word
+ * timing; otherwise each entry is a line.
+ */
+function readSylt(body: Uint8Array): LyricLineData[] | null {
   if (body.length < 7) return null;
   const encoding = body[0];
   const format = body[4];            // 1 = MPEG frames, 2 = milliseconds
   if (format !== 2) return null;     // frame-based timing needs the decoder; skip
   let p = 6;
   [, p] = splitTerminated(body, p, encoding); // content descriptor
-  const out: { t: number; text: string }[] = [];
+  const entries: { t: number; raw: string }[] = [];
   while (p < body.length) {
     const [txt, next] = splitTerminated(body, p, encoding);
     if (next + 4 > body.length) break;
     const ms = plain32(body, next);
-    const text = id3Text(encoding, txt).trim();
-    if (text) out.push({ t: ms / 1000, text });
+    entries.push({ t: ms / 1000, raw: id3Text(encoding, txt) });
     p = next + 4;
   }
-  return out.length ? out.sort((a, b) => a.t - b.t) : null;
+  if (!entries.length) return null;
+  entries.sort((a, b) => a.t - b.t);
+  const grouped = entries.some((e) => /[\r\n]/.test(e.raw));
+  if (!grouped) {
+    const out = entries.map((e) => ({ t: e.t, text: e.raw.trim() })).filter((l) => l.text);
+    return out.length ? out : null;
+  }
+  const out: LyricLineData[] = [];
+  let cur: { t: number; parts: { t: number; s: string }[] } | null = null;
+  const flush = () => {
+    if (!cur) return;
+    const text = cur.parts.map((x) => x.s).join("").replace(/\s+/g, " ").trim();
+    if (text) {
+      // syllables join into words; a word is timed by its first syllable
+      const words: LyricWord[] = [];
+      let acc = "", at = -1;
+      for (const part of cur.parts) {
+        for (const ch of part.s.split(/(\s+)/)) {
+          if (!ch) continue;
+          if (/^\s+$/.test(ch)) { if (acc) { words.push({ t: at, text: acc }); acc = ""; at = -1; } continue; }
+          if (at < 0) at = part.t;
+          acc += ch;
+        }
+      }
+      if (acc) words.push({ t: at, text: acc });
+      for (let i = 0; i < words.length; i++) words[i].e = words[i + 1]?.t;
+      out.push({ t: cur.t, text, words: words.length > 1 ? words : undefined });
+    }
+    cur = null;
+  };
+  for (const e of entries) {
+    const brk = /^[\r\n]/.test(e.raw);
+    const s = e.raw.replace(/[\r\n]+/g, "");
+    if (brk || !cur) { flush(); cur = { t: e.t, parts: [] }; }
+    cur!.parts.push({ t: e.t, s });
+  }
+  flush();
+  return out.length ? out : null;
 }
 
 /** USLT: a whole lyric sheet as one string (often LRC-formatted in practice). */
@@ -232,7 +316,7 @@ const LYRIC_KEYS = new Set(["LYRICS", "UNSYNCEDLYRICS", "SYNCEDLYRICS", "LYRICS:
  * layout after that point is identical in both containers, and the alternative
  * is two container parsers to reach the same twelve bytes.
  */
-function vorbisComments(b: Uint8Array): Map<string, string> {
+export function vorbisComments(b: Uint8Array): Map<string, string> {
   const out = new Map<string, string>();
   const le = (o: number) => (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
 

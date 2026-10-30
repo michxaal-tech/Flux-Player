@@ -45,7 +45,7 @@ function push(force = false): void {
   // Rounded to the second: the progress ticks many times a second, and Discord
   // rate-limits activity updates — sending one per frame gets the connection
   // throttled and the presence stops updating at all.
-  const pos = Math.round(s.progress * (s.duration || 0));
+  const pos = Math.round(s.progress);
   const key = `${id}|${tr?.name ?? ""}|${s.playing}|${pos}`;
   if (key === last && !force) return;
   last = key;

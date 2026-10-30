@@ -1,10 +1,44 @@
-# FLUX PRO
+# Flux
 
-Local music player with a live Web Audio FX rack, DJ performance deck, and an 80-theme
-audio-reactive visualizer — the production build of the `flux-studio-pro.tsx` prototype
-(kept as the design spec in [`docs/prototype/`](docs/prototype/flux-studio-pro.tsx)).
+A local music player that makes music visible. Seven music-reactive stages,
+lyrics that follow the singer word by word, a live Web Audio FX rack and a DJ
+deck — all in the browser, and your audio never leaves the device.
 
-Everything runs in the browser: your audio never leaves the device.
+## The idea
+
+Flux is a warm ink room lit by the record that's playing. The interface takes
+one accent at a time from the sleeve, type does most of the work (Bricolage
+Grotesque, whose width and weight axes the titles actually animate through),
+and depth comes from light and shadow rather than frosted panels. Behind
+everything runs the **stage** — the visualizer — dimmed and calmed into a
+backdrop while you browse, full brightness when you step into it.
+
+Motion is part of the identity, with three families that each have a job:
+**springs** for anything a hand touches (they retarget mid-flight, so a second
+click bends the motion instead of restarting it), **glides** for what the
+system moves (views, panels — long decisive deceleration, no bounce), and
+**reveals** for content arriving (masks and clip paths that uncover from an
+origin). Signature moments:
+
+- **The sleeve stack** — changing track slides the cover out the way you went
+  and the next one in from the other side, tilted like flipping records; the
+  title re-sets letter by letter from condensed to full width; the accent, the
+  stage and the waveform all glide to the new record's colour together. You can
+  also throw the sleeve sideways to skip.
+- **The Flux line** — the scrubber is the track's own waveform. A lens swells
+  the bars under the pointer, dragging follows the hand exactly, and on release
+  the playhead springs to the new spot with a ring where it landed.
+- **The morphing play button** — one shape whose vertices travel between
+  triangle and bars on a spring; a halo outside it breathes with the music.
+- **The aperture** — entering the stage opens a ring from the button you pressed
+  while the interface recedes and the scene comes forward.
+- **Shared elements** — the dock artwork *is* the Listen artwork, and a
+  playlist's collage *is* its page header; both morph between places.
+
+Interface motion and music motion are separate systems: nothing in the UI waits
+for the visualizer, and controls and text never move with the music. **Studio →
+Motion** offers Full / Calm / Minimal interface motion (Minimal also follows the
+system reduced-motion setting), independent of the stage's own intensity.
 
 ## Run it
 
@@ -14,37 +48,27 @@ npm run dev        # dev server
 npm run build      # type-check + production build to dist/
 npm run preview    # serve the production build
 node scripts/smoke.mjs   # headless end-to-end smoke test (after build)
+npm run sync             # beat + lyric timing against a track with known kicks (after build)
 npm run spotify          # Spotify import, network stubbed (after build)
 npm run spotify:live     # same, against the live service — needs the internet
-npm run drops            # drop escalation over a whole track (after build)
-npm run lyricfade        # an outgoing lyric line fades rather than being replaced
 npm run discover         # Internet Archive source, network stubbed (after build)
 npm run catalogue        # every Discover source, against the live services
-npm run perf             # where a frame goes, per theme, one knob at a time
-npm run fps              # proves a theme's motion is frame-rate independent
-npm run seekbar          # scrubbing, and drop markers landing before their drops
-npm run impacts          # every beat impact does something, and nothing whites out
-npm run visualsui        # the theme menu is reachable, the overlay timeline scrubs
 npm run deepbeats        # the beat tracker against pulses with known times (no browser)
 npm run deep             # deep vs fast analysis on real audio, error in ms
-npm run looks            # one frame per theme, for comparing two builds
 ```
 
 ## Desktop build
 
 `desktop/` is a window around the same build the web version ships — not a
-second implementation, so a fix lands in both. What it adds is the two things
-a web page is not allowed to do for itself:
+second implementation, so a fix lands in both. What it adds:
 
 - **Chromium's GPU flags.** `ignore-gpu-blocklist` and `enable-gpu-rasterization`.
   Chromium blocklists GPU rasterisation on a lot of ordinary laptop graphics
-  drivers, and the visual engine is entirely canvas rasterisation — so on the
-  machines most likely to stutter, the browser is doing all of it on the CPU
-  and cannot be argued out of it.
-- **A higher pixel ceiling.** The backing store cap goes from 1800px to
-  2560px (`MAX_EDGE`), because the browser build has to assume a phone. The
-  adaptive quality signal still scales it back if the machine can't hold
-  60fps, so raising the ceiling costs sharpness at worst, never frames.
+  drivers — so on the machines most likely to stutter, the browser would
+  otherwise draw the interface and the canvas-based stage modes on the CPU and
+  cannot be argued out of it.
+- **No service worker.** The build is already on disk, so an offline cache
+  could only ever serve a stale copy of it.
 
 It loads the build over a `flux://` scheme of its own rather than `file://`,
 which would render the markup and break IndexedDB — where the library lives —
@@ -54,7 +78,7 @@ It also carries **Discord Rich Presence**, which is desktop-only for the same
 reason: it is an IPC conversation over a local socket, and a browser tab cannot
 open one. `desktop/discord.cjs` speaks the protocol directly — a 4-byte opcode,
 a 4-byte length and that much JSON — rather than depending on a library for it.
-It needs a Discord application ID, entered under ME → DISCORD; there is no
+It needs a Discord application ID, entered under Settings → DISCORD; there is no
 shared one to ship, because the name Discord displays is that application's.
 
 The **Desktop build (Windows)** workflow builds it on GitHub's runners and
@@ -69,7 +93,8 @@ cd desktop && npm install && npm start      # or: npx electron-builder --win
 
 ## Features
 
-- **Player** — drag-and-drop or file-picker import, decoded waveform seekbar,
+- **Player** — drag-and-drop or file-picker import (title/artist read from
+  the file's tags), decoded waveform seekbar,
   A-B loop, shuffle/repeat, crossfaded track switching, favorites/tags/notes,
   per-track pinned FX, up-next queue, session stats + listener levels.
 - **FX rack** — speed with tape mode (pitch-follow), convolution reverb, echo,
@@ -79,111 +104,72 @@ cd desktop && npm install && npm start      # or: npx electron-builder --win
   wind) are synthesized in the audio graph, no samples.
 - **DJ deck** — live BPM detection, output meter, 4 hot cues, hold-to-stutter
   (⅛/¼/½), tape brake & spin-up, speed nudge.
-- **Visualizer** — 85 canvas themes × 41 palettes (+ custom hue pair), including
-  10 multi-colour ones (RAINBOW, PRISM, PLASMA, MIAMI, OPAL, TIEDYE, BOREALIS,
-  REEF, SLICK, CITRUS): a palette is a list of hue stops rather than a pair, and
-  a list of three or more becomes a cycle the whole scene walks through over
-  about half a minute, so even a theme that only draws two colours passes through
-  the entire spectrum. Also including
-  15 staged themes (◈) whose effects layer in as the arrangement builds, most of
-  them natively 3D (real perspective projection and depth sorting), plus 2 more
-  3D ones. Any theme can be projected into 3D
-  eight ways (floor plane, corridor, flying tunnel, vortex, rotating panel,
-  cube, dome, cylinder). **Drop layers**: every drop the analyser finds adds a
-  persistent layer to the picture — orbit rings carrying travelling lights, god
-  rays, rising embers, luminous constellations, falling light, tumbling shards
-  and more — and it *stays*, swelling in over a couple of beats as it arrives.
-  Placement comes from the analysed timeline, which is why **ANALYZED is on by
-  default**: it knows where every drop is, rather than guessing from the low end
-  as it arrives. The guessed path still runs until the timeline lands and on any
-  file that won't analyse, measuring the low end as a ratio against a floor that
-  falls fast and rises slowly — so an eight-bar loud section doesn't become the
-  new normal before the next drop, and a track that is merely loud throughout
-  doesn't invent drops it never had. `npm run drops` plays synthesised tracks
-  with drops at known times and checks the layers land on them, because this
-  broke once in a way no screenshot or smoke test could see. When the track calms the
-  newest layers thin out; when it lifts they come back, so a song builds through
-  its length instead of flashing at each drop. Four themes — RING, CITY, TUNNEL, THUNDER — have
-  effects written only for them (window lights and a searchlight for the
-  skyline, rungs and a gate ring for the corridor, forked bolts and sheet
-  lightning for the storm); the rest draw from a
-  library of 28 — every set unique, 25 different opening layers, checked by
-  `node scripts/layers-check.mjs` since a missing or misspelt entry fails
-  silently rather than visibly. Drawn in the theme's own space (so a 3D projection carries them onto
-  the surface with everything else), and a PREVIEW DEPTH stepper auditions any
-  depth without waiting for a drop. Five themes — STRATA, CROWN, CASCADE,
-  FISSION, PARALLAX — are built around this: each drop adds another stratum,
-  tier, terrace, shell or depth plane to their own structure.
-  44 per-letter lyric effects — colour ramps, per-letter motion, karaoke
-  fills and text treatments. One from each group applies at a time and the
-  groups stack, so a colour ramp, a motion, a reveal and a texture all run on
-  the same letters, on top of any of the 20 line animations. 15 tune
-  controls (glow, trails, particles w/ 4 styles, reactivity, zoom, scene spin,
-  mirror, beat flash/shake, auto-cycle), starrable favourites pinned to the top
-  of the theme picker, saveable looks with self-contained share codes, 34 stackable beat impacts (including a signature set with a frame
-  history behind it — ghosting, datamosh, melt, fracture), 20 particle drifts × 12
-  silhouettes × 3 size spreads × a size multiplier, edge spectrum meters on every tab.
-  A **highlight rolloff** keeps bright centres from blinding you. The trail
-  buffer keeps (1 - fade) of each frame and adds the next, so anything that
-  doesn't move converges to about 4.7x its per-frame brightness at the default
-  TRAILS — which is why it was always the centre, where themes put the thing
-  that sits still. One masked pass compresses only what is above ~83% luminance,
-  so it fixes every theme at once instead of retuning eighty of them.
-  The halo is **one bloom pass over the finished frame**, not a shadow under
-  every stroke. Canvas `shadowBlur` is priced per draw call, and capping the
-  radius does not help — the price is the extra layer allocated and blurred
-  each call. Measured at 1440×900 with everything up, it was 78% of RING's
-  frame and 71% of WAVES', for eight and twelve strokes; blooming the frame
-  instead costs the same whatever the theme drew, and took RING from 207ms to
-  52ms. The same reasoning covers the impact stack: eight impacts that copy the
-  frame back over itself were making the browser snapshot the canvas fifteen
-  times a frame, and now share one snapshot. Adaptive **quality** keeps
-  full-screen rendering at 60fps on any device: one measured signal drives
-  backing resolution, the bloom pass and particle count together. QUALITY in
-  the TUNE panel pins it high (MAX) or low (FAST) if you'd rather not let it
-  adapt; the COST readout shows where it settled. Themes also read a smoothed musical
-  "energy" signal, so they move differently in a song's calm and driving parts.
-  Analysis is delayed to compensate for audio output latency, so beats land on
-  the sound rather than ahead of it (with a BEAT SYNC offset for Bluetooth).
-- **Synced lyrics** — lrclib.net lookup with filename analysis + confidence
-  scoring, auto-search per track, .lrc import, and a manual "wrong lyrics?"
-  search so a mismatched file can be corrected by picking the right song
-  yourself. 20 line animations × 44 per-letter effects, drawn on a dedicated
-  canvas layer. Every style is a **continuous function of time** — an optional
-  per-character offset and an optional whole-line one, in em so they scale with
-  the font — and nothing else. Layout, the crossfade in and out, the dwell cap
-  and the letter effects all live in the renderer, so every style behaves
-  identically at the seams and differs only in its motion.
+- **The stage** — seven modes, each its own composition and movement
+  language, rendered on WebGL2 (canvas 2D for the graphic ones) and composited
+  through one pass that handles grading, grain and the transitions between
+  modes: a noise-shaped reveal that grows from the centre with a glowing front,
+  both scenes drifting in scale, so a switch reads as moving *through* rather
+  than cutting. Colours glide between palettes rather than jumping.
 
-  That replaced twenty hand-written branches, each with its own screen position,
-  its own entry ramp and its own idea of what happens when a line leaves. WAVE
-  was the one that felt right, and the reason is that it never makes a decision:
-  each frame is a smooth function of (time, character index), so there is
-  nothing to jump. The rest arrived somewhere, sat, and were replaced — and
-  twenty branches meant twenty handovers to get right, which they were not.
-  **The change from one line to the next is an animation.** Fading one out and
-  the next in at the same anchor prints two texts on top of each other; fading
-  one out *before* the next arrives is readable but dead — a blink of empty
-  screen where the transition should be. Neither is a transition. So a style
-  gets `enter` and `exit` (0→1) alongside the clock and carries the line on and
-  off with the same motion that defines it: WAVE's letters rise into the wave
-  and lift away, GLIDE slides in one side and out the other, SPIRAL unwinds.
-  The line leaving and the line arriving overlap in time but not in space. A
-  line also gives up after 5.5s, on the same exit motion, since its span is the
-  gap to the next one and an instrumental break would otherwise leave the last
-  words hanging.
+  | Mode | Composition | What the music does |
+  | --- | --- | --- |
+  | Veil | curtains of light over a dark horizon | bass lifts the hems, highs shimmer, beats climb the folds |
+  | Ink | pigment folding through water (marbling) | energy deepens the fold, bass swells, hits drop ripples |
+  | Caustic | refracted light on the floor of a pool | bass bulges the surface, beats pull the light into focus, highs split colour |
+  | Orbit | an orrery seen from above | beats tick the bodies forward like an escapement, bars release coronas |
+  | Signal | a Swiss poster that rearranges itself | bars turn the shapes, a cell counts the beat, bass swells the discs |
+  | Ridge | the spectrum as hills receding into fog | loudness raises peaks, time carries them back, beats rim the front ridge |
+  | Words | the lyrics set as the picture | sung words light, bass stretches the active word, lines rise and lift away |
 
-  `npm run lyricfade` walks all twenty against **two real consecutive lines** and
-  measures, for each: that a line is drawn, that the screen is never empty
-  between lines, that the ink never reaches what two stacked lines would, and
-  that it **visibly animates** — travel, size change or a brightness swing.
+  Every mode has two named dials and nine curated looks start from them. Quiet
+  passages keep a slow self-motion ("quiet breathing"); the paused stage drops
+  to 30fps. Adding a mode: write a `ModeDef` in `src/stage/modes/`, list it in
+  `modes/index.ts` and `src/stage/modeIds.ts`.
 
-  That last one used to assert the opposite. It rewarded a line for holding
-  still, so every amplitude got tuned down until the styles did nothing worth
-  watching; a check that measures the wrong thing does not just miss faults, it
-  causes them. An earlier version also made the second line empty so the first
-  could be measured alone, and so never once measured what happens when one line
-  follows another — which is exactly where every fault lived.
+- **Synchronisation** — one playback clock (`src/flux/clock.ts`) answers
+  "where in the song are we, *as heard*": it interpolates the element's coarse
+  `currentTime`, subtracts the output latency (scaled by playback rate) plus a
+  user offset for Bluetooth, holds still while paused or buffering, and marks
+  every seek, loop, track change and repeat as a new epoch so nothing fires the
+  beats it skipped. The stage, the lyrics and the scrubber all read it.
+
+  The signals layer (`src/flux/signals.ts`) keeps measured and inferred things
+  apart: **level, frequency bands and transients** are measured from the
+  analyser (delayed to match the speakers); **tempo and beat phase** are
+  inferred, so they carry a **confidence**. The beat comes from the offline
+  analysis (a beat grid fitted over the whole file in a worker), checked section
+  by section against real onsets — a grid that runs on through a silent intro or
+  a beatless breakdown loses its confidence there. Before the analysis lands a
+  live autocorrelation tracker stands in, capped at lower confidence. Below the
+  threshold nothing snaps to a beat: the stage follows energy and real
+  transients instead (Studio → Intensity → Rhythm: Auto / Beat / Energy, with a
+  live confidence readout). `npm run sync` measures it: on a 120bpm test track
+  beats land with ≈10ms median error, none fire in the beatless intro or on a
+  pulseless track, and timing holds through seeks, pause/resume, 1.25× playback,
+  track changes and repeat.
+
+- **Lyrics** — read from the file first (ID3 SYLT/USLT, Vorbis, MP4), then
+  lrclib.net, or a manual search, an attached .lrc, or (with an AI key)
+  transcription. Rendered as real DOM text driven per frame from the clock: the
+  column glides to the active line on a spring, distant lines soften, a long
+  instrumental gap shows a countdown toward the next line, and hand-scrolling
+  pauses the follow. **Word timing is used only when it exists** — enhanced LRC
+  `<mm:ss.xx>` tags, karaoke SYLT (syllables grouped into lines) and word-level
+  Whisper timestamps — and fills each word as it is sung; otherwise the line
+  lights as a whole, and untimed text is shown as a static page marked as such.
+  Click a line to seek. Size, alignment, highlight style, stage contrast and a
+  timing offset live in Studio → Lyrics. (Flux has no animated mouth or
+  character, so there is no lip-sync feature.)
+
+- **Studio** — Looks (curated + your own: save, rename, duplicate, update,
+  delete), Style, Colour (follow the artwork or a palette, warmth, vividness),
+  Motion, Intensity, Lyrics, Interface (Ink / Night / Paper themes, accent,
+  backdrop strength, rendering quality). Previews are rendered by the stage
+  itself in the real colours; every section resets on its own.
+
+- **Artwork** — embedded covers (ID3 APIC, FLAC PICTURE, MP4 covr), catalogue
+  art and YouTube thumbnails; tracks with none get a generated sleeve stable for
+  that track. The palette for the interface and the stage is taken from it.
 
 - **Recorder** — captures the master output (FX, stutters, ambience included)
   via MediaRecorder; takes are stored and downloadable.
@@ -283,29 +269,28 @@ cd desktop && npm install && npm start      # or: npx electron-builder --win
 
 ```
 src/
-  audio/        engine (Web Audio graph), transport, recorder, peaks,
-                offline FX render + WAV/MP3 encoders, store wiring
-  components/   one file per tab (Player, DJ, FXRack, Library, Me),
-                visualizer overlay, shortcuts panel, shared UI atoms
-  visualizer/   render loop engine, live (mutable frame state),
-                project3d (perspective projections), dropLayers (per-theme
-                layers unlocked by drops),
-                lyricRenderer + lyricFx (line animations and per-letter effects),
-                themes/ — one file per theme; register new ones in themes/index.ts
-  store/        zustand store (persisted) + blob storage (IndexedDB/OPFS)
+  flux/         clock (shared playback time), signals (bands, transients,
+                tempo + confidence), look model + presets + migration, artwork,
+                tags, lyric timing, runtime wiring (analysis, accent)
+  stage/        the visualizer: engine (WebGL2 compositor, quality governor,
+                thumbnails), glsl, modes/ — one file per mode
+  ui/           the interface: shell pieces, Listen, Library, Queue, Search,
+                Studio, Lyrics, scrubber, transport, kit (motion primitives)
+  components/   the instrument panels (FX rack, deck, Revoice, sources,
+                settings, AI) — dense tools set into the new UI on a dark surface
+  audio/        engine (Web Audio graph), transport, analysis worker, recorder,
+                peaks, offline FX render + encoders, stems, Revoice
+  store/        zustand store (persisted, migrated) + blob storage
   hooks/        keyboard, media session, sleep timer
 ```
 
-### Adding a visualizer theme
-
-Create `src/visualizer/themes/mytheme.ts` exporting a `ThemeDraw`, register it
-in `themes/index.ts`, and add its name to `VIS_THEMES` in `src/constants.ts`.
-The draw context gives you the canvas, FFT/waveform data, beat flag,
-palette helpers (`C1`/`C2`/`CMix`), and a scratch state bucket (`L`).
+Saved settings from the previous visualizer migrate automatically: each old
+theme opens on the closest mode, palettes map to the nearest palette, the sync
+offset carries over, and saved looks become personal presets.
 
 ## Optional AI layer (BYOK)
 
-FLUX works completely without AI. Add an API key in **ME → AI SETTINGS** and a
+FLUX works completely without AI. Add an API key in **Settings → AI SETTINGS** and a
 `✦` layer appears across the app; remove the key and every AI surface
 disappears again. Keys are stored only in this browser (IndexedDB, one per
 provider) and are sent only to the provider you pick — there is no backend.

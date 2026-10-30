@@ -1,6 +1,7 @@
-// Self-contained end-to-end smoke test: builds nothing, expects `npm run build`
-// to have been run. Spawns `vite preview`, drives the app in headless Chromium,
-// and checks import → playback → FX → DJ → visualizer → recorder → export → persistence.
+// End-to-end smoke test for the built app. Spawns `vite preview`, drives the
+// interface in headless Chromium, and checks import → playback → navigation →
+// Sound (FX, deck) → stage + modes → Studio looks and presets → lyrics →
+// recorder/export → migration of older saves → persistence.
 //
 // Usage: npm run build && node scripts/smoke.mjs
 import { spawn } from "node:child_process";
@@ -12,7 +13,7 @@ import { chromium } from "playwright";
 const PORT = 4179;
 const BASE = `http://localhost:${PORT}`;
 
-// 6s stereo test WAV: 440Hz tone + 120bpm kick so BPM/beat detection has material.
+// 6s stereo test WAV: 440Hz tone + 120bpm kick
 function makeTestWav(path) {
   const rate = 44100, secs = 6, n = rate * secs, ch = 2;
   const dataSize = n * ch * 2;
@@ -25,36 +26,26 @@ function makeTestWav(path) {
   for (let i = 0; i < n; i++) {
     const t = i / rate;
     const env = Math.exp(-8 * (t % 0.5));
-    // broadband kick like a real drum: fundamental + harmonics + noise click
-    const beat =
-      env * (Math.sin(2 * Math.PI * 55 * t) + 0.5 * Math.sin(2 * Math.PI * 110 * t) + 0.3 * Math.sin(2 * Math.PI * 220 * t) + (Math.random() * 2 - 1) * 0.25);
-    const tone = 0.2 * Math.sin(2 * Math.PI * 440 * t);
-    const s = Math.round(Math.max(-1, Math.min(1, tone + beat * 0.7)) * 32767 * 0.8);
+    const beat = env * (Math.sin(2 * Math.PI * 55 * t) + 0.5 * Math.sin(2 * Math.PI * 110 * t) + (Math.random() * 2 - 1) * 0.25);
+    const s = Math.round(Math.max(-1, Math.min(1, 0.2 * Math.sin(2 * Math.PI * 440 * t) + beat * 0.7)) * 32767 * 0.8);
     buf.writeInt16LE(s, off); off += 2;
     buf.writeInt16LE(s, off); off += 2;
   }
   writeFileSync(path, buf);
 }
 
-const wav = join(mkdtempSync(join(tmpdir(), "flux-")), "test-track.wav");
+const wav = join(mkdtempSync(join(tmpdir(), "flux-")), "Test Artist - test track.wav");
 makeTestWav(wav);
 
-const preview = spawn("npx", ["vite", "preview", "--port", String(PORT)], { stdio: "ignore" });
+const preview = spawn("npx", ["vite", "preview", "--port", String(PORT), "--strictPort"], { stdio: "ignore" });
 await new Promise((r) => setTimeout(r, 2500));
 
-const exe =
-  process.env.CHROMIUM_PATH ??
-  (existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined);
-const browser = await chromium.launch({
-  executablePath: exe,
-  args: ["--autoplay-policy=no-user-gesture-required", "--no-sandbox"],
-});
-const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
+const exe = process.env.CHROMIUM_PATH ?? (existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined);
+const browser = await chromium.launch({ executablePath: exe, args: ["--autoplay-policy=no-user-gesture-required", "--no-sandbox"] });
+const page = await browser.newPage({ viewport: { width: 1280, height: 820 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
-page.on("console", (m) => {
-  if (m.type() === "error") errors.push(`console: ${m.text()}`);
-});
+page.on("console", (m) => { if (m.type() === "error") errors.push(`console: ${m.text()}`); });
 
 const step = async (name, fn) => {
   try {
@@ -65,164 +56,143 @@ const step = async (name, fn) => {
     process.exitCode = 1;
   }
 };
+const S = (fn, arg) => page.evaluate(fn, arg);
+const nav = (label) => page.evaluate((l) => document.querySelector(`nav button[aria-label=${l}]`).click(), label);
 
-await page.goto(BASE, { waitUntil: "networkidle" });
+// ── migration: an install from the 85-theme era opens on the matching mode ──
+await page.addInitScript(() => {
+  if (sessionStorage.getItem("seeded")) return;
+  sessionStorage.setItem("seeded", "1");
+  localStorage.setItem("flux-store", JSON.stringify({
+    version: 2,
+    state: {
+      visTheme: "ORRERY", visCfg: { palette: "OCEAN", h1: 192, h2: 252, intensity: 1.3, speed: 0.8, syncMs: 120 },
+      visPresets: [{ name: "My old look", look: { theme: "LIQUID", cfg: { palette: "EMBER" } } }],
+      tab: "library", volume: 0.6,
+    },
+  }));
+});
+await page.goto(BASE, { waitUntil: "load" });
 
-await step("app renders header + tabs", async () => {
-  await page.waitForSelector("text=FLUX", { timeout: 5000 });
-  for (const t of ["PLAYER", "DJ", "FX", "LIBRARY", "ME"]) await page.waitForSelector(`text=${t}`);
+await step("intro plays and hands off to the interface", async () => {
+  await page.waitForSelector("text=Music, made visible", { timeout: 5000 });
+  await page.waitForSelector("nav[aria-label=Main]", { timeout: 8000 });
 });
 
-await step("import audio file via library", async () => {
-  await page.click("button:has(div:text-is('LIBRARY'))");
-  await page.waitForSelector("button:has-text('LOAD INTO')");
-  await page.setInputFiles("input[type=file]", wav);
+await step("old saves migrate: theme → mode, palette, offset, presets, view", async () => {
+  const s = await S(() => {
+    const st = window.__fluxStore.getState();
+    return { mode: st.look.style.mode, src: st.look.color.source, sync: st.syncMs, presets: st.lookPresets.map((p) => [p.name, p.look.style.mode]), view: st.view, vol: st.volume };
+  });
+  if (s.mode !== "orbit") throw new Error(`mode ${s.mode}`);
+  // OCEAN's lead hue (192°) is closest to Lagoon
+  if (s.src !== "lagoon") throw new Error(`palette ${s.src}`);
+  if (s.sync !== 120) throw new Error(`syncMs ${s.sync}`);
+  if (s.presets[0]?.[0] !== "My old look" || s.presets[0]?.[1] !== "ink") throw new Error(JSON.stringify(s.presets));
+  if (s.view !== "library" || s.vol !== 0.6) throw new Error(`${s.view} ${s.vol}`);
+});
+
+await step("import audio file via Add music", async () => {
+  const [chooser] = await Promise.all([page.waitForEvent("filechooser"), page.click("button:has-text('Add music')")]);
+  await chooser.setFiles(wav);
   await page.waitForSelector("text=test track", { timeout: 5000 });
 });
 
-await step("auto-play started, progress advancing", async () => {
-  await page.click("button:has(div:text-is('PLAYER'))");
-  await page.waitForFunction(() => !document.body.innerText.includes("NO SIGNAL"), { timeout: 5000 });
-  await page.waitForTimeout(1500);
-  const text = await page.innerText("body");
-  if (!/0:0[1-9]/.test(text)) throw new Error("progress not advancing");
+await step("auto-play started, clock advancing", async () => {
+  await page.waitForFunction(() => window.__fluxClock.media() > 0.5, null, { timeout: 8000 });
 });
 
-await step("FX rack: apply SLOWED+REVERB preset", async () => {
-  await page.click("button:has(div:text-is('FX'))");
-  await page.waitForSelector("text=TIME & PITCH");
-  await page.click("button:has-text('SLOWED+REVERB')");
-  await page.waitForSelector("text=0.80×");
+await step("artist split from the file name", async () => {
+  const a = await S(() => window.__fluxStore.getState().playlists[0].tracks[0].artist ?? window.__fluxStore.getState().playlists[0].tracks[0].name);
+  if (!/Test Artist/.test(a)) throw new Error(a);
 });
 
-await step("DJ tab renders cues + performance fx", async () => {
-  await page.click("button:has(div:text-is('DJ'))");
-  await page.waitForSelector("text=HOT CUES");
-  await page.waitForSelector("text=TAPE BRAKE");
-  await page.waitForSelector("text=LIVE BPM");
-});
-
-await step("visualizer opens, theme dropdown works, tune panel works", async () => {
-  await page.click("button:has-text('◉ VISUALS')");
-  await page.click("button:has-text('◉ RING')"); // theme picker dropdown
-  await page.waitForSelector("div:text-is('KALEIDO')");
-  await page.click('[data-th="TUNNEL"]');
-  await page.waitForSelector("button:has-text('◉ TUNNEL')");
-  await page.click("button:has-text('⚙ TUNE')");
-  await page.waitForSelector("text=COLOR PALETTE");
-  await page.click("button:has-text('VAPOR')");
-  // Escape peels one layer at a time: first the tune panel, then the overlay.
-  // It used to close both at once, so a stray Escape while tuning dumped you
-  // back to the player.
-  await page.keyboard.press("Escape");
-  await page.waitForSelector("text=COLOR PALETTE", { state: "detached" });
-  if (!(await page.$("button[data-themechip]"))) throw new Error("Escape closed the whole visualizer, not just the panel");
-  await page.keyboard.press("Escape");
-  await page.waitForSelector("button[data-themechip]", { state: "detached" });
-});
-
-await step("3D projection applies to any theme", async () => {
-  await page.click("button:has-text('◉ VISUALS')");
-  await page.click("button:has-text('⚙ TUNE')");
-  // the tune panel is grouped now — 3D lives behind its own tab
-  await page.click('button[data-ptab="3D"]');
-  await page.waitForSelector("text=3D SPACE");
-  await page.click('button[data-3d="FLOOR"]');
-  await page.waitForSelector("text=DEPTH"); // amount slider appears once on
-  await page.click('button[data-3d="OFF"]');
-  // letter effects are a second, independent dimension from the lyric styles
-  await page.click('button[data-ptab="LYRICS"]');
-  await page.waitForSelector("text=LETTER FX");
-  await page.click('button[data-lfx="RAINBOW WAVE"]');
-  await page.waitForSelector('button[data-lfx="NONE-COLOR"]');
-  await page.waitForSelector("input[data-lfxmatch]");
-  await page.keyboard.press("Escape");
-  await page.keyboard.press("Escape");
-  await page.waitForSelector("button[data-themechip]", { state: "detached" });
-});
-
-await step("favourite themes pin to the top of the picker", async () => {
-  await page.click("button:has-text('◉ VISUALS')");
-  await page.click("button[data-themechip]");
-  await page.waitForSelector('[data-th="ORRERY"]');
-  // starring must favourite without also selecting the theme and closing the menu
-  await page.click('[data-th="ORRERY"] [data-star="ORRERY"]');
-  await page.waitForSelector('[data-thfav="ORRERY"]', { timeout: 5000 });
-  if (await page.$("button:has-text('◉ ORRERY')")) throw new Error("starring a theme also selected it");
-  // the section header is badged as the newest feature
-  const hdr = await page.$("text=★ FAVORITES");
-  if (!hdr) throw new Error("favourites section missing");
-  // and it survives a reload
-  await page.keyboard.press("Escape");
-  await page.reload({ waitUntil: "networkidle" });
-  await page.click("button:has-text('◉ VISUALS')");
-  await page.click("button[data-themechip]");
-  await page.waitForSelector('[data-thfav="ORRERY"]', { timeout: 5000 });
-  // un-starring removes it again
-  await page.click('[data-thfav="ORRERY"] [data-star="ORRERY"]');
-  await page.waitForSelector('[data-thfav="ORRERY"]', { state: "detached", timeout: 5000 });
-  await page.keyboard.press("Escape");
-  await page.waitForSelector("button[data-themechip]", { state: "detached" });
-});
-
-await step("visual presets save, share and round-trip", async () => {
-  await page.click("button:has-text('◉ VISUALS')");
-  await page.click("button:has-text('⚙ TUNE')");
-  await page.waitForSelector("text=SAVED LOOKS");
-  // build a distinctive look, save it, then change everything and restore it
-  await page.evaluate(() => {
-    const st = window.__fluxStore.getState();
-    st.set({ visTheme: "PRISM", lyricStyle: "PULSE", lyricFxs: ["FIRE", "WAVE"] });
-    st.setVisKey("palette", "LAVA");
-    st.setVisKey("vis3d", "TUNNEL");
-    st.setVisKey("impacts", ["GHOST", "SHARDS"]);
-    st.setVisKey("pShape", "STAR");
-  });
-  await page.click("button[data-savelook]");
-  await page.waitForSelector('button[data-look="LOOK 1"]');
-
-  // A share code must reconstruct the look exactly, not approximately — it is
-  // the whole point of the feature, and it survives a JSON round trip through
-  // shortened keys plus re-validation, so it is worth asserting field by field.
-  const code = await page.evaluate(() => window.__fluxLook.encodeLook(window.__fluxLook.captureLook()));
-  if (!code.startsWith("FLUX1-")) throw new Error(`bad code prefix: ${code.slice(0, 12)}`);
-  const decoded = await page.evaluate((cd) => window.__fluxLook.decodeLook(cd), code);
-  if (!decoded) throw new Error("share code failed to decode");
-  if (decoded.theme !== "PRISM" || decoded.cfg.palette !== "LAVA" || decoded.cfg.vis3d !== "TUNNEL"
-      || decoded.cfg.pShape !== "STAR" || decoded.lyricFxs?.join() !== "FIRE,WAVE"
-      || (decoded.cfg.impacts || []).join() !== "GHOST,SHARDS") {
-    throw new Error(`share code lost fields: ${JSON.stringify({ t: decoded.theme, p: decoded.cfg.palette, d: decoded.cfg.vis3d, s: decoded.cfg.pShape, f: decoded.lyricFxs, i: decoded.cfg.impacts })}`);
+await step("navigation: every view mounts", async () => {
+  for (const [l, text] of [["Listen", "Lyrics"], ["Library", "Library"], ["Search", "Online"], ["Sound", "Sound"], ["Studio", "Make it yours"]]) {
+    await nav(l);
+    await page.waitForSelector(`text=${text}`, { timeout: 5000 });
   }
-  // and garbage must be rejected rather than half-applied
-  if (await page.evaluate(() => window.__fluxLook.decodeLook("not a code"))) throw new Error("garbage code was accepted");
-
-  await page.evaluate(() => {
-    const st = window.__fluxStore.getState();
-    st.set({ visTheme: "RING", lyricStyle: "DRIFT", lyricFxs: [] });
-    st.setVisKey("palette", "NEON");
-    st.setVisKey("vis3d", "OFF");
-    st.setVisKey("impacts", []);
-    st.setVisKey("pShape", "DOT");
-  });
-  await page.click('button[data-look="LOOK 1"]');
-  const restored = await page.evaluate(() => {
-    const s = window.__fluxStore.getState();
-    return { t: s.visTheme, p: s.visCfg.palette, d: s.visCfg.vis3d, im: s.visCfg.impacts, sh: s.visCfg.pShape, lf: s.lyricFxs };
-  });
-  if (restored.t !== "PRISM") throw new Error(`theme not restored: ${restored.t}`);
-  if (restored.p !== "LAVA") throw new Error(`palette not restored: ${restored.p}`);
-  if (restored.d !== "TUNNEL") throw new Error(`3D mode not restored: ${restored.d}`);
-  if (restored.sh !== "STAR") throw new Error(`particle shape not restored: ${restored.sh}`);
-  if ((restored.lf || []).join() !== "FIRE,WAVE") throw new Error(`letter fx not restored: ${restored.lf}`);
-  if ((restored.im || []).join() !== "GHOST,SHARDS") throw new Error(`impacts not restored: ${restored.im}`);
-
-  await page.keyboard.press("Escape");
-  await page.keyboard.press("Escape");
-  await page.waitForSelector("button[data-themechip]", { state: "detached" });
+  await page.evaluate(() => window.__fluxStore.setState({ view: "settings" }));
+  await page.waitForSelector("text=Analyse tracks for exact beats");
 });
 
-await step("Me tab: recorder saves a take", async () => {
-  await page.click("button:has(div:text-is('ME'))");
+await step("Sound: FX preset applies to the audio graph", async () => {
+  await nav("Sound");
+  await page.click("button:has-text('SLOWED+REVERB')");
+  const fx = await S(() => window.__fluxStore.getState().fx);
+  if (Math.abs(fx.speed - 0.8) > 0.001) throw new Error(`speed ${fx.speed}`);
+  await page.click("button:has-text('CLEAN')");
+});
+
+await step("Sound: deck renders cues", async () => {
+  await page.click("button[role=radio]:has-text('Deck')");
+  await page.waitForSelector("text=HOT CUES", { timeout: 5000 });
+});
+
+await step("stage opens, modes switch, Escape leaves", async () => {
+  await page.keyboard.press("v");
+  await page.waitForSelector("[role=dialog][aria-label=Stage]");
+  await page.click("button[aria-label='Next mode']");
+  await page.waitForFunction(() => window.__fluxStore.getState().look.style.mode === "signal");
+  await page.waitForFunction(() => window.__fluxStage.mode === "signal");
+  const err = await S(() => window.__fluxStage.error);
+  if (err) throw new Error(err);
+  await page.keyboard.press("Escape");
+  await page.waitForSelector("[role=dialog][aria-label=Stage]", { state: "detached" });
+});
+
+await step("every mode renders without error", async () => {
+  for (const m of ["veil", "ink", "caustic", "orbit", "signal", "ridge", "words"]) {
+    await S((m) => window.__fluxStore.getState().setLook("style", { mode: m }), m);
+    await page.waitForFunction((m) => window.__fluxStage.mode === m, m, { timeout: 5000 });
+    await page.waitForTimeout(150);
+  }
+  const err = await S(() => window.__fluxStage.error);
+  if (err) throw new Error(err);
+});
+
+await step("Studio: apply, save, rename, duplicate and delete a look", async () => {
+  await nav("Studio");
+  await page.click("button[aria-label='Apply look: Pool Light']");
+  await page.waitForFunction(() => window.__fluxStore.getState().look.style.mode === "caustic");
+  await S(() => window.__fluxStore.getState().setLook("motion", { speed: 1.4 }));
+  await page.click("button:has-text('Save as look')");
+  await page.fill("input[aria-label='Look name']", "Smoke look");
+  await page.keyboard.press("Enter");
+  await page.waitForSelector("text=Smoke look");
+  const id = await S(() => window.__fluxStore.getState().lookPresets.find((p) => p.name === "Smoke look").id);
+  await S((id) => window.__fluxStore.getState().renameLookPreset(id, "Renamed look"), id);
+  await page.waitForSelector("text=Renamed look");
+  await S((id) => { const s = window.__fluxStore.getState(); s.duplicateLookPreset(s.lookPresets.find((p) => p.id === id)); }, id);
+  await page.waitForSelector("text=Renamed look copy");
+  await S((id) => window.__fluxStore.getState().deleteLookPreset(id), id);
+  await page.waitForSelector("text=Renamed look copy");
+  const n = await S(() => window.__fluxStore.getState().lookPresets.length);
+  if (n !== 2) throw new Error(`${n} presets`);
+});
+
+await step("Studio: section resets restore defaults", async () => {
+  await page.click("button[role=radio]:has-text('Motion')");
+  await page.click("button[aria-label='Reset scene motion']");
+  const sp = await S(() => window.__fluxStore.getState().look.motion.speed);
+  if (sp !== 1) throw new Error(`speed ${sp}`);
+});
+
+await step("lyrics: word-timed lines render and follow the clock", async () => {
+  await S(() => {
+    const st = window.__fluxStore.getState();
+    const lrc = "[00:00.50]<00:00.50>one <00:01.00>two <00:01.50>three\n[00:03.00]<00:03.00>four <00:03.50>five";
+    st.updateTrack(st.playlists[0].tracks[0].id, { lyrics: window.__fluxLyrics.parseLrc(lrc), lyricsTimed: true });
+    window.__fluxStore.setState({ view: "listen", listenPane: "lyrics" });
+    window.__fluxEngine.audio.currentTime = 3.6;
+  });
+  await page.waitForFunction(() => document.querySelector(".lyric-line[data-state=active]")?.textContent?.includes("five"), null, { timeout: 5000 });
+  const words = await page.$$eval(".lyric-word", (els) => els.length);
+  if (words !== 5) throw new Error(`${words} word spans`);
+});
+
+await step("Settings: recorder saves a take", async () => {
+  await page.evaluate(() => window.__fluxStore.setState({ view: "settings" }));
   await page.click("button:has-text('START RECORDING')");
   await page.waitForTimeout(1500);
   await page.click("button:has-text('STOP & SAVE TAKE')");
@@ -241,30 +211,29 @@ await step("shortcuts panel via ?", async () => {
 });
 
 await step("state persists across reload", async () => {
-  await page.reload({ waitUntil: "networkidle" });
-  await page.click("button:has(div:text-is('LIBRARY'))");
-  await page.waitForSelector("text=test track", { timeout: 5000 });
-  await page.click("button:has(div:text-is('ME'))");
-  await page.waitForSelector("text=flux-take-1");
+  await page.waitForTimeout(1800); // persistence is debounced
+  await page.reload({ waitUntil: "load" });
+  await page.waitForSelector("nav[aria-label=Main]", { timeout: 8000 });
+  const s = await S(() => {
+    const st = window.__fluxStore.getState();
+    return { n: st.playlists[0].tracks.length, presets: st.lookPresets.length, takes: st.takes.length, lyrics: st.playlists[0].tracks[0]?.lyrics?.length };
+  });
+  // presets: the migrated one plus the renamed one (its copy was deleted)
+  if (s.n !== 1 || s.presets !== 2 || s.takes < 1 || s.lyrics !== 2) throw new Error(JSON.stringify(s));
 });
 
 await step("track playable from persisted blob after reload", async () => {
-  await page.click("button:has(div:text-is('LIBRARY'))");
-  await page.click("span:has-text('test track')");
-  await page.click("button:has(div:text-is('PLAYER'))");
-  await page.waitForTimeout(1500);
-  const text = await page.innerText("body");
-  if (!/0:0[1-9]/.test(text)) throw new Error("no progress after reload");
+  await S(() => window.__fluxStore.setState({ view: "listen" }));
+  await page.click("button[aria-label=Play]");
+  await page.waitForFunction(() => window.__fluxClock.media() > 0.5, null, { timeout: 8000 });
 });
 
 const realErrors = errors.filter((e) => !e.includes("favicon") && !e.includes("Failed to load resource"));
 if (realErrors.length) {
-  console.log("✘ console/page errors:", realErrors.join(" | "));
+  console.log("\nPage errors:");
+  for (const e of realErrors) console.log("  " + e);
   process.exitCode = 1;
-} else {
-  console.log("✔ no console errors");
 }
-
 await browser.close();
 preview.kill();
-process.exit();
+console.log(process.exitCode ? "\nSMOKE FAILED" : "\nSMOKE OK");

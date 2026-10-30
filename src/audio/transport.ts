@@ -7,6 +7,8 @@ import { cleanName, isAudioFile, uid } from "../utils";
 import { isYouTube, ytLoad, ytPause, ytPlay, ytSeek, ytStop } from "../youtube";
 
 const S = () => useStore.getState();
+/** bumped on every playAt, so rapid skips resolve to the last one only */
+let switchToken = 0;
 
 export async function playAt(plId: string, i: number): Promise<void> {
   const s = S();
@@ -32,14 +34,22 @@ export async function playAt(plId: string, i: number): Promise<void> {
   }
   ytStop();
   engine.ensure();
+  // The interface answers at once — the new track is current from this frame,
+  // so artwork, title and colour start moving immediately — while the audio
+  // fades out underneath and swaps a moment later.
+  const wasPlaying = s.playing;
+  const token = ++switchToken;
+  useStore.setState({ playPl: plId, current: i, loopA: null, loopB: null, cues: [null, null, null, null] });
   const wantInst = s.instMode && tr.hasInst;
   const url = (wantInst ? await getUrl(`inst-${tr.fileId}`) : null) ?? (await getUrl(tr.fileId));
+  if (token !== switchToken) return; // a newer skip has already taken over
   if (!url) {
     console.warn(`Audio for "${tr.name}" is missing from storage.`);
     return;
   }
   const el = engine.audio;
   const doSwitch = () => {
+    if (token !== switchToken) return;
     el.src = url;
     el.volume = S().volume;
     const useFx = tr.fxPin || null;
@@ -59,9 +69,9 @@ export async function playAt(plId: string, i: number): Promise<void> {
     if (n && S().smooth) n.fader.gain.setTargetAtTime(1, n.ctx.currentTime, 0.12);
   };
   const n = engine.nodes;
-  if (s.smooth && n && s.playing) {
-    n.fader.gain.setTargetAtTime(0, n.ctx.currentTime, 0.08);
-    setTimeout(doSwitch, 240);
+  if (s.smooth && n && wasPlaying) {
+    n.fader.gain.setTargetAtTime(0, n.ctx.currentTime, 0.06);
+    setTimeout(doSwitch, 180);
   } else doSwitch();
 }
 
@@ -101,8 +111,17 @@ export async function addFiles(fileList: FileList | File[]): Promise<void> {
   // persist to storage in the background — importing an album must not
   // freeze the UI while every file is written to IndexedDB
   void (async () => {
+    const { readTags } = await import("../flux/tags");
     for (const { f, id } of pairs) {
       await blobStore.put(id, f).catch((e) => console.warn("Failed to persist audio:", e));
+      // real title/artist from the file's tags, when it has them
+      const tags = await readTags(f).catch(() => ({} as { title?: string; artist?: string }));
+      if (tags.title || tags.artist) {
+        S().updateTrack(id, {
+          ...(tags.title ? { name: tags.title } : {}),
+          ...(tags.artist ? { artist: tags.artist } : {}),
+        });
+      }
     }
   })();
 }
@@ -121,6 +140,8 @@ export function togglePlay(): void {
   }
   engine.ensure();
   const el = engine.audio;
+  // after a reload the current track is remembered but nothing is loaded yet
+  if (!el.src) { void playAt(s.playPl, s.current); return; }
   if (el.paused) {
     el.play();
     useStore.setState({ playing: true });
@@ -160,7 +181,7 @@ export function prevTrack(): void {
   if (!list || !list.tracks.length) return;
   const cur = list.tracks[s.current];
   if (isYouTube(cur)) {
-    if (s.progress * s.duration > 3) { ytSeek(0); return; }
+    if (s.progress > 3) { ytSeek(0); return; }
   } else if (engine.audio.currentTime > 3) {
     engine.audio.currentTime = 0;
     return;
@@ -172,7 +193,7 @@ export function seek(t: number): void {
   const s = S();
   if (isYouTube(getPlayingList(s).tracks[s.current])) {
     ytSeek(t);
-    if (s.duration > 0) useStore.setState({ progress: t / s.duration });
+    useStore.setState({ progress: t });
     return;
   }
   engine.audio.currentTime = t;

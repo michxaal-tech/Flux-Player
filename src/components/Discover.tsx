@@ -17,7 +17,7 @@ import { fmt } from "../utils";
  * matters depends entirely on what you came for, so the trade-off is stated
  * rather than decided on the user's behalf.
  */
-export function Discover() {
+export function Discover({ query, defaultOpen = false }: { query?: string; defaultOpen?: boolean } = {}) {
   const status = useStore((s) => s.catStatus);
   const playlists = useStore((s) => s.playlists);
   const viewMode = useStore((s) => s.viewMode);
@@ -29,7 +29,7 @@ export function Discover() {
   void connectorRev;
   const sources = allSources();
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [srcId, setSrcId] = useState(SOURCES[0].id);
   const [q, setQ] = useState("");
   const [genre, setGenre] = useState(SOURCES[0].genres[0]);
@@ -54,6 +54,15 @@ export function Discover() {
     }
     setBusy(false);
   };
+
+  // the Search view's query drives this panel when it is given one
+  useEffect(() => {
+    if (query === undefined) return;
+    const qq = query.trim();
+    setQ(qq);
+    if (qq) { setOpen(true); load(() => src.search(qq)); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
 
   // show something on first open rather than an empty box
   useEffect(() => {

@@ -1,220 +1,208 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type React from "react";
-import { BG, BORDER, CYAN, MAG, MONO, SANS } from "./constants";
-import { addFiles } from "./audio/transport";
+// The shell: the stage canvas behind everything, navigation, the current view,
+// the dock, and the overlays.
+//
+// Views sit in a simple spatial model. Listen is the front layer — going to it
+// brings it toward you, leaving it lets it fall back. The other views are
+// side by side in nav order, so moving between them slides left or right.
+// Every transition retargets if you click again mid-flight.
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "framer-motion";
+import { useStore } from "./store/useStore";
 import { useKeyboard } from "./hooks/useKeyboard";
 import { useMediaSession } from "./hooks/useMediaSession";
-import { useSleepLeft } from "./hooks/useSleepLeft";
-import { useStore } from "./store/useStore";
 import { refreshConnectorSources } from "./connectors";
-import { canvasRefs } from "./visualizer/live";
-import type { TabId } from "./types";
-import { fmt } from "./utils";
-import { DJTab } from "./components/DJTab";
-import { FXRackTab } from "./components/FXRackTab";
-import { LibraryTab } from "./components/LibraryTab";
-import { MeTab } from "./components/MeTab";
-import { YouTubeTab } from "./components/YouTubeTab";
-import { PlayerTab } from "./components/PlayerTab";
+import { stage } from "./stage/engine";
+import type { ViewId } from "./types";
+import { NowPlaying } from "./ui/NowPlaying";
+import { Library } from "./ui/Library";
+import { Search } from "./ui/Search";
+import { Studio } from "./ui/Studio";
+import { Sound, Settings } from "./ui/Panels";
+import { Dock, DropOverlay, FluxMark, Rail, StageButton, TabBar, Toasts, VIEW_ORDER, YouTubeHost } from "./ui/Chrome";
+import { Intro, StageView } from "./ui/Stage";
+import { I } from "./ui/icons";
 import { ShortcutsPanel } from "./components/ShortcutsPanel";
-import { VisualizerOverlay } from "./components/VisualizerOverlay";
-import { PlayIcon } from "./components/ui";
 import { AiBusyChip } from "./components/ai/AiBits";
 import { CopilotFab, CopilotPanel } from "./components/ai/CopilotPanel";
+import { ease } from "./ui/motion";
+
+function useWide(): boolean {
+  const q = "(min-width: 960px)";
+  const [wide, setWide] = useState(() => window.matchMedia(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia(q);
+    const on = () => setWide(m.matches);
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
+  return wide;
+}
+
+/** How visible and how calm the stage is, per view. */
+function usePresence(wide: boolean) {
+  const view = useStore((s) => s.view);
+  const open = useStore((s) => s.stage);
+  const ui = useStore((s) => s.ui);
+  useEffect(() => {
+    const paper = ui.theme === "paper" ? 1 : 0;
+    const b = ui.backdrop;
+    if (open) stage.setPresence({ show: true, calm: 0, dim: 1, paper: 0 });
+    else if (view === "studio") stage.setPresence({ show: true, calm: 0.15, dim: 1, paper: 0 });
+    else if (view === "listen") stage.setPresence({ show: b > 0.01, calm: 0.75, dim: b * 0.85, paper });
+    else stage.setPresence({ show: b > 0.01, calm: 1, dim: b * 0.42, paper });
+  }, [view, open, ui.theme, ui.backdrop, wide]);
+}
+
+const depthOf = (v: ViewId) => (v === "listen" ? 0 : 1);
 
 export default function App() {
-  const tab = useStore((s) => s.tab);
-  const visOpen = useStore((s) => s.visOpen);
+  const view = useStore((s) => s.view);
+  const open = useStore((s) => s.stage);
+  const motionPref = useStore((s) => s.ui.motion);
   const shortcutsOpen = useStore((s) => s.shortcutsOpen);
   const aiReady = useStore((s) => s.aiReady);
-  const playerBgOn = useStore((s) => s.playerBgOn);
-  const recState = useStore((s) => s.recState);
-  const recTime = useStore((s) => s.recTime);
-  const set = useStore((s) => s.set);
-  const sleepLeft = useSleepLeft();
+  const wide = useWide();
+  const [ready, setReady] = useState(false);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const prevView = useRef<ViewId>(view);
+  const [dir, setDir] = useState({ x: 0, z: 0 });
 
   useKeyboard();
   useMediaSession();
+  usePresence(wide);
 
-  // ── tab motion: remember where we came from so the incoming panel slides
-  // in from that side, and slide the accent bar to the active tab ──
-  const TAB_ORDER: TabId[] = ["player", "visuals", "dj", "fx", "library", "yt", "me"];
-  const prevTab = useRef<TabId>(tab);
-  const [dir, setDir] = useState<1 | -1>(1);
-  const tabBarRef = useRef<HTMLDivElement>(null);
-  const [ink, setInk] = useState({ x: 0, w: 0 });
-  /** the tab being animated out, kept mounted until its exit finishes */
-  const [leaving, setLeaving] = useState<{ tab: TabId; dir: 1 | -1 } | null>(null);
-
-  const renderTab = (id: TabId) => (
-    <>
-      {id === "player" && <PlayerTab />}
-      {id === "dj" && <DJTab />}
-      {id === "fx" && <FXRackTab />}
-      {id === "library" && <LibraryTab onLoadClick={() => fileInputRef.current?.click()} onAnyFileClick={() => anyInputRef.current?.click()} />}
-      {id === "yt" && <YouTubeTab />}
-      {id === "me" && <MeTab />}
-    </>
-  );
-
-  useLayoutEffect(() => {
-    if (prevTab.current !== tab) {
-      const d = TAB_ORDER.indexOf(tab) >= TAB_ORDER.indexOf(prevTab.current) ? 1 : -1;
-      setDir(d);
-      setLeaving({ tab: prevTab.current, dir: d });
-      prevTab.current = tab;
-    }
-    const bar = tabBarRef.current;
-    const btn = bar?.querySelector<HTMLElement>(`[data-tab="${visOpen ? "visuals" : tab}"]`);
-    if (bar && btn) setInk({ x: btn.offsetLeft, w: btn.offsetWidth });
-  }, [tab, visOpen]);
-
-  // drop the outgoing tab once its exit animation has played out
   useEffect(() => {
-    if (!leaving) return;
-    const t = window.setTimeout(() => setLeaving(null), 320);
-    return () => window.clearTimeout(t);
-  }, [leaving]);
-
-  // register any saved connectors (Subsonic servers, etc.) so they appear in
-  // the Discover picker on launch, not only after the settings panel is opened
-  useEffect(() => {
+    if (canvas.current) stage.attach(canvas.current);
     void refreshConnectorSources().then(() => useStore.setState({ connectorRev: Date.now() }));
   }, []);
 
-  // keep the accent bar aligned when the window resizes
-  useEffect(() => {
-    const onResize = () => {
-      const bar = tabBarRef.current;
-      const btn = bar?.querySelector<HTMLElement>(`[data-tab="${visOpen ? "visuals" : tab}"]`);
-      if (bar && btn) setInk({ x: btn.offsetLeft, w: btn.offsetWidth });
-    };
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [tab, visOpen]);
+  // direction of travel between views, for the transition
+  if (prevView.current !== view) {
+    const a = prevView.current, b = view;
+    const z = depthOf(b) - depthOf(a); // -1 toward you (to Listen), 1 away
+    const x = z === 0 ? Math.sign(VIEW_ORDER.indexOf(b) - VIEW_ORDER.indexOf(a)) : 0;
+    prevView.current = view;
+    if (dir.x !== x || dir.z !== z) setDir({ x, z });
+  }
 
-  const bgRef = useRef<HTMLCanvasElement>(null);
-  const pbgRef = useRef<HTMLCanvasElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const anyInputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    canvasRefs.bg = bgRef.current;
-    canvasRefs.pbg = pbgRef.current;
-    return () => {
-      if (canvasRefs.bg === bgRef.current) canvasRefs.bg = null;
-      if (canvasRefs.pbg === pbgRef.current) canvasRefs.pbg = null;
-    };
-  }, []);
+  const onIntroDone = useCallback(() => setReady(true), []);
+  // Minimal always reduces; otherwise follow the system's reduced-motion setting
+  const reduce = motionPref === "minimal" ? "always" : "user";
 
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
-  };
+  const content = (
+    <>
+      {view === "listen" && <NowPlaying wide={wide} />}
+      {view === "library" && <Library />}
+      {view === "search" && <Search />}
+      {view === "sound" && <Sound />}
+      {view === "studio" && <Studio wide={wide} />}
+      {view === "settings" && <Settings />}
+    </>
+  );
+  const scrolls = view !== "studio" && !(view === "listen" && wide);
 
   return (
-    <div
-      onDrop={onDrop}
-      onDragOver={(e) => e.preventDefault()}
-      style={{ position: "fixed", inset: 0, background: BG, fontFamily: SANS, color: "#fff", display: "flex", flexDirection: "column", userSelect: "none" }}
-    >
-      {/* live theme behind the whole player page, rendered tiny and blurred so
-          it reads as colour and motion rather than a competing picture */}
-      <canvas
-        ref={pbgRef}
-        aria-hidden
-        style={{
-          position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none",
-          opacity: tab === "player" && playerBgOn && !visOpen ? 0.6 : 0,
-          // The blur itself is applied in the canvas now, at its own 460px
-          // scale, rather than here across the whole viewport every frame.
-          filter: "saturate(1.4)",
-          transition: "opacity 0.55s var(--ease-soft)",
-        }}
-      />
-      <canvas ref={bgRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
+    <MotionConfig reducedMotion={reduce} transition={motionPref === "calm" ? { duration: 0.25 } : undefined}>
+      <LayoutGroup>
+        <div style={{ position: "fixed", inset: 0, background: "var(--bg)", overflow: "hidden" }}>
+          <canvas ref={canvas} aria-hidden style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
+          {/* a soft vignette of the page colour over the stage, so text never sits on a bright patch */}
+          <motion.div
+            aria-hidden
+            animate={{ opacity: open ? 0 : view === "studio" ? 0 : 1 }}
+            transition={{ duration: 0.6, ease: ease.out }}
+            style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(120% 90% at 30% 40%, rgb(var(--scrim) / 0.15), rgb(var(--scrim) / 0.6))" }}
+          />
 
-      <div className="bootIn" style={{ position: "relative", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 18px" }}>
-        <div style={{ fontWeight: 700, fontSize: 17, letterSpacing: "0.22em" }}>FLUX<span style={{ color: CYAN }}> PRO</span></div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {recState === "rec" && <span style={{ fontFamily: MONO, fontSize: 10.5, color: "#FF4949" }}>● {fmt(recTime)}</span>}
-          {sleepLeft && <span style={{ fontFamily: MONO, fontSize: 10.5, color: MAG }}>☾ {sleepLeft}</span>}
-          <button onClick={() => set({ visOpen: true })} className="sheen" style={{ padding: "7px 13px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer", background: `linear-gradient(120deg, ${CYAN}, ${MAG})`, color: BG, border: "none" }}>◉ VISUALS</button>
-        </div>
-      </div>
-
-      {/* iOS greys out .mp3 files under a bare accept="audio/*" — its Files
-          picker matches on UTI, and audio/* does not cover everything (files
-          from Drive/Dropbox especially). Listing concrete types AND extensions
-          is what makes them selectable. */}
-      <input
-        ref={fileInputRef} type="file" multiple style={{ display: "none" }}
-        accept={"audio/*,audio/mpeg,audio/mp3,audio/mp4,audio/x-m4a,audio/aac,audio/wav,audio/x-wav,audio/wave,audio/flac,audio/x-flac,audio/ogg,audio/opus,application/ogg,.mp3,.m4a,.m4b,.aac,.wav,.wave,.flac,.ogg,.oga,.opus,.aif,.aiff,.caf,.wma,.mp4,.alac"}
-        onChange={(e) => {
-          if (e.target.files) addFiles(e.target.files);
-          e.target.value = "";
-        }}
-      />
-      {/* last resort: no filter at all, so nothing can be greyed out. Files
-          are still validated after selection. */}
-      <input
-        ref={anyInputRef} type="file" multiple style={{ display: "none" }}
-        onChange={(e) => {
-          if (e.target.files) addFiles(e.target.files);
-          e.target.value = "";
-        }}
-      />
-
-      <div className="bootIn d1 tabWrap" style={{ position: "relative", flex: 1, overflowY: "auto", padding: "2px 18px 14px" }}>
-        {/* The tab we just left stays mounted underneath until its exit
-            animation finishes, so a switch is one continuous move instead of
-            the old panel disappearing on the frame the new one appears. */}
-        {leaving && (
-          <div key={`out-${leaving.tab}`} aria-hidden className={`tabLeaving ${leaving.dir === 1 ? "tabOut-r" : "tabOut-l"}`}>
-            {renderTab(leaving.tab)}
-          </div>
-        )}
-        {/* keyed by tab so the entrance animation replays on every switch */}
-        <div key={tab} className={dir === 1 ? "tabIn-r" : "tabIn-l"}>
-          {renderTab(tab)}
-        </div>
-      </div>
-
-      {/* bottom tabs */}
-      <div ref={tabBarRef} className="bootIn d2" style={{ position: "relative", display: "flex", borderTop: BORDER, background: "rgba(10,11,16,0.85)", backdropFilter: "blur(16px)" }}>
-        <div className="tabInk" style={{ transform: `translateX(${ink.x}px)`, width: ink.w }} />
-        {([
-          ["player", <PlayIcon key="i" size={15} color="currentColor" />, "PLAYER"],
-          ["visuals", "◉", "VISUALS"],
-          ["dj", "🎧", "DJ"],
-          ["fx", "🎛", "FX"],
-          ["library", "≡", "LIBRARY"],
-          ["yt", "▶", "YT"],
-          ["me", "👤", "ME"],
-        ] as [TabId, React.ReactNode, string][]).map(([id, icon, label]) => (
-          <button
-            key={id}
-            data-tab={id}
-            data-on={(id === "visuals" ? visOpen : tab === id) ? "1" : "0"}
-            className="tabBtn"
-            onClick={() => (id === "visuals" ? set({ visOpen: true }) : set({ tab: id }))}
+          <motion.div
+            animate={open ? { opacity: 0, scale: 0.96 } : { opacity: 1, scale: 1 }}
+            transition={{ duration: open ? 0.5 : 0.6, ease: ease.out }}
             style={{
-              flex: 1, padding: "11px 0 13px", background: "transparent", border: "none", cursor: "pointer",
-              color: (id === "visuals" ? visOpen : tab === id) ? CYAN : "rgba(255,255,255,0.45)",
-              borderTop: "2px solid transparent",
+              position: "absolute", inset: 0, display: "grid",
+              gridTemplateColumns: wide ? "var(--rail) 1fr" : "1fr",
+              gridTemplateRows: wide ? "1fr" : "auto 1fr auto auto",
+              pointerEvents: open ? "none" : "auto",
             }}
+            aria-hidden={open}
           >
-            <div className="tabIcon" style={{ fontSize: 15 }}>{icon}</div>
-            <div style={{ fontSize: 9, letterSpacing: "0.18em", fontWeight: 700, marginTop: 2 }}>{label}</div>
-          </button>
-        ))}
-      </div>
+            {wide ? (
+              ready ? (
+                <motion.div initial={{ x: -40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.7, ease: ease.out }}>
+                  <Rail />
+                </motion.div>
+              ) : <div />
+            ) : (
+              <header style={{ display: "flex", alignItems: "center", gap: 10, padding: "calc(10px + env(safe-area-inset-top)) 16px 6px", position: "relative", zIndex: 4 }}>
+                {ready && <motion.div layoutId="flux-mark"><FluxMark size={28} /></motion.div>}
+                <span className="display" style={{ fontSize: 22 }}>Flux</span>
+                <div style={{ flex: 1 }} />
+                <StageButton size={38} inline />
+                <button className="icon-btn" aria-label="Settings" data-on={view === "settings"} onClick={() => useStore.setState({ view: "settings" })}><I.settings size={22} /></button>
+              </header>
+            )}
 
-      {visOpen && <VisualizerOverlay />}
-      {shortcutsOpen && <ShortcutsPanel />}
-      {/* AI surfaces stay entirely absent until a key is connected */}
-      {aiReady && !visOpen && <CopilotFab />}
-      {aiReady && <CopilotPanel />}
-      <AiBusyChip />
-    </div>
+            <main style={{ position: "relative", minHeight: 0, minWidth: 0, display: "grid", gridTemplateRows: wide ? "1fr auto" : "1fr", padding: wide ? "0 28px 0 8px" : 0 }}>
+              <div style={{ position: "relative", minHeight: 0, overflow: "hidden" }}>
+                <AnimatePresence mode="popLayout" initial={false} custom={dir}>
+                  {ready && (
+                    <motion.section
+                      key={view}
+                      custom={dir}
+                      className={scrolls ? "scroll" : undefined}
+                      variants={{
+                        enter: (d: { x: number; z: number }) => ({
+                          opacity: 0,
+                          x: d.x * 56,
+                          scale: d.z < 0 ? 0.94 : d.z > 0 ? 1.03 : 1,
+                        }),
+                        center: { opacity: 1, x: 0, scale: 1 },
+                        exit: (d: { x: number; z: number }) => ({
+                          opacity: 0,
+                          x: d.x * -40,
+                          scale: d.z > 0 ? 0.95 : d.z < 0 ? 1.04 : 1,
+                          transition: { duration: 0.26, ease: ease.in },
+                        }),
+                      }}
+                      initial="enter"
+                      animate="center"
+                      exit="exit"
+                      transition={{ duration: 0.6, ease: ease.out }}
+                      style={{
+                        position: "absolute", inset: 0,
+                        padding: wide ? (view === "listen" ? "28px 20px 24px" : view === "studio" ? "24px 0 24px" : "40px 20px 40px") : "8px 16px 24px",
+                        overflowY: scrolls ? "auto" : "hidden",
+                      }}
+                    >
+                      {content}
+                    </motion.section>
+                  )}
+                </AnimatePresence>
+              </div>
+              {wide && (
+                <AnimatePresence>
+                  {ready && view !== "listen" && <Dock key="dock" wide />}
+                </AnimatePresence>
+              )}
+            </main>
+            {!wide && (
+              <>
+                <AnimatePresence>{ready && view !== "listen" && <Dock key="dock" wide={false} />}</AnimatePresence>
+                <TabBar />
+              </>
+            )}
+          </motion.div>
+
+          <AnimatePresence>{open && <StageView key="stage" />}</AnimatePresence>
+          <YouTubeHost wide={wide} />
+          <Toasts />
+          <DropOverlay />
+          <AnimatePresence>{shortcutsOpen && <ShortcutsPanel key="sc" />}</AnimatePresence>
+          {aiReady && !open && <CopilotFab />}
+          {aiReady && <CopilotPanel />}
+          <AiBusyChip />
+          <Intro onDone={onIntroDone} />
+        </div>
+      </LayoutGroup>
+    </MotionConfig>
   );
 }

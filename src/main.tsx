@@ -4,13 +4,12 @@ import App from "./App";
 import { refreshReady } from "./ai/client";
 import { engine } from "./audio/engine";
 import { wireAudio } from "./audio/wire";
-import { startRenderLoop } from "./visualizer/engine";
-import { applyAccentTheme } from "./theme";
+import { wireRuntime } from "./flux/runtime";
 import { useStore } from "./store/useStore";
 import "./styles.css";
 
 wireAudio();
-startRenderLoop();
+wireRuntime();
 // unlock AI surfaces if this browser already holds a key (BYOK, local only)
 refreshReady();
 import("./miniPlayer").then((m) => m.wireMiniPlayer());
@@ -19,20 +18,12 @@ import("./spotify").then(async (m) => {
   await m.completeSpotifyAuth();
   useStore.setState({ spotifyReady: await m.spotifyConnected() });
 });
-applyAccentTheme(useStore.getState().visCfg);
-useStore.subscribe((s) => s.visCfg, applyAccentTheme);
 // debug/test handle
 (window as unknown as { __fluxStore: typeof useStore }).__fluxStore = useStore;
 (window as unknown as { __fluxEngine: typeof engine }).__fluxEngine = engine;
-// per-frame visual state + transport, so beat/impact sync can be measured
-// rather than eyeballed (see scripts/impact-check.mjs)
-import("./visualizer/live").then((m) => {
-  (window as unknown as { __fluxLive: unknown }).__fluxLive = m.live;
-});
-// look encode/decode, so the share-code round trip can be asserted end to end
-import("./visualPresets").then((m) => {
-  (window as unknown as { __fluxLook: unknown }).__fluxLook = m;
-});
+// per-frame signals, clock and stage state are exposed as __fluxSig,
+// __fluxClock and __fluxStage (see flux/signals.ts, flux/clock.ts,
+// stage/engine.ts) so sync can be measured rather than eyeballed
 // melody transcription + MIDI writer, for scripts/revoice-check.mjs
 import("./audio/revoice").then((m) => {
   (window as unknown as { __fluxRevoice: unknown }).__fluxRevoice = m;
@@ -42,6 +33,9 @@ import("./audio/instruments").then((m) => {
 });
 import("./audio/arrange").then((m) => {
   (window as unknown as { __fluxArrange: unknown }).__fluxArrange = m;
+});
+import("./lyrics").then((m) => {
+  (window as unknown as { __fluxLyrics: unknown }).__fluxLyrics = m;
 });
 import("./audio/transport").then((m) => {
   (window as unknown as { __fluxPlayAt: unknown }).__fluxPlayAt = m.playAt;

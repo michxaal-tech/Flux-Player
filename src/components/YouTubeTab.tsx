@@ -6,7 +6,7 @@ import { mix } from "../theme";
 import { fmt } from "../utils";
 import { playAt } from "../audio/transport";
 import {
-  ensurePlayer, loadYtKey, openOnYouTube, saveYtKey, searchYouTube, ytTrack, type YtHit,
+  loadYtKey, openOnYouTube, saveYtKey, searchYouTube, ytTrack, type YtHit,
 } from "../youtube";
 
 const input: React.CSSProperties = {
@@ -39,7 +39,6 @@ export function YouTubeTab() {
   const [hits, setHits] = useState<YtHit[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const hostRef = useRef<HTMLDivElement | null>(null);
   const abort = useRef<AbortController | null>(null);
 
   const target = viewMode.type === "pl" ? viewMode.id : playlists[0]?.id;
@@ -52,10 +51,6 @@ export function YouTubeTab() {
     });
   }, []);
 
-  // the player is created once, lazily, and lives for the session
-  useEffect(() => {
-    if (hostRef.current) void ensurePlayer(hostRef.current).catch(() => {});
-  }, []);
 
   const run = async () => {
     if (!q.trim()) return;
@@ -91,21 +86,6 @@ export function YouTubeTab() {
 
   return (
     <div>
-      {/* The player. Kept mounted and merely hidden when nothing YouTube is
-          playing — unmounting it would destroy the iframe and, on mobile, the
-          permission to start audio without a fresh tap. */}
-      <div style={{ marginBottom: 10 }}>
-        <div
-          style={{
-            position: "relative", width: "100%", aspectRatio: "16 / 9",
-            borderRadius: 12, overflow: "hidden", border: BORDER,
-            background: "rgba(255,255,255,0.03)",
-          }}
-        >
-          <div ref={hostRef} style={{ position: "absolute", inset: 0 }} />
-        </div>
-      </div>
-
       <Module
         title="▶ YOUTUBE"
         extra={

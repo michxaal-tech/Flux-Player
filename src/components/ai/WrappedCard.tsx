@@ -1,10 +1,10 @@
 // FLUX WRAPPED rendered to a canvas so it can be saved/shared as an image.
 import { useEffect, useRef, useState } from "react";
 import { BORDER, MONO, SANS } from "../../constants";
-import { stopsOf } from "../../palette";
+import { resolvePalette } from "../../stage/engine";
+import { hexToRgb, rgbToHsl } from "../../flux/art";
 import type { Wrapped } from "../../ai/features";
 import { useStore } from "../../store/useStore";
-import { PALETTES } from "../../constants";
 import { mix } from "../../theme";
 
 const W = 720, H = 1100;
@@ -12,7 +12,7 @@ const W = 720, H = 1100;
 export function WrappedCard({ data, onClose }: { data: Wrapped; onClose: () => void }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [url, setUrl] = useState<string | null>(null);
-  const visCfg = useStore((s) => s.visCfg);
+  const look = useStore((s) => s.look);
 
   useEffect(() => {
     const cv = ref.current;
@@ -20,12 +20,10 @@ export function WrappedCard({ data, onClose }: { data: Wrapped; onClose: () => v
     cv.width = W;
     cv.height = H;
     const c = cv.getContext("2d")!;
-    const pal = PALETTES.find((p) => p.id === visCfg.palette) ?? PALETTES[0];
-    // a still image takes the two ends of the ramp; there is nothing to cycle
-    const stops = stopsOf(pal, visCfg.h1, visCfg.h2);
-    const h1 = stops[0];
-    const h2 = stops[stops.length - 1];
-    const s = pal.s;
+    // the card takes its two hues from the current look's palette
+    const pal = resolvePalette(look);
+    const [h1, s] = rgbToHsl(...hexToRgb(pal[3]));
+    const [h2] = rgbToHsl(...hexToRgb(pal[2]));
     const c1 = (a = 1, l = 62) => `hsla(${h1}, ${s}%, ${l}%, ${a})`;
     const c2 = (a = 1, l = 62) => `hsla(${h2}, ${s}%, ${l}%, ${a})`;
 
@@ -107,7 +105,7 @@ export function WrappedCard({ data, onClose }: { data: Wrapped; onClose: () => v
     cv.toBlob((b) => b && setUrl(URL.createObjectURL(b)), "image/png");
     return () => { if (url) URL.revokeObjectURL(url); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, visCfg.palette, visCfg.h1, visCfg.h2]);
+  }, [data, look]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

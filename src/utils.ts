@@ -1,4 +1,7 @@
-export const cleanName = (n: string) => n.replace(/\.[^/.]+$/, "").replace(/[_-]+/g, " ").trim();
+/** File name → display name. Underscores become spaces; a spaced " - " is
+ * kept, because "Artist - Title" is where most local files keep the artist. */
+export const cleanName = (n: string) =>
+  n.replace(/\.[^/.]+$/, "").replace(/_+/g, " ").replace(/(\S)-(\S)/g, "$1-$2").replace(/\s+/g, " ").trim();
 
 export const fmt = (t: number) => {
   if (!isFinite(t)) return "0:00";

@@ -41,6 +41,12 @@ export interface AnalysisResult {
   sections: number[];
   /** present only on a deep pass — see analyseDeep */
   deep?: DeepExtras;
+  /** 0..1, how far the beat grid can be trusted — the deep pass's own figure
+   * when it ran, otherwise grid support × steadiness from the fast pass. Low
+   * means "this music has no steady pulse", and the stage stops snapping to it */
+  beatConf?: number;
+  /** bar lines, seconds (every fourth beat from the strongest low-end phase) */
+  downbeats?: number[];
 }
 
 /** What the deep pass knows that the fast one does not. */
@@ -264,6 +270,8 @@ function analyse(mono: Float32Array, rate: number, post: (p: number) => void, de
 
   const beats: number[] = [];
   let deepExtras: DeepExtras | undefined;
+  let fastConf = 0;
+  let fastDownbeats: number[] = [];
 
   if (deep) {
     // ── the deep beat stage ──
@@ -406,13 +414,29 @@ function analyse(mono: Float32Array, rate: number, post: (p: number) => void, de
     };
   } else {
     const snap = Math.max(1, Math.round(period * 0.12));
+    const beatFrames: number[] = [];
     for (let x = phase; x < frames; x += period) {
       const centre = Math.round(x);
-      let bi = centre, bv = -1;
+      // with nothing to snap to, stay on the comb rather than drifting to
+      // the window's left edge (which made silence look perfectly "steady")
+      let bi = Math.min(frames - 1, centre), bv = onset[bi] ?? 0;
       for (let k = Math.max(0, centre - snap); k <= Math.min(frames - 1, centre + snap); k++) {
         if (onset[k] > bv) { bv = onset[k]; bi = k; }
       }
+      beatFrames.push(bi);
       beats.push(+tAt(bi).toFixed(3));
+    }
+    // The fast grid is a fixed-period comb, so it always produces beats — even
+    // over a rubato piano piece or an ambient wash with no pulse at all. How
+    // much louder the onsets are on the grid than off it is what says whether
+    // those beats mean anything, and the spacing after snapping says whether
+    // the comb was riding real hits or being dragged between noise.
+    if (beatFrames.length >= 8) {
+      const support = Math.min(1, gridStrength(onset, beatFrames) / 3);
+      const steady = pulseSteadiness(beats);
+      fastConf = +Math.max(0, Math.min(1, support * 0.65 + steady * 0.35)).toFixed(3);
+      const barOff = downbeatOffset(bass, beatFrames, 4);
+      fastDownbeats = beats.filter((_, i) => i % 4 === barOff);
     }
   }
 
@@ -421,7 +445,12 @@ function analyse(mono: Float32Array, rate: number, post: (p: number) => void, de
   // passages flash at their own pace instead of the tempo's. ──
   const hits: number[] = [];
   const minGap = Math.max(1, Math.round(fps * 0.075)); // 75ms refractory
-  const thresh = oMed + oDev * 1.6;
+  // Relative to the median alone, a near-silent passage turns its own ripple
+  // into a stream of "hits"; a floor tied to the track's strong onsets keeps
+  // quiet stretches quiet.
+  const sortedOn = Float32Array.from(onset).sort();
+  const p95 = sortedOn[Math.floor(sortedOn.length * 0.95)] ?? 0;
+  const thresh = Math.max(oMed + oDev * 1.6, p95 * 0.18);
   let lastHit = -1e9;
   for (let i = 1; i < frames - 1; i++) {
     if (onset[i] < thresh) continue;
@@ -507,6 +536,8 @@ function analyse(mono: Float32Array, rate: number, post: (p: number) => void, de
     fps, bpm: deepExtras && deepExtras.tempoCurve.length ? Math.round(medianOf(deepExtras.tempoCurve)) : bpm,
     bass: r3(bass), mid: r3(mid), treb: r3(treb), rms: r3(rms),
     beats, hits, drops, sections,
+    beatConf: deepExtras ? deepExtras.confidence : fastConf,
+    downbeats: deepExtras ? deepExtras.downbeats : fastDownbeats,
     ...(deepExtras ? { deep: deepExtras } : {}),
   };
 }

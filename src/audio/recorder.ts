@@ -22,7 +22,7 @@ function watchActions(): void {
     useStore.subscribe((s) => s.fx.reverb, (v) => actionLog.push(`${at()}: reverb ${Math.round(v * 100)}%`)),
     useStore.subscribe((s) => s.fx.crush, (v) => actionLog.push(`${at()}: crush ${Math.round(v * 100)}%`)),
     useStore.subscribe((s) => s.fx.vocalCut, (v) => actionLog.push(`${at()}: vocal cut ${v ? "on" : "off"}`)),
-    useStore.subscribe((s) => s.visTheme, (v) => actionLog.push(`${at()}: visual ${v}`)),
+    useStore.subscribe((s) => s.look.style.mode, (v) => actionLog.push(`${at()}: visual ${v}`)),
     useStore.subscribe((s) => s.current, () => {
       const tr = getCurrentTrack(useStore.getState());
       if (tr) actionLog.push(`${at()}: track "${tr.name}"`);

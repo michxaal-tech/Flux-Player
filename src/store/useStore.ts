@@ -2,10 +2,16 @@ import { create } from "zustand";
 import { persist, subscribeWithSelector } from "zustand/middleware";
 import { lazyJsonStorage } from "./lazyStorage";
 import type {
-  AmbState, FxState, Playlist, Preset, RecState, RepeatMode, SortBy, Stats, TabId,
-  Take, Track, ViewMode, VisCfg,
+  AmbState, FxState, Playlist, Preset, RecState, RepeatMode, SortBy, Stats,
+  Take, Track, ViewId, ViewMode,
 } from "../types";
-import { DEFAULT_FX, DEFAULT_VIS_CFG, P_STYLES, PALETTES, VIS_THEMES } from "../constants";
+import { DEFAULT_FX } from "../constants";
+import {
+  BUILTIN_PRESETS, DEFAULT_LOOK, DEFAULT_LYRICS, DEFAULT_UI, PALETTES as LOOK_PALETTES,
+  modeForOldTheme, paletteForOldHue, sanitizeLook,
+  type Look, type LookPreset, type LyricPrefs, type Quality, type UiPrefs,
+} from "../flux/look";
+import { MODE_IDS } from "../stage/modeIds";
 import { uid } from "../utils";
 import { DEFAULT_PROVIDER } from "../ai/providers";
 
@@ -41,14 +47,22 @@ export interface StoreState {
   amb: AmbState;
   activePreset: string;
   userPresets: Preset[];
-  // vis
-  visOpen: boolean;
-  visTheme: string;
-  visCfg: VisCfg;
-  visPanel: boolean;
-  /** ambient theme rendered (blurred) behind the player page */
-  playerTheme: string;
-  playerBgOn: boolean;
+  // stage + look
+  /** the immersive full-screen stage is open */
+  stage: boolean;
+  look: Look;
+  /** the user's own saved looks (built-ins live in flux/look.ts) */
+  lookPresets: LookPreset[];
+  /** which preset the current look came from, cleared when it's edited */
+  lookFrom: string;
+  lyricPrefs: LyricPrefs;
+  ui: UiPrefs;
+  quality: Quality;
+  /** extra A/V offset in ms on top of measured output latency — for Bluetooth
+   * and TV pass-through, which delay sound but not the screen */
+  syncMs: number;
+  /** first-run intro has played */
+  introSeen: boolean;
   // recorder / exports
   recState: RecState;
   recTime: number;
@@ -66,15 +80,10 @@ export interface StoreState {
   stemProgress: string;
   // lyrics
   lyricsOn: boolean;
-  lyricStyle: string;
-  /** per-letter lyric effect, independent of the entry/exit style */
-  /** legacy single per-letter effect; superseded by `lyricFxs` and kept so a
-   * saved look from before stacking still loads */
-  lyricFx: string;
-  /** per-letter effects applied together, at most one per group (see lyricFx.ts) */
-  lyricFxs: string[];
-  /** re-hue fixed-colour letter effects onto the active palette */
-  lyricFxMatch: boolean;
+  /** a lyric lookup for the current track is in flight */
+  lyricBusy: boolean;
+  /** outcome of the last lookup, per track: drives the searching / not found / error states */
+  lyricState: { id: string; state: "searching" | "missing" | "error" | "" };
   /** manual-search candidates awaiting a choice (see lyrics.ts) */
   lyricPicks: import("../lyrics").LyricPick[];
   lyricStatus: string;
@@ -135,7 +144,11 @@ export interface StoreState {
   /** spoken transitions between tracks */
   radioMode: "off" | "host" | "hype";
   // ui
-  tab: TabId;
+  view: ViewId;
+  /** the right-hand pane on Listen: lyrics or the queue */
+  listenPane: "lyrics" | "queue";
+  /** a playlist the Library should open on arrival (set by Search) */
+  libOpen: string | null;
   shortcutsOpen: boolean;
   /** bumped whenever the user edits a connector, so pickers reload the list */
   connectorRev: number;
@@ -143,21 +156,19 @@ export interface StoreState {
   // actions
   set: (partial: Partial<StoreState>) => void;
   setFxKey: <K extends keyof FxState>(k: K, v: FxState[K]) => void;
-  setVisKey: <K extends keyof VisCfg>(k: K, v: VisCfg[K]) => void;
-  /** starred visualizer themes, pinned to the top of the theme picker */
-  favThemes: string[];
-  toggleFavTheme: (name: string) => void;
-  /** saved visual looks (theme + every visualizer setting) */
-  visPresets: import("../visualPresets").VisualPreset[];
-  /** Takes a fully-built preset rather than capturing one itself: visualPresets
-   * imports the store, so importing it back here would be a cycle. */
-  saveVisPreset: (preset: import("../visualPresets").VisualPreset) => void;
-  deleteVisPreset: (i: number) => void;
+  /** patch one group of the look; marks it as edited */
+  setLook: <K extends keyof Look>(k: K, v: Partial<Look[K]>) => void;
+  applyLookPreset: (p: LookPreset) => void;
+  saveLookPreset: (name: string) => string;
+  renameLookPreset: (id: string, name: string) => void;
+  duplicateLookPreset: (p: LookPreset) => string;
+  deleteLookPreset: (id: string) => void;
+  setLyricPrefs: (p: Partial<LyricPrefs>) => void;
+  setUi: (p: Partial<UiPrefs>) => void;
   applyPreset: (p: Preset) => void;
   saveUserPreset: () => void;
   deleteUserPreset: (i: number) => void;
   chaos: () => void;
-  visChaos: () => void;
   updateTrack: (trackId: string, patch: Partial<Track>) => void;
   toggleFav: (trackId: string) => void;
   toggleTag: (trackId: string, tag: string) => void;
@@ -174,6 +185,48 @@ export interface StoreState {
   addTake: (t: Take) => void;
   removeTake: (id: string) => void;
 }
+
+/**
+ * v2 → v3: the 85-theme visualizer became seven stage modes.
+ *
+ * Every old theme maps to the mode closest to it in composition, its palette to
+ * the nearest new palette, and the sync offset carries over unchanged since it
+ * describes the user's speakers rather than the visuals. Saved looks become
+ * personal presets under their own names, so nothing the user built vanishes.
+ */
+function migrateToLooks(s: Record<string, unknown>): void {
+  type OldCfg = { palette?: string; h1?: number; intensity?: number; speed?: number; syncMs?: number; trail?: number };
+  const pals: Record<string, [number, number]> = {
+    NEON: [187, 100], SUNSET: [18, 95], EMBER: [8, 95], MATRIX: [128, 90], ICE: [198, 85], GOLD: [44, 90],
+    VAPOR: [265, 90], LAVA: [0, 100], OCEAN: [192, 90], FOREST: [92, 80], ROSE: [340, 90], GHOST: [0, 4],
+    MIDNIGHT: [230, 80], SAKURA: [335, 70], MINT: [158, 65], NOIR: [222, 22], STEEL: [206, 38],
+  };
+  const toLook = (theme: string | undefined, cfg: OldCfg | undefined): Look => {
+    const pal = cfg?.palette ? pals[cfg.palette] : undefined;
+    const source = cfg?.palette === "CUSTOM" ? paletteForOldHue(cfg.h1) : pal ? paletteForOldHue(pal[0], pal[1]) : "artwork";
+    return sanitizeLook({
+      ...DEFAULT_LOOK,
+      style: { ...DEFAULT_LOOK.style, mode: modeForOldTheme(theme) },
+      color: { ...DEFAULT_LOOK.color, source: LOOK_PALETTES.some((x) => x.id === source) ? source : "artwork" },
+      motion: { ...DEFAULT_LOOK.motion, speed: cfg?.speed ?? 1 },
+      intensity: { ...DEFAULT_LOOK.intensity, react: Math.min(1.5, cfg?.intensity ?? 1) },
+    }, MODE_IDS);
+  };
+  const cfg = s.visCfg as OldCfg | undefined;
+  if (s.visTheme || cfg) {
+    s.look = toLook(s.visTheme as string | undefined, cfg);
+    s.lookFrom = "";
+  }
+  if (typeof cfg?.syncMs === "number") s.syncMs = cfg.syncMs;
+  const old = s.visPresets as { name: string; look: { theme: string; cfg: OldCfg } }[] | undefined;
+  if (Array.isArray(old)) {
+    s.lookPresets = old.map((p, i) => ({ id: `m-${i}-${Date.now().toString(36)}`, name: p.name, note: "Imported", look: toLook(p.look?.theme, p.look?.cfg) }));
+  }
+  if (s.tab) s.view = s.tab === "library" ? "library" : s.tab === "dj" || s.tab === "fx" ? "sound" : s.tab === "me" ? "settings" : "listen";
+  for (const k of ["visTheme", "visCfg", "visPresets", "favThemes", "playerTheme", "playerBgOn", "lyricStyle", "lyricFx", "lyricFxs", "lyricFxMatch", "tab"]) delete s[k];
+}
+
+export { BUILTIN_PRESETS };
 
 /** Adjusts the playing index when a track list within the playing playlist is edited. */
 function shiftCurrent(state: StoreState, plId: string, fn: (cur: number) => number): Partial<StoreState> {
@@ -206,12 +259,15 @@ export const useStore = create<StoreState>()(
         amb: { rain: 0, fire: 0, wind: 0 },
         activePreset: "CLEAN",
         userPresets: [],
-        visOpen: false,
-        visTheme: "RING",
-        visCfg: { ...DEFAULT_VIS_CFG },
-        visPanel: false,
-        playerTheme: "AURORA",
-        playerBgOn: true,
+        stage: false,
+        look: DEFAULT_LOOK,
+        lookPresets: [],
+        lookFrom: "p-veil",
+        lyricPrefs: DEFAULT_LYRICS,
+        ui: DEFAULT_UI,
+        quality: "auto",
+        syncMs: 0,
+        introSeen: false,
         recState: "idle",
         recTime: 0,
         vidState: "idle",
@@ -223,10 +279,8 @@ export const useStore = create<StoreState>()(
         instMode: false,
         stemProgress: "",
         lyricsOn: true,
-        lyricStyle: "DRIFT",
-        lyricFx: "NONE",
-        lyricFxs: [],
-        lyricFxMatch: true,
+        lyricBusy: false,
+        lyricState: { id: "", state: "" },
         lyricPicks: [],
         lyricStatus: "",
         lyricAuto: true,
@@ -257,26 +311,42 @@ export const useStore = create<StoreState>()(
         ytReady: false,
         ytStatus: "",
         fullOnly: true,
-        tab: "player",
+        view: "listen",
+        listenPane: "lyrics",
+        libOpen: null,
         shortcutsOpen: false,
         connectorRev: 0,
 
         set: (partial) => set(partial),
 
         setFxKey: (k, v) => set((s) => ({ fx: { ...s.fx, [k]: v }, activePreset: "" })),
-        setVisKey: (k, v) => set((s) => ({ visCfg: { ...s.visCfg, [k]: v } })),
-
-        favThemes: [],
-        visPresets: [],
-        saveVisPreset: (preset) => set((s) => ({ visPresets: [...s.visPresets, preset] })),
-        deleteVisPreset: (i) => set((s) => ({ visPresets: s.visPresets.filter((_, j) => j !== i) })),
-        toggleFavTheme: (name) =>
+        setLook: (k, v) => set((s) => ({ look: { ...s.look, [k]: { ...s.look[k], ...v } }, lookFrom: "" })),
+        applyLookPreset: (p) => set({ look: sanitizeLook(p.look, MODE_IDS), lookFrom: p.id }),
+        saveLookPreset: (name) => {
+          const id = `u-${uid()}`;
           set((s) => ({
-            favThemes: s.favThemes.includes(name)
-              ? s.favThemes.filter((n) => n !== name)
-              // newest first, so a theme you just starred is easy to find again
-              : [name, ...s.favThemes],
-          })),
+            lookPresets: [...s.lookPresets, { id, name: name.trim() || "Untitled look", look: s.look }],
+            lookFrom: id,
+          }));
+          return id;
+        },
+        renameLookPreset: (id, name) =>
+          set((s) => ({ lookPresets: s.lookPresets.map((p) => (p.id === id ? { ...p, name: name.trim() || p.name } : p)) })),
+        duplicateLookPreset: (p) => {
+          const id = `u-${uid()}`;
+          set((s) => {
+            const at = s.lookPresets.findIndex((x) => x.id === p.id);
+            const copy: LookPreset = { id, name: `${p.name} copy`, note: p.note, look: p.look };
+            const list = [...s.lookPresets];
+            list.splice(at >= 0 ? at + 1 : list.length, 0, copy);
+            return { lookPresets: list };
+          });
+          return id;
+        },
+        deleteLookPreset: (id) =>
+          set((s) => ({ lookPresets: s.lookPresets.filter((p) => p.id !== id), lookFrom: s.lookFrom === id ? "" : s.lookFrom })),
+        setLyricPrefs: (p) => set((s) => ({ lyricPrefs: { ...s.lyricPrefs, ...p } })),
+        setUi: (p) => set((s) => ({ ui: { ...s.ui, ...p } })),
 
         applyPreset: (p) => set({ fx: { ...DEFAULT_FX, ...p.fx }, activePreset: p.name }),
 
@@ -306,25 +376,6 @@ export const useStore = create<StoreState>()(
             },
             activePreset: "??",
           }),
-
-        visChaos: () => {
-          const pal = PALETTES[Math.floor(Math.random() * (PALETTES.length - 1))];
-          const th = VIS_THEMES.filter((x) => x !== "CLOCK");
-          set((s) => ({
-            visCfg: {
-              ...s.visCfg, palette: pal.id,
-              glow: 0.3 + Math.random() * 0.7, trail: Math.random() * 0.9, particles: Math.random(),
-              pStyle: P_STYLES[Math.floor(Math.random() * P_STYLES.length)],
-              speed: 0.5 + Math.random() * 1.2, intensity: 0.7 + Math.random() * 1.0,
-              // never randomize scene rotation/zoom — a spinning screen reads
-              // as broken, not as a fresh look
-              zoom: 0.95 + Math.random() * 0.15, spinV: 0,
-              bgWash: Math.random() * 0.6, thick: 0.6 + Math.random() * 1.4,
-              mirror: Math.random() < 0.35, shake: Math.random() < 0.5,
-            },
-            visTheme: th[Math.floor(Math.random() * th.length)],
-          }));
-        },
 
         updateTrack: (trackId, patch) =>
           set((s) => ({
@@ -443,7 +494,7 @@ export const useStore = create<StoreState>()(
       }),
       {
         name: "flux-store",
-        version: 2,
+        version: 3,
         // v2 turns ANALYZED on. It was opt-in and off by default, which meant
         // almost nobody had the exact drop timeline and everyone got the guessed
         // one instead — and that guessed path was the broken one. Existing
@@ -452,6 +503,7 @@ export const useStore = create<StoreState>()(
         migrate: (prev: unknown, from: number) => {
           const s = (prev ?? {}) as Record<string, unknown>;
           if (from < 2) s.analyzedMode = true;
+          if (from < 3) migrateToLooks(s);
           return s;
         },
         storage: lazyJsonStorage(1500),
@@ -468,21 +520,20 @@ export const useStore = create<StoreState>()(
           fx: s.fx,
           activePreset: s.activePreset,
           userPresets: s.userPresets,
-          visTheme: s.visTheme,
-          visCfg: s.visCfg,
-          playerTheme: s.playerTheme,
-          playerBgOn: s.playerBgOn,
+          look: s.look,
+          lookPresets: s.lookPresets,
+          lookFrom: s.lookFrom,
+          lyricPrefs: s.lyricPrefs,
+          ui: s.ui,
+          quality: s.quality,
+          syncMs: s.syncMs,
+          introSeen: s.introSeen,
+          listenPane: s.listenPane,
           takes: s.takes,
           stats: s.stats,
           instMode: s.instMode,
           lyricsOn: s.lyricsOn,
-          lyricStyle: s.lyricStyle,
-          lyricFx: s.lyricFx,
-          lyricFxs: s.lyricFxs,
-          lyricFxMatch: s.lyricFxMatch,
           fullOnly: s.fullOnly,
-          favThemes: s.favThemes,
-          visPresets: s.visPresets,
           lyricAuto: s.lyricAuto,
           trackBpm: s.trackBpm,
           radioMode: s.radioMode,
@@ -497,20 +548,18 @@ export const useStore = create<StoreState>()(
         }),
         merge: (persisted, current) => {
           const p = (persisted ?? {}) as Partial<StoreState>;
-          const legacyCfg = p.visCfg as (Partial<VisCfg> & { autoCycle?: boolean }) | undefined;
           return {
             ...current,
             ...p,
             fx: { ...DEFAULT_FX, ...(p.fx ?? {}) },
-            visCfg: {
-              ...DEFAULT_VIS_CFG,
-              ...(legacyCfg ?? {}),
-              // migrate the old boolean autoCycle to the three-way mode
-              autoMode: legacyCfg?.autoMode ?? (legacyCfg?.autoCycle ? "cycle" : DEFAULT_VIS_CFG.autoMode),
-            },
+            look: sanitizeLook(p.look, MODE_IDS),
+            lyricPrefs: { ...DEFAULT_LYRICS, ...(p.lyricPrefs ?? {}) },
+            ui: { ...DEFAULT_UI, ...(p.ui ?? {}) },
+            lookPresets: (p.lookPresets ?? []).map((x) => ({ ...x, look: sanitizeLook(x.look, MODE_IDS) })),
             // never resume in a transient state
             playing: false,
-            visOpen: false,
+            stage: false,
+            lyricBusy: false,
             recState: "idle",
             vidState: "idle",
             vidTime: 0,

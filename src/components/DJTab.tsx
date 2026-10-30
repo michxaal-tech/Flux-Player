@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { BORDER, CARD, CYAN, MAG, MONO } from "../constants";
 import { brake, launch, stutterDown, stutterUp, tapCue } from "../audio/transport";
 import { useStore } from "../store/useStore";
-import { canvasRefs } from "../visualizer/live";
+import { sig } from "../flux/signals";
 import { mix } from "../theme";
 import { fmt } from "../utils";
 import { bigBtn, Module, Slider } from "./ui";
@@ -15,14 +15,20 @@ export function DJTab() {
 
   const bpmRef = useRef<HTMLSpanElement>(null);
   const levelRef = useRef<HTMLDivElement>(null);
+  // tempo and level straight from the shared signals, written to the DOM on
+  // each frame rather than through React state
   useEffect(() => {
-    if (bpmRef.current) canvasRefs.bpm.add(bpmRef.current);
-    canvasRefs.level = levelRef.current;
-    const bpmEl = bpmRef.current;
-    return () => {
-      if (bpmEl) canvasRefs.bpm.delete(bpmEl);
-      if (canvasRefs.level === levelRef.current) canvasRefs.level = null;
+    let raf = 0;
+    const loop = () => {
+      raf = requestAnimationFrame(loop);
+      if (bpmRef.current) {
+        const txt = sig.bpm > 0 && sig.confidence > 0.3 ? String(Math.round(sig.bpm)) : "––";
+        if (bpmRef.current.textContent !== txt) bpmRef.current.textContent = txt;
+      }
+      if (levelRef.current) levelRef.current.style.width = `${Math.round(sig.level * 100)}%`;
     };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   return (

@@ -1,6 +1,6 @@
 // Generates the PWA icon PNGs (192, 512, maskable-512) with zero dependencies:
 // raw RGBA pixels → zlib deflate → hand-assembled PNG chunks.
-// Art: FLUX PRO vinyl disc, cyan→magenta gradient label on #08090D.
+// Art: the Flux mark — a ring crossed by an ember waveform, on warm ink.
 import { deflateSync } from "node:zlib";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -54,49 +54,48 @@ function encodePng(size, pixels) {
 }
 
 const lerp = (a, b, f) => a + (b - a) * f;
-const CYAN = [0x53, 0xe9, 0xff];
-const MAG = [0xff, 0x4e, 0xcd];
-const BG = [0x08, 0x09, 0x0d];
+const INK = [0x0f, 0x0d, 0x0b];
+const PAPER = [0xf4, 0xee, 0xe4];
+const EMBER = [0xff, 0x7a, 0x3d];
 
-function drawIcon(size, discScale) {
+// The Flux mark: a ring (a record seen edge-on) crossed by a waveform. Drawn
+// by distance to each shape, so the edges are anti-aliased without a renderer.
+function wave(u) {
+  // the mark's path, normalised to the ring's radius: two arches, rising out
+  return Math.sin(u * Math.PI * 1.55 + 0.35) * 0.42 * (1 - Math.abs(u) * 0.15);
+}
+
+function drawIcon(size, markScale) {
   const px = Buffer.alloc(size * size * 4);
   const c = size / 2;
-  const discR = size * discScale;
-  const labelR = discR * 0.42;
-  const holeR = discR * 0.11;
+  const R = size * markScale;
+  const ringW = R * 0.17;
+  const waveW = R * 0.2;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const dx = x - c, dy = y - c;
-      const r = Math.hypot(dx, dy);
-      const ang = Math.atan2(dy, dx);
-      let col;
-      if (r > discR) {
-        // background with faint radial glow around the disc
-        const glow = Math.max(0, 1 - (r - discR) / (size * 0.18)) * 0.25;
-        col = [lerp(BG[0], CYAN[0], glow * 0.4), lerp(BG[1], CYAN[1], glow * 0.4), lerp(BG[2], CYAN[2], glow * 0.4)];
-      } else if (r <= holeR) {
-        col = BG;
-      } else if (r <= labelR) {
-        // conic cyan↔magenta label
-        const f = (Math.sin(ang * 2) + 1) / 2;
-        col = [lerp(CYAN[0], MAG[0], f), lerp(CYAN[1], MAG[1], f), lerp(CYAN[2], MAG[2], f)];
-      } else {
-        // vinyl grooves
-        const groove = Math.floor((discR - r) / (size * 0.012)) % 2;
-        const base = groove ? 0x1c : 0x14;
-        // top-left sheen
-        const sheen = Math.max(0, 1 - Math.hypot(dx + discR * 0.35, dy + discR * 0.35) / (discR * 1.1)) * 22;
-        col = [base + sheen, base + 2 + sheen, base + 8 + sheen];
-      }
-      // anti-alias disc edge against bg
-      if (r > discR - 1 && r <= discR + 1) {
-        const f = (r - (discR - 1)) / 2;
-        col = [lerp(col[0], BG[0], f * 0.6), lerp(col[1], BG[1], f * 0.6), lerp(col[2], BG[2], f * 0.6)];
+      const dx = (x + 0.5 - c) / R, dy = (y + 0.5 - c) / R;
+      let col = [...INK];
+      // a faint ember glow behind the mark
+      const g = Math.max(0, 1 - Math.hypot(dx, dy) / 1.9) * 0.14;
+      col = col.map((v, k) => lerp(v, EMBER[k], g));
+      // ring
+      const dRing = Math.abs(Math.hypot(dx, dy) - 1) * R - ringW / 2;
+      const aRing = Math.max(0, Math.min(1, 0.5 - dRing));
+      col = col.map((v, k) => lerp(v, PAPER[k], aRing));
+      // wave: distance to the curve, sampled
+      if (Math.abs(dx) < 1.15) {
+        let best = 1e9;
+        for (let s = -1.15; s <= 1.15; s += 0.01) {
+          const d = Math.hypot(dx - s, dy + wave(s));
+          if (d < best) best = d;
+        }
+        const aWave = Math.max(0, Math.min(1, 0.5 - (best * R - waveW / 2)));
+        col = col.map((v, k) => lerp(v, EMBER[k], aWave));
       }
       const i = (y * size + x) * 4;
-      px[i] = Math.min(255, Math.round(col[0]));
-      px[i + 1] = Math.min(255, Math.round(col[1]));
-      px[i + 2] = Math.min(255, Math.round(col[2]));
+      px[i] = Math.round(col[0]);
+      px[i + 1] = Math.round(col[1]);
+      px[i + 2] = Math.round(col[2]);
       px[i + 3] = 255;
     }
   }
@@ -104,9 +103,9 @@ function drawIcon(size, discScale) {
 }
 
 for (const [file, size, scale] of [
-  ["icon-192.png", 192, 0.44],
-  ["icon-512.png", 512, 0.44],
-  ["icon-maskable-512.png", 512, 0.34], // art inside the 80% safe zone
+  ["icon-192.png", 192, 0.3],
+  ["icon-512.png", 512, 0.3],
+  ["icon-maskable-512.png", 512, 0.24], // art inside the 80% safe zone
 ]) {
   writeFileSync(join(outDir, file), encodePng(size, drawIcon(size, scale)));
   console.log(`wrote ${file}`);
