@@ -8,7 +8,7 @@
 //
 //   - the page loaded over flux:// at all
 //   - the preload ran, so the desktop pixel ceiling is actually raised
-//   - React mounted and the render loop is running
+//   - React mounted and the stage's render loop is running
 //
 // Usage: xvfb-run -a node launch-check.cjs
 const { app, BrowserWindow } = require("electron");
@@ -59,17 +59,18 @@ app.whenReady().then(async () => {
   const probe = await win.webContents.executeJavaScript(`(() => ({
     href: location.href,
     desktop: window.__fluxDesktop === true,
-    tabs: document.querySelectorAll("button.tabBtn").length,
+    navs: document.querySelectorAll("nav[aria-label=Main] button").length,
     canvases: document.querySelectorAll("canvas").length,
-    loop: !!window.__flux,
-    frames: window.__flux ? window.__flux.vt : -1,
+    // the stage reports the mode it is drawing once its loop has run
+    loop: !!(window.__fluxStage && window.__fluxStage.mode && !window.__fluxStage.error),
+    stageError: window.__fluxStage ? window.__fluxStage.error : "no stage",
   }))()`);
 
   check("loads over flux://", probe.href.startsWith("flux://app/"), probe.href);
   check("preload bridge reached the page", probe.desktop);
-  check("the app mounted", probe.tabs >= 3 && probe.canvases >= 2,
-    `${probe.tabs} tabs, ${probe.canvases} canvases`);
-  check("the render loop is running", probe.loop);
+  check("the app mounted", probe.navs >= 3 && probe.canvases >= 1,
+    `${probe.navs} nav buttons, ${probe.canvases} canvases`);
+  check("the render loop is running", probe.loop, probe.stageError || "");
 
   // Is the window actually painting? Counting the engine's own `vt` does not
   // answer that — it only advances while the fullscreen visualizer is open,
