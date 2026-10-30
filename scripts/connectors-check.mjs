@@ -6,6 +6,9 @@
 // search it, and confirm the request URLs FLUX builds are valid Subsonic with
 // salted-token auth. Then reloads to prove the connection persists.
 //
+// Connections live in Settings → Sources now, and the Discover picker in the
+// Search view under "Catalogues" (open from the start).
+//
 // Usage: npm run build && node scripts/connectors-check.mjs
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -53,6 +56,31 @@ await page.route(`${HOST}/**`, (route) => {
   return route.fulfill(ok({}));
 });
 
+// The intro plays on a first launch and would sit over everything. Mark it
+// seen — but only when nothing is stored yet, so a reload keeps the
+// connection this test has saved rather than resetting it.
+await page.addInitScript(() => {
+  if (!localStorage.getItem("flux-store")) localStorage.setItem("flux-store", JSON.stringify({ state: { introSeen: true }, version: 3 }));
+});
+// Views are store-driven; setting the store is the one way in that works on
+// every layout (Settings has no rail label when narrow).
+const go = async (view) => {
+  await page.waitForSelector("nav[aria-label=Main]");
+  await page.evaluate((v) => window.__fluxStore.setState({ view: v }), view);
+};
+// Views and panels slide in, and a click that lands mid-animation is refused
+// as "not stable" — so wait for the target, and force it if it won't settle.
+const tap = async (sel, timeout = 8000) => {
+  const el = page.locator(sel).first();
+  await el.waitFor({ timeout });
+  await el.click({ timeout: 3000 }).catch(() => el.click({ force: true }));
+};
+const openConnections = async () => {
+  await go("settings");
+  await tap("button[role=radio]:has-text('Sources')");
+  await page.waitForSelector("text=🔌 CONNECTIONS");
+};
+
 let failed = 0;
 const step = async (name, fn) => {
   try { await fn(); console.log(`✔ ${name}`); }
@@ -61,10 +89,9 @@ const step = async (name, fn) => {
 
 await page.goto(BASE, { waitUntil: "networkidle" });
 
-await step("open Connections in the Library tab", async () => {
-  await page.click("button:has(div:text-is('LIBRARY'))");
-  await page.waitForSelector("text=🔌 CONNECTIONS");
-  await page.click("button:has-text('+ ADD')");
+await step("open Connections in Settings → Sources", async () => {
+  await openConnections();
+  await tap("button:has-text('+ ADD')");
   await page.waitForSelector("button:has-text('SUBSONIC SERVER')");
 });
 
@@ -73,18 +100,18 @@ await step("add a Subsonic connection", async () => {
   await page.fill("input[placeholder='https://music.example.com']", HOST);
   await page.fill("input[placeholder='your login']", "alice");
   await page.fill("input[placeholder='••••••••']", "hunter2");
-  await page.click("button:has-text('SAVE')");
+  await tap("button:has-text('SAVE')");
   await page.waitForSelector("text=TestNav");
 });
 
 await step("TEST pings the server and reports Connected", async () => {
-  await page.click("button:text-is('TEST')");
+  await tap("button:text-is('TEST')");
   await page.waitForSelector("text=Connected.", { timeout: 4000 });
 });
 
 await step("connection reaches the Discover picker", async () => {
-  await page.click("button:has-text('BROWSE')");
-  await page.waitForSelector("button[data-src]:has-text('TESTNAV')", { timeout: 4000 });
+  await go("search");
+  await page.waitForSelector("button[data-src]:has-text('TESTNAV')", { timeout: 6000 });
 });
 
 await step("ping URL is valid Subsonic with salted-token auth", async () => {
@@ -99,7 +126,7 @@ await step("ping URL is valid Subsonic with salted-token auth", async () => {
 });
 
 await step("search the connector and get a mapped track", async () => {
-  await page.click("button[data-src]:has-text('TESTNAV')");
+  await tap("button[data-src]:has-text('TESTNAV')");
   await page.fill("input[data-discoverq]", "test");
   await page.press("input[data-discoverq]", "Enter");
   await page.waitForSelector("text=Test Song", { timeout: 5000 });
@@ -113,7 +140,7 @@ await step("each request re-salts (token differs run to run)", async () => {
 
 await step("connection survives a reload", async () => {
   await page.reload({ waitUntil: "networkidle" });
-  await page.click("button:has(div:text-is('LIBRARY'))");
+  await openConnections();
   await page.waitForSelector("text=TestNav", { timeout: 5000 });
 });
 

@@ -11,11 +11,13 @@ import type { Track } from "../types";
 import { ease } from "./motion";
 
 export function useArt(tr: Track | null | undefined): Art {
-  const [, bump] = useState(0);
+  const [rev, bump] = useState(0);
   useEffect(() => onArt(() => bump((n) => n + 1)), []);
+  // re-checked on every art change too: when the cache is cleared (a new AI
+  // cover), every visible row reloads its own art, not just the playing one
   useEffect(() => {
     if (tr && !hasArt(tr)) void loadArt(tr);
-  }, [tr?.id, tr?.fileId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tr?.id, tr?.fileId, rev]); // eslint-disable-line react-hooks/exhaustive-deps
   return artNow(tr);
 }
 

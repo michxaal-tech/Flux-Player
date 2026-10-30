@@ -3,12 +3,15 @@
 // half: that one checks the live service still behaves the way this one
 // pretends it does.
 //
+// The importer lives in the Search view now, behind the "Spotify link" segment;
+// the playlists it builds are in the Library view.
+//
 // Usage: npm run build && node scripts/spotify-e2e.mjs
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { chromium } from "playwright";
 
-const PORT = 4181;
+const PORT = 4186;
 const BASE = `http://localhost:${PORT}`;
 const FIXTURE = readFileSync("scripts/fixtures/spotify-embed-playlist.html", "utf8");
 // the importer only needs a body big enough to be real audio; nothing decodes
@@ -43,6 +46,26 @@ await page.route("**p.scdn.co/**", async (r) => {
 });
 await page.route("**r.jina.ai/**", (r) => r.fulfill({ contentType: "text/html", body: FIXTURE }));
 
+// The intro plays on a first launch and would sit over everything. Mark it
+// seen — but only when nothing is stored yet, so a reload keeps the library
+// this test has built rather than resetting it.
+await page.addInitScript(() => {
+  if (!localStorage.getItem("flux-store")) localStorage.setItem("flux-store", JSON.stringify({ state: { introSeen: true }, version: 3 }));
+});
+// Views are store-driven; setting the store is the one way in that works on
+// every layout (the rail hides its labels when narrow).
+const go = async (view) => {
+  await page.waitForSelector("nav[aria-label=Main]");
+  await page.evaluate((v) => window.__fluxStore.setState({ view: v }), view);
+};
+// Views and panels slide in, and a click that lands mid-animation is refused
+// as "not stable" — so wait for the target, and force it if it won't settle.
+const tap = async (sel, timeout = 8000) => {
+  const el = page.locator(sel).first();
+  await el.waitFor({ timeout });
+  await el.click({ timeout: 3000 }).catch(() => el.click({ force: true }));
+};
+
 let failed = 0;
 const step = async (name, fn) => {
   try { await fn(); console.log(`✔ ${name}`); }
@@ -52,14 +75,15 @@ const step = async (name, fn) => {
 await page.goto(BASE, { waitUntil: "networkidle" });
 
 await step("spotify panel says no setup is needed", async () => {
-  await page.click("button:has(div:text-is('LIBRARY'))");
+  await go("search");
+  await tap("button[role=radio]:has-text('Spotify link')");
   await page.waitForSelector("text=SPOTIFY IMPORT");
   await page.waitForSelector("text=NO SETUP NEEDED");
 });
 
 await step("reads a playlist link with no account", async () => {
   await page.fill("input[placeholder*='paste a song']", "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M");
-  await page.click("button:has-text('READ')");
+  await tap("button:has-text('READ')");
   await page.waitForSelector("text=Animal", { timeout: 15000 });
   for (const t of ["stupid song", "Earrings", "petal"]) await page.waitForSelector(`text=${t}`);
 });
@@ -74,7 +98,7 @@ await step("rows show where each track will come from", async () => {
 });
 
 await step("imports the audio and builds the playlist", async () => {
-  await page.click("button:has-text('IMPORT PLAYLIST')");
+  await tap("button:has-text('IMPORT PLAYLIST')");
   await page.waitForSelector("text=✓ Created", { timeout: 30000 });
   const status = await page.innerText("text=✓ Created");
   if (!/3 tracks/.test(status)) throw new Error(`expected 3 tracks imported, got: ${status}`);
@@ -82,7 +106,10 @@ await step("imports the audio and builds the playlist", async () => {
 });
 
 await step("the tracks are really in the library", async () => {
-  await page.click("button:has-text('TOP HITS')"); // the playlist it just made
+  // the playlist it just made, opened from the Library's playlist grid (whose
+  // cards title-case the name)
+  await go("library");
+  await tap("button:has-text('Top Hits')");
   await page.waitForSelector("text=Animal (preview)", { timeout: 5000 });
   if (clipHits !== 3) throw new Error(`expected 3 clip fetches, saw ${clipHits}`);
   if (appleHits < 1) throw new Error("the clip-less track should have fallen back to a catalogue search");
@@ -90,7 +117,8 @@ await step("the tracks are really in the library", async () => {
 
 await step("it survives a reload", async () => {
   await page.reload({ waitUntil: "networkidle" });
-  await page.click("button:has(div:text-is('LIBRARY'))");
+  await go("library");
+  await tap("button[role=radio]:has-text('Songs')");
   await page.waitForSelector("text=Animal (preview)", { timeout: 8000 });
 });
 

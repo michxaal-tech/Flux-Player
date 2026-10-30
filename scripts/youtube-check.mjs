@@ -11,6 +11,8 @@
 // check a test of network reachability. What *is* asserted is everything up to
 // that boundary, plus that the boundary is disclosed in the UI.
 //
+// The YouTube panel lives in the Search view now, behind the "YouTube" segment.
+//
 // Usage: npm run build && node scripts/youtube-check.mjs
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -72,6 +74,26 @@ page.on("console", (m) => {
   if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(`console: ${m.text()}`);
 });
 
+// The intro plays on a first launch and would sit over everything. Mark it
+// seen — but only when nothing is stored yet, so a reload keeps what the test
+// has built rather than resetting it.
+await page.addInitScript(() => {
+  if (!localStorage.getItem("flux-store")) localStorage.setItem("flux-store", JSON.stringify({ state: { introSeen: true }, version: 3 }));
+});
+// Views are store-driven; setting the store is the one way in that works on
+// every layout (the rail hides its labels when narrow).
+const go = async (view) => {
+  await page.waitForSelector("nav[aria-label=Main]");
+  await page.evaluate((v) => window.__fluxStore.setState({ view: v }), view);
+};
+// Views and panels slide in, and a click that lands mid-animation is refused
+// as "not stable" — so wait for the target, and force it if it won't settle.
+const tap = async (sel, timeout = 8000) => {
+  const el = page.locator(sel).first();
+  await el.waitFor({ timeout });
+  await el.click({ timeout: 3000 }).catch(() => el.click({ force: true }));
+};
+
 let failed = 0;
 const step = async (name, fn) => {
   try { await fn(); console.log(`✔ ${name}`); }
@@ -80,8 +102,9 @@ const step = async (name, fn) => {
 
 await page.goto(BASE, { waitUntil: "networkidle" });
 
-await step("the YT tab exists and opens", async () => {
-  await page.click("button:has(div:text-is('YT'))");
+await step("the YouTube source exists and opens", async () => {
+  await go("search");
+  await tap("button[role=radio]:has-text('YouTube')");
   await page.waitForSelector("text=▶ YOUTUBE", { timeout: 5000 });
 });
 
@@ -97,7 +120,7 @@ await step("search is disabled until a key is entered", async () => {
 
 await step("a key can be saved and enables search", async () => {
   await page.fill("input[placeholder='AIza…']", "TEST-KEY-123");
-  await page.click("button:has-text('SAVE KEY')");
+  await tap("button:has-text('SAVE KEY')");
   await page.waitForSelector("button:has-text('KEY SET')", { timeout: 4000 });
   await page.waitForFunction(() => !document.querySelector("input[data-ytq]")?.disabled, { timeout: 4000 });
 });
@@ -151,8 +174,11 @@ await step("queueing adds a real FLUX track to the playlist", async () => {
 });
 
 await step("it appears in the ordinary library queue, not a separate one", async () => {
-  await page.click("button:has(div:text-is('LIBRARY'))");
-  await page.waitForSelector("text=Test Song", { timeout: 5000 });
+  // a row in the Library's song list — matched by its play button so the
+  // search hit still fading out of the previous view can't satisfy it
+  await go("library");
+  await tap("button[role=radio]:has-text('Songs')");
+  await page.waitForSelector("button[aria-label^='Play Test Song']", { timeout: 5000 });
 });
 
 if (errors.length) {

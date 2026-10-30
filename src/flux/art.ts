@@ -272,7 +272,10 @@ export function loadArt(tr: Track): Promise<Art> {
     try {
       const { loadCover } = await import("../ai/covers");
       const svg = await loadCover("track", tr.id);
-      if (svg) url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      // drawn as an <img> now, and an image SVG without its namespace is
+      // never decoded — inline markup didn't need it, a data URL does
+      const ns = svg && !/<svg[^>]*\sxmlns=/i.test(svg) ? svg.replace(/<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"') : svg;
+      if (ns) url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(ns)}`;
     } catch { /* AI layer optional */ }
     if (!url && tr.fileId) url = await embeddedCover(tr.fileId).catch(() => null);
     if (!url && tr.art) url = tr.art;

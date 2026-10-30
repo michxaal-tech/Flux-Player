@@ -52,7 +52,7 @@ const step = async (name, fn) => {
     await fn();
     console.log(`✔ ${name}`);
   } catch (e) {
-    console.log(`✘ ${name}: ${e.message.split("\n")[0]}`);
+    console.log(`✘ ${name}: ${e.message.split("\n").slice(0, 3).join(" | ")}`);
     process.exitCode = 1;
   }
 };
@@ -159,6 +159,8 @@ await step("Studio: apply, save, rename, duplicate and delete a look", async () 
   await page.click("button:has-text('Save as look')");
   await page.fill("input[aria-label='Look name']", "Smoke look");
   await page.keyboard.press("Enter");
+  await page.waitForFunction(() => window.__fluxStore.getState().lookPresets.some((p) => p.name === "Smoke look"), null, { timeout: 5000 })
+    .catch(async () => { throw new Error("not saved: " + JSON.stringify(await page.evaluate(() => ({ names: window.__fluxStore.getState().lookPresets.map((p) => p.name), from: window.__fluxStore.getState().lookFrom, input: document.querySelector("input[aria-label='Look name']")?.value })))); });
   await page.waitForSelector("text=Smoke look");
   const id = await S(() => window.__fluxStore.getState().lookPresets.find((p) => p.name === "Smoke look").id);
   await S((id) => window.__fluxStore.getState().renameLookPreset(id, "Renamed look"), id);

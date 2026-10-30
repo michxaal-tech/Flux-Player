@@ -4,6 +4,9 @@
 // compared against it. Pitch tracking is exactly the kind of code that looks
 // plausible while being an octave off, so "it produced some notes" is not a
 // pass — the actual MIDI numbers have to match.
+//
+// The file comes in through the Library view's "Add music" button (a file
+// chooser); everything after that drives the app through its debug handles.
 import { spawn } from "node:child_process";
 import { existsSync, writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -62,11 +65,26 @@ page.on("console", (m) => {
   if (m.type() === "error" && !/ERR_CONNECTION_RESET|Failed to load resource/.test(m.text())) errors.push(m.text());
 });
 
+// The intro plays on a first launch and would sit over everything; mark it
+// seen, but only when nothing is stored yet so a reload would keep the state.
+await page.addInitScript(() => {
+  if (!localStorage.getItem("flux-store")) localStorage.setItem("flux-store", JSON.stringify({ state: { introSeen: true }, version: 3 }));
+});
 await page.goto(`http://localhost:${PORT}`, { waitUntil: "networkidle" });
-await page.click("button:has(div:text-is('LIBRARY'))");
-await page.setInputFiles("input[type=file]", wav);
-await page.waitForSelector("text=melody test", { timeout: 8000 });
-await page.click("button:has(div:text-is('PLAYER'))");
+await page.waitForSelector("nav[aria-label=Main]");
+// Views and panels slide in, and a click that lands mid-animation is refused
+// as "not stable" — so wait for the target, and force it if it won't settle.
+const tap = async (sel, timeout = 8000) => {
+  const el = page.locator(sel).first();
+  await el.waitFor({ timeout });
+  await el.click({ timeout: 3000 }).catch(() => el.click({ force: true }));
+};
+await page.evaluate(() => window.__fluxStore.setState({ view: "library" }));
+const [chooser] = await Promise.all([page.waitForEvent("filechooser"), tap("button:has-text('Add music')")]);
+await chooser.setFiles(wav);
+await tap("button[role=radio]:has-text('Songs')");
+await page.waitForSelector("button[aria-label^='Play melody test']", { timeout: 8000 });
+await page.evaluate(() => window.__fluxStore.setState({ view: "listen" }));
 await page.waitForTimeout(1200);
 
 let bad = 0;

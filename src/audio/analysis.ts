@@ -86,6 +86,10 @@ async function runAnalysis(fileId: string, onProgress: (msg: string) => void, de
 }
 
 const inFlight = new Map<string, Promise<Analysis | null>>();
+/** whether the job in `inFlight` for a file is a deep one */
+const inFlightDeep = new Map<string, boolean>();
+const inFlightId = new Map<string, number>();
+let jobSeq = 0;
 
 /**
  * Analyses a track if it isn't already cached. `force` re-runs it.
@@ -95,15 +99,25 @@ const inFlight = new Map<string, Promise<Analysis | null>>();
  * re-runs unless what is cached is already deep.
  */
 export async function ensureAnalysis(fileId: string, force = false, deep = false): Promise<Analysis | null> {
+  // A job already running for this file is only an answer if it is the same
+  // kind of job. A deep or forced request arriving while the automatic fast
+  // pass runs used to be handed the fast result — so it waits for that pass
+  // to land (and store its result) and then runs its own, rather than racing it.
+  const existing = inFlight.get(fileId);
+  if (existing) {
+    if (!force && inFlightDeep.get(fileId) === deep) return existing;
+    await existing.catch(() => null);
+  }
   if (force) await clearAnalysis(fileId);
   else {
     const cached = await loadAnalysis(fileId);
     if (cached && (!deep || cached.deep)) return cached;
     if (cached) await clearAnalysis(fileId);
   }
-  const existing = inFlight.get(fileId);
-  if (existing) return existing;
+  const again = inFlight.get(fileId);
+  if (again && !force && inFlightDeep.get(fileId) === deep) return again;
 
+  const id = ++jobSeq;
   const job = (async () => {
     useStore.setState({ analyzeStatus: "decoding…" });
     try {
@@ -116,10 +130,12 @@ export async function ensureAnalysis(fileId: string, force = false, deep = false
       setTimeout(() => useStore.setState({ analyzeStatus: "" }), 4000);
       return null;
     } finally {
-      inFlight.delete(fileId);
+      if (inFlightId.get(fileId) === id) { inFlight.delete(fileId); inFlightDeep.delete(fileId); inFlightId.delete(fileId); }
     }
   })();
   inFlight.set(fileId, job);
+  inFlightDeep.set(fileId, deep);
+  inFlightId.set(fileId, id);
   return job;
 }
 

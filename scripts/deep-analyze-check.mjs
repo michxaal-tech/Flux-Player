@@ -9,6 +9,9 @@
 // A mode that is slower and not measurably better is not worth shipping, so
 // that comparison is the test rather than a footnote.
 //
+// Files come in through the Library view's "Add music" button (a file
+// chooser), and a track is played from its row in the Songs list.
+//
 // Usage: npm run build && node scripts/deep-analyze-check.mjs
 import { spawn } from "node:child_process";
 import { existsSync, writeFileSync, mkdtempSync } from "node:fs";
@@ -99,7 +102,21 @@ const check = (name, ok, detail = "") => {
   if (!ok) failed++;
 };
 
+// The intro plays on a first launch and would sit over everything; mark it
+// seen, but only when nothing is stored yet so a reload would keep the state.
+await page.addInitScript(() => {
+  if (!localStorage.getItem("flux-store")) localStorage.setItem("flux-store", JSON.stringify({ state: { introSeen: true }, version: 3 }));
+});
 await page.goto(BASE, { waitUntil: "networkidle" });
+await page.waitForSelector("nav[aria-label=Main]");
+
+// Views and panels slide in, and a click that lands mid-animation is refused
+// as "not stable" — so wait for the target, and force it if it won't settle.
+const tap = async (sel, timeout = 10000) => {
+  const el = page.locator(sel).first();
+  await el.waitFor({ timeout });
+  await el.click({ timeout: 3000 }).catch(() => el.click({ force: true }));
+};
 
 /**
  * Runs an analysis in the page and returns the result.
@@ -109,11 +126,17 @@ await page.goto(BASE, { waitUntil: "networkidle" });
  * server instead would be testing a different build from the one that ships.
  */
 async function analyse(page, file, name, deep) {
-  await page.click("button:has(div:text-is('LIBRARY'))");
-  await page.setInputFiles("input[type=file]", file);
-  await page.waitForSelector(`text=${name}`, { timeout: 10000 });
-  await page.click(`span:text-is('${name}')`);
+  await page.evaluate(() => window.__fluxStore.setState({ view: "library" }));
+  const [chooser] = await Promise.all([page.waitForEvent("filechooser"), tap("button:has-text('Add music')")]);
+  await chooser.setFiles(file);
+  // play it from its row, which is what makes it the track being analysed
+  await tap("button[role=radio]:has-text('Songs')");
+  await tap(`button[aria-label='Play ${name}']`);
   await page.waitForTimeout(700);
+  // Playing a track starts the app's own (fast) analysis of it, and a request
+  // made while that is in flight is handed the same job whatever `deep` says —
+  // so let it finish first, or the "deep" result here is the fast one again.
+  await page.waitForFunction(() => !window.__fluxStore.getState().analyzeStatus, null, { timeout: 60000 });
   return page.evaluate(async (deep) => {
     const a = await window.__fluxAnalyse(deep);
     return a && { beats: a.beats, bpm: a.bpm, deep: a.deep ?? null };

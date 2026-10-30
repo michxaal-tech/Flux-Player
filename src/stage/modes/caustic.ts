@@ -54,8 +54,8 @@ vec3 scene(vec2 uv) {
   // two depths of web: the far one dim and soft, the near one sharp
   // light arrives in broad drifting patches, so the web is bright in places
   // and nearly gone in others instead of an even net
-  float patch = smoothstep(0.25, 0.75, fbm(c * 0.9 + vec2(t * 0.05, -t * 0.04)));
-  col += mix(uPal[3], uPal[4], clamp(l.g, 0.0, 1.0)) * l * (0.6 + uLevel * 0.7) * fade * (0.25 + patch * 1.1);
+  float pool = smoothstep(0.25, 0.75, fbm(c * 0.9 + vec2(t * 0.05, -t * 0.04)));
+  col += mix(uPal[3], uPal[4], clamp(l.g, 0.0, 1.0)) * l * (0.6 + uLevel * 0.7) * fade * (0.25 + pool * 1.1);
   col += uPal[2] * 0.08 * (1.0 + sin(c.x * 3.0 + t * 0.2) * sin(c.y * 2.0 - t * 0.15));
   // god rays falling from the surface
   float ray = fbm(vec2(c.x * 3.0 + c.y * 0.6 + t * 0.08, 0.0)) ;

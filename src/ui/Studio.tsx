@@ -172,7 +172,6 @@ function Looks() {
   const from = useStore((s) => s.lookFrom);
   const save = useStore((s) => s.saveLookPreset);
   const [naming, setNaming] = useState(false);
-  const [name, setName] = useState("");
   const modified = !from;
   return (
     <>
@@ -187,7 +186,7 @@ function Looks() {
             style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 12px 10px 14px", borderRadius: 14, background: "rgb(var(--accent-rgb) / 0.12)" }}
           >
             <span style={{ fontSize: 13.5 }}>You've changed the current look.</span>
-            <button className="btn" data-size="sm" data-variant="accent" onClick={() => { setName(""); setNaming(true); }}>Save as look</button>
+            <button className="btn" data-size="sm" data-variant="accent" onClick={() => setNaming(true)}>Save as look</button>
           </motion.div>
         )}
         {naming && (
@@ -197,16 +196,22 @@ function Looks() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.97 }}
             transition={spring.snap}
-            onSubmit={(e) => { e.preventDefault(); save(name || "My look"); setNaming(false); }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              // read the field itself: a fast Enter can beat the state update
+              const v = (new FormData(e.currentTarget).get("lookName") as string | null)?.trim();
+              save(v || "My look");
+              setNaming(false);
+            }}
             style={{ display: "flex", gap: 8 }}
           >
-            <input autoFocus className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name this look" aria-label="Look name" onKeyDown={(e) => { if (e.key === "Escape") setNaming(false); }} />
+            <input autoFocus className="input" name="lookName" defaultValue="" placeholder="Name this look" aria-label="Look name" onKeyDown={(e) => { if (e.key === "Escape") setNaming(false); }} />
             <button className="btn" data-variant="accent" type="submit">Save</button>
           </motion.form>
         )}
       </AnimatePresence>
       {!modified && !naming && (
-        <button className="btn" data-size="sm" onClick={() => { setName(""); setNaming(true); }} style={{ justifySelf: "start" }}><I.plus size={15} /> Save current as a new look</button>
+        <button className="btn" data-size="sm" onClick={() => setNaming(true)} style={{ justifySelf: "start" }}><I.plus size={15} /> Save current as a new look</button>
       )}
       {mine.length > 0 && (
         <div>

@@ -10,6 +10,9 @@
 // browser's own decoder, which skips a leading ID3 chunk, so one file is both
 // playable and tagged.
 //
+// Files come in through the Library view's "Add music" button, which opens a
+// file chooser rather than exposing a standing <input type=file>.
+//
 // Usage: npm run build && node scripts/taglyrics-e2e.mjs
 import { spawn } from "node:child_process";
 import { existsSync, writeFileSync, mkdtempSync } from "node:fs";
@@ -76,6 +79,34 @@ page.on("console", (m) => {
   if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(`console: ${m.text()}`);
 });
 
+// The intro plays on a first launch and would sit over everything. Mark it
+// seen — but only when nothing is stored yet, so a reload keeps what the test
+// has built rather than resetting it.
+await page.addInitScript(() => {
+  if (!localStorage.getItem("flux-store")) localStorage.setItem("flux-store", JSON.stringify({ state: { introSeen: true }, version: 3 }));
+});
+// Views are store-driven; setting the store is the one way in that works on
+// every layout (the rail hides its labels when narrow).
+const go = async (view) => {
+  await page.waitForSelector("nav[aria-label=Main]");
+  await page.evaluate((v) => window.__fluxStore.setState({ view: v }), view);
+};
+// Views and panels slide in, and a click that lands mid-animation is refused
+// as "not stable" — so wait for the target, and force it if it won't settle.
+const tap = async (sel, timeout = 8000) => {
+  const el = page.locator(sel).first();
+  await el.waitFor({ timeout });
+  await el.click({ timeout: 3000 }).catch(() => el.click({ force: true }));
+};
+// Import through the real button, then wait for the row in the song list.
+const addMusic = async (file, name) => {
+  await go("library");
+  const [chooser] = await Promise.all([page.waitForEvent("filechooser"), tap("button:has-text('Add music')")]);
+  await chooser.setFiles(file);
+  await tap("button[role=radio]:has-text('Songs')");
+  await page.waitForSelector(`button[aria-label^='Play ${name}']`, { timeout: 8000 });
+};
+
 let failed = 0;
 const step = async (name, fn) => {
   try { await fn(); console.log(`✔ ${name}`); }
@@ -83,10 +114,8 @@ const step = async (name, fn) => {
 };
 
 await page.goto(BASE, { waitUntil: "networkidle" });
-await page.click("button:has(div:text-is('LIBRARY'))");
-await page.setInputFiles("input[type=file]", tagged);
-await page.waitForSelector("text=tagged song", { timeout: 8000 });
-await page.click("button:has(div:text-is('PLAYER'))");
+await addMusic(tagged, "tagged song");
+await go("listen");
 await page.waitForTimeout(1500);
 
 const lyricsOf = () => page.evaluate(() => {
@@ -125,9 +154,7 @@ await step("no lyric lookup was made", async () => {
 });
 
 await step("an untagged file does not gain invented lyrics", async () => {
-  await page.click("button:has(div:text-is('LIBRARY'))");
-  await page.setInputFiles("input[type=file]", plain);
-  await page.waitForSelector("text=plain song", { timeout: 8000 });
+  await addMusic(plain, "plain song");
   await page.waitForTimeout(1200);
   const ly = await page.evaluate(() => {
     const s = JSON.parse(localStorage.getItem("flux-store") || "{}");

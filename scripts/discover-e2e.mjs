@@ -3,6 +3,9 @@
 // `scripts/catalogue-check.mjs` is the other half: that one checks the live
 // services still answer the way these fixtures say they do.
 //
+// Discover lives in the Search view now, under the "Catalogues" segment, and
+// starts open — there is no BROWSE click to make any more.
+//
 // Usage: npm run build && node scripts/discover-e2e.mjs
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -46,6 +49,26 @@ await page.route("**/metadata/**", (r) => {
            : r.fulfill({ status: 404, body: "{}" });
 });
 
+// The intro plays on a first launch and would sit over everything. Mark it
+// seen — but only when nothing is stored yet, so a reload keeps the library
+// this test has built rather than resetting it.
+await page.addInitScript(() => {
+  if (!localStorage.getItem("flux-store")) localStorage.setItem("flux-store", JSON.stringify({ state: { introSeen: true }, version: 3 }));
+});
+// Views are store-driven; setting the store is the one way in that works on
+// every layout (the rail hides its labels when narrow).
+const go = async (view) => {
+  await page.waitForSelector("nav[aria-label=Main]");
+  await page.evaluate((v) => window.__fluxStore.setState({ view: v }), view);
+};
+// Views and panels slide in, and a click that lands mid-animation is refused
+// as "not stable" — so wait for the target, and force it if it won't settle.
+const tap = async (sel, timeout = 8000) => {
+  const el = page.locator(sel).first();
+  await el.waitFor({ timeout });
+  await el.click({ timeout: 3000 }).catch(() => el.click({ force: true }));
+};
+
 let failed = 0;
 const step = async (name, fn) => {
   try { await fn(); console.log(`✔ ${name}`); }
@@ -55,13 +78,12 @@ const step = async (name, fn) => {
 await page.goto(BASE, { waitUntil: "networkidle" });
 
 await step("discover offers the archive source", async () => {
-  await page.click("button:has(div:text-is('LIBRARY'))");
-  await page.click("button:has-text('BROWSE')");
+  await go("search");
   await page.waitForSelector("button[data-src='archive']");
 });
 
 await step("archive browse lists full-length tracks", async () => {
-  await page.click("button[data-src='archive']");
+  await tap("button[data-src='archive']");
   await page.waitForSelector("text=Grateful Dead", { timeout: 15000 });
   const body = await page.innerText("body");
   if (/\bpreview\b/.test(body.split("Grateful Dead")[1]?.slice(0, 200) ?? "")) {
@@ -77,31 +99,33 @@ await step("the blurb states what the archive is and isn't", async () => {
 });
 
 await step("a track imports into the library", async () => {
-  await page.click("button[data-add]");
+  await tap("button[data-add]");
   await page.waitForSelector("text=✓ added", { timeout: 20000 });
   if (audioHits < 1) throw new Error("no audio was fetched");
 });
 
 await step("it survives a reload", async () => {
   await page.reload({ waitUntil: "networkidle" });
-  await page.click("button:has(div:text-is('LIBRARY'))");
+  // the Library view opens on a grid of playlists; the tracks are under Songs
+  await go("library");
+  await tap("button[role=radio]:has-text('Songs')");
+  await page.waitForSelector("text=/Grateful Dead|Of A Revolution/", { timeout: 8000 }).catch(() => {});
   const body = await page.innerText("body");
   if (!/Grateful Dead|Of A Revolution/.test(body)) throw new Error("imported track missing after reload");
 });
 
 await step("previews are kept out by default", async () => {
-  await page.click("button:has(div:text-is('LIBRARY'))");
-  await page.click("button:has-text('BROWSE')");
+  await go("search");
   await page.waitForSelector("button[data-fullonly]");
   const label = await page.innerText("button[data-fullonly]");
   if (!/FULL TRACKS ONLY/.test(label)) throw new Error(`filter is off by default: ${label}`);
-  await page.click("button[data-src='apple']");
+  await tap("button[data-src='apple']");
   await page.waitForSelector("text=30-second excerpt", { timeout: 15000 });
   if (await page.$("button[data-add]")) throw new Error("an excerpt was still addable");
 });
 
 await step("previews can be shown deliberately", async () => {
-  await page.click("text=Show them anyway");
+  await tap("text=Show them anyway");
   await page.waitForSelector("text=EXCERPT", { timeout: 10000 });
   if (!(await page.$("button[data-add]"))) throw new Error("rows didn't come back");
   const label = await page.innerText("button[data-fullonly]");
@@ -110,8 +134,8 @@ await step("previews can be shown deliberately", async () => {
 
 await step("the choice survives a reload", async () => {
   await page.reload({ waitUntil: "networkidle" });
-  await page.click("button:has(div:text-is('LIBRARY'))");
-  await page.click("button:has-text('BROWSE')");
+  await go("search");
+  await page.waitForSelector("button[data-fullonly]");
   const label = await page.innerText("button[data-fullonly]");
   if (!/PREVIEWS SHOWN/.test(label)) throw new Error(`not persisted: ${label}`);
 });

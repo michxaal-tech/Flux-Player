@@ -26,6 +26,8 @@ export function wireRuntime(): void {
     ).catch(() => {});
   };
   useStore.subscribe((s) => s.analyzedMode, wantAnalysis);
+  // switching deep analysis on re-reads the playing track with the better pass
+  useStore.subscribe((s) => s.deepAnalyze, (deep) => { if (deep) wantAnalysis(); });
   useStore.subscribe((s) => getCurrentTrack(s)?.fileId, wantAnalysis, { fireImmediately: true });
 
   // ── artwork for the playing track (and its neighbours, so skipping is instant) ──
