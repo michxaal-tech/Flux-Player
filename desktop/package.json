@@ -47,20 +47,14 @@
       "category": "public.app-category.music",
       "icon": "build/icon.png",
       "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        }
+        "dmg"
       ],
       "identity": "-",
       "darkModeSupport": true,
       "artifactName": "Flux-${version}-mac-${arch}.${ext}"
     },
     "dmg": {
-      "title": "Flux",
+      "title": "Flux ${arch}",
       "artifactName": "Flux-${version}-mac-${arch}.${ext}"
     }
   }
