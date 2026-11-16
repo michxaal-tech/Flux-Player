@@ -12,6 +12,7 @@ import { deletePlaylist, playAt, removeTrack } from "../audio/transport";
 import { exportTrack } from "../audio/exporter";
 import { TAGS } from "../constants";
 import type { Playlist, Track } from "../types";
+import { uid } from "../utils";
 import { Artwork, useArt } from "./Artwork";
 import { I } from "./icons";
 import { Chip, EmptyState, Segmented, useMenuButton, type MenuItem } from "./kit";
@@ -20,7 +21,7 @@ import { sig } from "../flux/signals";
 import { pickFiles } from "./files";
 import { EmojiSearch, LibraryAiBar, TrackAiMenu } from "../components/ai/LibraryAi";
 
-type Tab = "playlists" | "songs" | "artists" | "liked" | "recent" | "tags";
+type Tab = "playlists" | "songs" | "artists" | "liked" | "recent" | "tags" | "mixes";
 
 export function Library() {
   const [tab, setTab] = useState<Tab>("playlists");
@@ -78,6 +79,7 @@ export function Library() {
                   onChange={setTab}
                   options={[
                     { id: "playlists", label: "Playlists" },
+                    { id: "mixes", label: "Mixes" },
                     { id: "songs", label: "Songs" },
                     { id: "artists", label: "Artists" },
                     { id: "liked", label: "Liked" },
@@ -86,7 +88,7 @@ export function Library() {
                   ]}
                 />
               </div>
-              {tab !== "playlists" && tab !== "artists" && (
+              {tab !== "playlists" && tab !== "artists" && tab !== "mixes" && (
                 <div style={{ position: "relative", flex: "1 1 200px", maxWidth: 320 }}>
                   <I.search size={16} style={{ position: "absolute", left: 12, top: 13, color: "var(--text-3)" }} />
                   <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter" aria-label="Filter tracks" style={{ paddingLeft: 36, height: 42 }} />
@@ -107,6 +109,7 @@ export function Library() {
                 {tab === "recent" && <SongList filter={q} which="recent" />}
                 {tab === "artists" && <Artists />}
                 {tab === "tags" && <Tags filter={q} />}
+                {tab === "mixes" && <Mixes />}
               </motion.div>
             </AnimatePresence>
           </motion.div>
@@ -326,6 +329,87 @@ function DraggableRow({ track, plId, idx, onDragStart, onDragEnd }: { track: Tra
 // ── song lists ─────────────────────────────────────────────────────────────
 const ROW_H = 62;
 
+// ── mixes ──────────────────────────────────────────────────────────────────
+// Made from your own listening, on this device, with no AI involved: what you
+// keep coming back to, what's new, what you've neglected, tempo and mood.
+const MIX_ID = "flux-mix";
+
+function playMix(name: string, tracks: Track[]): void {
+  if (!tracks.length) return;
+  const copies = tracks.map((t) => ({ ...t, id: uid() }));
+  useStore.setState((s) => {
+    const pl: Playlist = { id: MIX_ID, name: `MIX · ${name.toUpperCase()}`, tracks: copies };
+    return { playlists: s.playlists.some((p) => p.id === MIX_ID) ? s.playlists.map((p) => (p.id === MIX_ID ? pl : p)) : [...s.playlists, pl], shuffle: false };
+  });
+  void playAt(MIX_ID, 0);
+}
+
+const shuffled = <T,>(a: T[]): T[] => { const o = [...a]; for (let i = o.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [o[i], o[j]] = [o[j], o[i]]; } return o; };
+
+function Mixes() {
+  const playlists = useStore((s) => s.playlists);
+  const bpm = useStore((s) => s.trackBpm);
+  const mixes = useMemo(() => {
+    // one entry per recording, whichever playlists it sits in
+    const seen = new Map<string, Track>();
+    for (const p of playlists) if (p.id !== MIX_ID) for (const t of p.tracks) {
+      const k = t.fileId || t.sourceId || t.id;
+      const cur = seen.get(k);
+      if (!cur || (t.plays || 0) > (cur.plays || 0)) seen.set(k, t);
+    }
+    const all = [...seen.values()];
+    const day = 86400000, now = Date.now();
+    const out: { name: string; note: string; tracks: Track[] }[] = [];
+    const add = (name: string, note: string, tracks: Track[], min = 2) => { if (tracks.length >= min) out.push({ name, note, tracks: tracks.slice(0, 40) }); };
+    add("On repeat", "What you play most", all.filter((t) => t.plays > 1).sort((a, b) => b.plays - a.plays));
+    add("Fresh", "Added most recently", [...all].sort((a, b) => b.addedAt - a.addedAt).slice(0, 25), 3);
+    add("Rediscover", "Loved once, not heard lately", all.filter((t) => t.plays > 0 && now - t.lastPlayedAt > 14 * day).sort((a, b) => a.lastPlayedAt - b.lastPlayedAt));
+    add("Unplayed", "Still waiting for a first listen", shuffled(all.filter((t) => !t.plays)));
+    add("Liked, shuffled", "Everything you've hearted", shuffled(all.filter((t) => t.fav)));
+    add("Slow burn", "Under 100 BPM", shuffled(all.filter((t) => bpm[t.id] && bpm[t.id] < 100)));
+    add("Up tempo", "120 BPM and faster", shuffled(all.filter((t) => bpm[t.id] >= 120)));
+    add("With words", "Tracks that have lyrics", shuffled(all.filter((t) => t.lyrics?.length)), 3);
+    for (const g of TAGS) add(`#${g.toLowerCase()}`, "By your tag", shuffled(all.filter((t) => t.tags.includes(g))));
+    add("Everything, shuffled", "The whole library", shuffled(all), 3);
+    return out;
+  }, [playlists, bpm]);
+  if (!mixes.length) return <EmptyState title="No mixes yet" body="Mixes build themselves from your library and listening — add a few tracks and play them." />;
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 18 }}>
+      {mixes.map((m, i) => <MixCard key={m.name} mix={m} i={i} />)}
+    </div>
+  );
+}
+
+function MixCard({ mix, i }: { mix: { name: string; note: string; tracks: Track[] }; i: number }) {
+  const art = useArt(mix.tracks[0]);
+  return (
+    <motion.button
+      onClick={() => playMix(mix.name, mix.tracks)}
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: ease.out, delay: Math.min(i, 12) * 0.04 }}
+      whileHover={{ y: -4 }}
+      whileTap={{ scale: 0.97 }}
+      aria-label={`Play mix: ${mix.name}`}
+      style={{
+        position: "relative", overflow: "hidden", textAlign: "left", border: "1px solid var(--line)", borderRadius: 22, padding: 18, aspectRatio: "1.25", color: "#fff",
+        background: `linear-gradient(140deg, ${art.palette[2]}, ${art.palette[1]} 70%)`, display: "grid", alignContent: "space-between",
+      }}
+    >
+      <div style={{ display: "flex" }}>
+        {mix.tracks.slice(0, 3).map((t, k) => (
+          <span key={t.id} style={{ width: 54, marginLeft: k ? -18 : 0, borderRadius: 10, boxShadow: "0 6px 16px rgba(0,0,0,0.4)", transform: `rotate(${(k - 1) * 5}deg)`, zIndex: 3 - k }}><Artwork track={t} radius={10} /></span>
+        ))}
+      </div>
+      <div>
+        <div className="display" style={{ fontSize: 26 }}>{mix.name}</div>
+        <div style={{ fontSize: 13, opacity: 0.8 }}>{mix.note} · {mix.tracks.length} tracks</div>
+      </div>
+    </motion.button>
+  );
+}
+
 /** Browse by mood tag: pick one and see every track that carries it. */
 function Tags({ filter }: { filter: string }) {
   const playlists = useStore((s) => s.playlists);
@@ -498,8 +582,10 @@ export function TrackRow({ track, plId, idx, handle, showSource }: { track: Trac
   const title = artist && track.name.startsWith(artist) ? track.name.replace(/^\s*.+?\s+[-–—]\s+/, "") : track.name;
   const [confirmRm, setConfirmRm] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const menu = useMenuButton((): MenuItem[] => [
     { label: "Play next", icon: <I.queue size={17} />, onSelect: () => useStore.getState().playNextQueue(track) },
+    { label: "Edit title & artist", icon: <I.edit size={17} />, onSelect: () => setEditOpen(true) },
     {
       label: "Add to playlist", icon: <I.playlist size={17} />, subTitle: "Add to…",
       sub: [
@@ -556,6 +642,31 @@ export function TrackRow({ track, plId, idx, handle, showSource }: { track: Trac
       <button className="icon-btn" aria-label="More" aria-haspopup="menu" aria-expanded={menu.open} onClick={menu.toggle}><I.more size={18} /></button>
       {menu.menu}
       <AnimatePresence>
+        {editOpen && (
+          <motion.form
+            key="edit"
+            initial={{ opacity: 0, scale: 0.96, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={spring.snap}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const f = new FormData(e.currentTarget);
+              const name = String(f.get("title") ?? "").trim();
+              useStore.getState().updateTrack(track.id, { name: name || track.name, artist: String(f.get("artist") ?? "").trim() || undefined });
+              setEditOpen(false);
+            }}
+            onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setEditOpen(false); } }}
+            style={{ position: "absolute", right: 8, top: ROW_H - 4, zIndex: 20, width: "min(420px, 90vw)", padding: 14, display: "grid", gap: 8, background: "var(--bg-raise)", border: "1px solid var(--line-2)", borderRadius: 18, boxShadow: "var(--shadow-lg)" }}
+          >
+            <input className="input" name="title" defaultValue={title} placeholder="Title" aria-label="Track title" autoFocus />
+            <input className="input" name="artist" defaultValue={artist ?? ""} placeholder="Artist" aria-label="Track artist" />
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button type="button" className="btn" data-variant="ghost" data-size="sm" onClick={() => setEditOpen(false)}>Cancel</button>
+              <button type="submit" className="btn" data-variant="accent" data-size="sm">Save</button>
+            </div>
+          </motion.form>
+        )}
         {aiOpen && (
           <motion.div
             key="ai"

@@ -56,6 +56,9 @@ export interface Track {
   /** false when the lyrics are untimed prose spread evenly — shown as static
    * text rather than pretending to follow the song */
   lyricsTimed?: boolean;
+  /** seconds to shift this track's lyrics by (positive = later), for a source
+   * that runs early or late against this particular recording */
+  lyricOffset?: number;
 }
 
 export interface LyricWord {

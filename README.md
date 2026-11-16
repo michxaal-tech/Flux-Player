@@ -185,6 +185,18 @@ cd desktop && npm install && npm start      # or: npx electron-builder --win
   timing offset live in Studio → Lyrics. (Flux has no animated mouth or
   character, so there is no lip-sync feature.)
 
+- **Command palette** — ⌘K / Ctrl+K reaches everything from one field: any
+  track or playlist, every view, looks, sound presets and the common actions.
+- **Mixes** — built on the device from your own listening, no AI involved: On
+  repeat, Fresh, Rediscover, Unplayed, Liked, tempo mixes (from analysed BPM),
+  one per tag, and more. Playing one fills a "Mix" playlist.
+- **Lyric tools** — a menu beside the Lyrics tab: search again when the match
+  is wrong, read the file's tags, attach a .lrc, transcribe, clear; nudge one
+  track's timing in quarter-second steps; **sync by tapping** (write or paste
+  the words, then tap Space as each line starts — stamped on the audible
+  clock); and **share a line as an image** in the record's colours. Eight line
+  animations to choose from in Studio.
+
 - **Studio** — Looks (curated + your own: save, rename, duplicate, update,
   delete), Style, Colour (follow the artwork or a palette, warmth, vividness),
   Motion, Intensity, Lyrics, Interface (Ink / Night / Paper themes, accent,

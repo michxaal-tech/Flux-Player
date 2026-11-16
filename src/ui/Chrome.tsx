@@ -122,6 +122,9 @@ export function Rail() {
       </motion.div>
       {NAV.map((n) => <NavButton key={n.id} {...n} on={!stage && view === n.id} vertical />)}
       <div style={{ flex: 1 }} />
+      <button className="icon-btn" aria-label="Command palette" title="Find and do anything (⌘K)" onClick={() => useStore.setState({ palette: true })} style={{ marginBottom: 8 }}>
+        <kbd className="mono" style={{ fontSize: 11, fontWeight: 600 }}>⌘K</kbd>
+      </button>
       <StageButton />
       <NavButton id="settings" label="Settings" icon={<I.settings size={22} />} on={!stage && view === "settings"} vertical />
     </nav>

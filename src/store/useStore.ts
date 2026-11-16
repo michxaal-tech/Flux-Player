@@ -149,6 +149,10 @@ export interface StoreState {
   listenPane: "lyrics" | "queue";
   /** a playlist the Library should open on arrival (set by Search) */
   libOpen: string | null;
+  /** the command palette is open */
+  palette: boolean;
+  /** the tap-to-sync lyric editor is open */
+  lyricSync: boolean;
   shortcutsOpen: boolean;
   /** bumped whenever the user edits a connector, so pickers reload the list */
   connectorRev: number;
@@ -314,6 +318,8 @@ export const useStore = create<StoreState>()(
         view: "listen",
         listenPane: "lyrics",
         libOpen: null,
+        palette: false,
+        lyricSync: false,
         shortcutsOpen: false,
         connectorRev: 0,
 

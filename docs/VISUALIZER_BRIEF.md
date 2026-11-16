@@ -185,7 +185,7 @@ Studio controls, and add a store migration (see below).
 `lyrics` (`getCurrentTrack(useStore.getState())`). Word timing exists only on
 some tracks (`line.words`); when it is absent, light the whole line — never
 fake per-word timing. Respect `lyricsOn`, `lyricPrefs.show`,
-`lyricPrefs.offsetMs`, and `track.lyricsTimed === false` (untimed text: do not
+`lyricPrefs.offsetMs` and `track.lyricOffset` (both are subtracted from the clock: positive = lyrics later), and `track.lyricsTimed === false` (untimed text: do not
 stage it as if it were synced).
 
 **Artwork** — `artNow(track)` in `src/flux/art.ts` gives `{ url, palette,

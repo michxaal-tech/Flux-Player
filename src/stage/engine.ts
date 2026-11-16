@@ -290,7 +290,7 @@ class Stage {
     const pace = sig.playing ? 0.55 + sig.energy * 0.9 : 0.12 + look.motion.drift * 0.3;
     this.time += dt * look.motion.speed * pace * (1 - calm * 0.3);
     const lines = s.lyricsOn && s.lyricPrefs.show ? tr?.lyrics : undefined;
-    const lt = sig.t + s.lyricPrefs.offsetMs / 1000;
+    const lt = sig.t - s.lyricPrefs.offsetMs / 1000 - (tr?.lyricOffset ?? 0);
     const at = tr?.lyricsTimed === false ? null : lineAt(lines, lt);
     const line = at && at.index >= 0 ? lines![at.index] : null;
     const css = [0, 1, 2, 3, 4].map((i) => toHex(this.pal[i * 3], this.pal[i * 3 + 1], this.pal[i * 3 + 2])) as Frame["css"];

@@ -20,6 +20,7 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: "R", does: "Cycle repeat mode" },
   { keys: "M", does: "Mute / unmute" },
   { keys: "V", does: "Enter / leave the stage" },
+  { keys: "⌘K / Ctrl K", does: "Command palette — find and do anything" },
   { keys: "/", does: "Search" },
   { keys: "Shift + ← / →", does: "Seek −5s / +5s" },
   { keys: "1–4", does: "Hot cues A–D (set / jump)" },

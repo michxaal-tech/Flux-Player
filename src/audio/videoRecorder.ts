@@ -111,7 +111,7 @@ export async function startVideoExport(fromStart = true): Promise<void> {
     const st = useStore.getState();
     const tr = getCurrentTrack(st);
     if (st.lyricsOn && st.lyricPrefs.show && tr?.lyrics && tr.lyricsTimed !== false && !modeById(st.look.style.mode).ownsLyrics) {
-      const at = lineAt(tr.lyrics, sig.t + st.lyricPrefs.offsetMs / 1000);
+      const at = lineAt(tr.lyrics, sig.t - st.lyricPrefs.offsetMs / 1000 - (tr.lyricOffset ?? 0));
       if (at.index >= 0) {
         const text = tr.lyrics[at.index].text;
         const size = Math.round(ch * 0.055);

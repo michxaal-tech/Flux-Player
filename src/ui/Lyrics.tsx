@@ -42,7 +42,7 @@ export function Lyrics({ variant = "pane" }: { variant?: "pane" | "stage" }) {
     return <NoLyrics track={track} state={lyricState.id === track.id ? lyricState.state : ""} />;
   }
   if (track.lyricsTimed === false) return <StaticLyrics key={track.id} lines={lines} variant={variant} />;
-  return <TimedLyrics key={track.id} lines={lines} variant={variant} />;
+  return <TimedLyrics key={track.id} lines={lines} variant={variant} offset={-(track.lyricOffset ?? 0)} />;
 }
 
 function LyricSkeleton() {
@@ -155,7 +155,9 @@ function StaticLyrics({ lines, variant }: { lines: LyricLineData[]; variant: "pa
   );
 }
 
-function TimedLyrics({ lines, variant }: { lines: LyricLineData[]; variant: "pane" | "stage" }) {
+function TimedLyrics({ lines, variant, offset }: { lines: LyricLineData[]; variant: "pane" | "stage"; offset: number }) {
+  const offsetRef = useRef(offset);
+  offsetRef.current = offset;
   const prefs = useStore((s) => s.lyricPrefs);
   const box = useRef<HTMLDivElement>(null);
   const col = useRef<HTMLDivElement>(null);
@@ -176,7 +178,7 @@ function TimedLyrics({ lines, variant }: { lines: LyricLineData[]; variant: "pan
       const dt = Math.min(0.05, (now - lastT) / 1000);
       lastT = now;
       const s = st.current;
-      const t = clock.audible() + useStore.getState().lyricPrefs.offsetMs / 1000;
+      const t = clock.audible() - useStore.getState().lyricPrefs.offsetMs / 1000 + offsetRef.current;
       const at = lineAt(lines, t);
       const focus = at.index >= 0 ? at.index : at.last;
       if (at.index !== s.active) {
@@ -341,14 +343,26 @@ export function LyricTools() {
   const menu = useMenuButton((): MenuItem[] => {
     if (!track) return [];
     const L = () => import("../lyrics");
+    const off = track.lyricOffset ?? 0;
+    const nudge = (d: number) => { const cur = getCurrentTrack(useStore.getState()); if (cur) useStore.getState().updateTrack(cur.id, { lyricOffset: +((cur.lyricOffset ?? 0) + d).toFixed(2) }); };
     return [
       { label: track.lyrics ? "Wrong lyrics? Search again" : "Search for lyrics", icon: <I.search size={17} />, onSelect: () => setSearch(true) },
       { label: "Read from the file's tags", icon: <I.note size={17} />, onSelect: () => void L().then((m) => m.lyricsFromTrackFile(track)) },
       { label: "Attach a .lrc file", icon: <I.upload size={17} />, onSelect: () => file.current?.click() },
+      { label: track.lyrics ? "Sync by tapping along" : "Write lyrics & tap them into time", icon: <I.lyrics size={17} />, onSelect: () => useStore.setState({ lyricSync: true }) },
+      ...(track.lyrics && track.lyricsTimed !== false ? [{
+        label: `Timing${off ? ` (${off > 0 ? "+" : ""}${off.toFixed(2)}s)` : ""}`, icon: <I.clock size={17} />, subTitle: "Nudge this track's lyrics",
+        sub: [
+          { label: "Lyrics are early — show later (+0.25s)", keep: true, onSelect: () => nudge(0.25) },
+          { label: "Lyrics are late — show sooner (−0.25s)", keep: true, onSelect: () => nudge(-0.25) },
+          { label: "Reset timing", onSelect: () => useStore.getState().updateTrack(track.id, { lyricOffset: 0 }) },
+        ],
+      } as MenuItem] : []),
+      ...(track.lyrics ? [{ label: "Share this line as an image", icon: <I.sparkle size={17} />, onSelect: () => void import("./Extras").then((m) => m.shareLyricCard()) }] : []),
       ...(aiReady ? [{ label: "Transcribe from the audio", icon: <I.sparkle size={17} />, onSelect: () => void L().then((m) => m.transcribeTrack(track)) }] : []),
       ...(track.lyrics ? [{ label: "Clear lyrics", icon: <I.trash size={17} />, danger: true, onSelect: () => void L().then((m) => m.clearLyrics(track)) }] : []),
     ];
-  }, 260);
+  }, 300);
   if (!track) return null;
   return (
     <>

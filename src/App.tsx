@@ -20,6 +20,7 @@ import { Studio } from "./ui/Studio";
 import { Sound, Settings } from "./ui/Panels";
 import { Aura, Dock, DropOverlay, FluxMark, Rail, StageButton, TabBar, Toasts, VIEW_ORDER, YouTubeHost } from "./ui/Chrome";
 import { Intro, StageView } from "./ui/Stage";
+import { CommandPalette, LyricSync } from "./ui/Extras";
 import { I } from "./ui/icons";
 import { ShortcutsPanel } from "./components/ShortcutsPanel";
 import { AiBusyChip } from "./components/ai/AiBits";
@@ -202,6 +203,8 @@ export default function App() {
           {aiReady && !open && <CopilotFab />}
           {aiReady && <CopilotPanel />}
           <AiBusyChip />
+          <LyricSync />
+          <CommandPalette />
           <Intro onDone={onIntroDone} />
         </div>
       </LayoutGroup>
