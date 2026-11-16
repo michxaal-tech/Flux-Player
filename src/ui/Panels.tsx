@@ -36,7 +36,6 @@ function Swap({ k, dir, children }: { k: string; dir: number; children: ReactNod
         variants={{ in: (d: number) => ({ opacity: 0, x: d * 40 }), at: { opacity: 1, x: 0 }, out: (d: number) => ({ opacity: 0, x: d * -40, transition: { duration: 0.16 } }) }}
         initial="in" animate="at" exit="out"
         transition={{ duration: 0.4, ease: ease.out }}
-        className="instrument"
       >{children}</motion.div>
     </AnimatePresence>
   );
@@ -56,7 +55,7 @@ export function Sound() {
       <Swap k={tab} dir={dir}>
         {tab === "fx" && <FXRackTab />}
         {tab === "deck" && <DJTab />}
-        {tab === "revoice" && <Revoice />}
+        {tab === "revoice" && <div className="instrument"><Revoice /></div>}
       </Swap>
     </div>
   );
@@ -76,7 +75,7 @@ export function Settings() {
       />
       {tab === "general" && (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: ease.out }} style={{ display: "grid", gap: 16, marginBottom: 18 }}>
-          <div style={{ display: "grid", gap: 14, padding: 20, borderRadius: 22, background: "var(--surface)", border: "1px solid var(--line)" }}>
+          <div className="card" style={{ display: "grid", gap: 18 }}>
             <Row label="Analyse tracks for exact beats" hint="Decodes each local track once, on this device, to find its beat grid, sections and drops. The stage and tempo readout use it; without it they rely on listening live, which is less certain.">
               <Switch label="Analyse tracks" on={analyzed} onChange={(v) => useStore.setState({ analyzedMode: v })} />
             </Row>
@@ -93,7 +92,7 @@ export function Settings() {
         </motion.div>
       )}
       <Swap k={tab} dir={tab === "general" ? -1 : 1}>
-        {tab === "general" ? <MeTab /> : <ConnectionsPanel />}
+        {tab === "general" ? <MeTab /> : <div className="instrument"><ConnectionsPanel /></div>}
       </Swap>
     </div>
   );

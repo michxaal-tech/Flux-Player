@@ -2,7 +2,7 @@
 // per-track analysis timeline, artwork loading, and the interface accent.
 import { useStore, getCurrentTrack } from "../store/useStore";
 import { clock } from "./clock";
-import { setAnalysis } from "./signals";
+import { setAnalysis, updateSignals } from "./signals";
 import { artNow, dropAllArt, loadArt, onArt, hexToRgb } from "./art";
 
 let wired = false;
@@ -11,6 +11,16 @@ export function wireRuntime(): void {
   if (wired) return;
   wired = true;
   clock.wire();
+  // The one per-frame tick for the clock and the music signals. It belongs to
+  // the app, not to the stage: lyrics, the scrubber and the meters all read
+  // these whether or not a visualizer is drawing. Registered before anything
+  // else asks for a frame, so every consumer sees this frame's values.
+  const tick = (now: number) => { requestAnimationFrame(tick); updateSignals(now); };
+  requestAnimationFrame(tick);
+  // the desktop shell says which OS it is, so the layout can make room for
+  // the Mac traffic lights
+  const plat = (window as unknown as { __fluxPlatform?: string }).__fluxPlatform;
+  if (plat) document.documentElement.dataset.platform = plat;
 
   // ── analysis timeline for the playing track ──
   const wantAnalysis = () => {

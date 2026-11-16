@@ -7,7 +7,8 @@
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win --publish never"
+    "dist": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -41,6 +42,26 @@
     },
     "portable": {
       "artifactName": "FLUX-Player-${version}-portable.${ext}"
+    },
+    "mac": {
+      "category": "public.app-category.music",
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "identity": "-",
+      "darkModeSupport": true,
+      "artifactName": "Flux-${version}-mac-${arch}.${ext}"
+    },
+    "dmg": {
+      "title": "Flux",
+      "artifactName": "Flux-${version}-mac-${arch}.${ext}"
     }
   }
 }

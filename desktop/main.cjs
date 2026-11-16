@@ -41,8 +41,14 @@ function createWindow() {
     height: 1000,
     minWidth: 900,
     minHeight: 600,
-    backgroundColor: "#08090D",
+    backgroundColor: "#09090b",
     autoHideMenuBar: true,
+    // On macOS the window has no title bar of its own: the traffic lights sit
+    // over the app's rail and the top edge of the interface is the drag area
+    // (see .mac-drag in styles.css), the way a native Mac app is laid out.
+    ...(process.platform === "darwin"
+      ? { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 18, y: 18 } }
+      : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,

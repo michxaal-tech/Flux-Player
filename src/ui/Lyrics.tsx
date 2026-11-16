@@ -244,7 +244,7 @@ function TimedLyrics({ lines, variant }: { lines: LyricLineData[]; variant: "pan
   };
   const touchY = useRef<number | null>(null);
 
-  const size = (stage ? 46 : 30) * prefs.size;
+  const size = (stage ? 46 : 36) * prefs.size;
   const center = prefs.align === "center" || stage;
   return (
     <div

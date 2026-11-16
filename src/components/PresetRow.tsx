@@ -1,7 +1,11 @@
-import { BORDER, MAG, PRESETS } from "../constants";
+import { PRESETS } from "../constants";
 import { useStore } from "../store/useStore";
-import { chip } from "./ui";
+import { Chip } from "../ui/kit";
+import { I } from "../ui/icons";
 
+const nice = (n: string) => n.toLowerCase().replace(/(^|[\s+'])\S/g, (c) => c.toUpperCase());
+
+/** Sound presets: the built-in ones, the user's own, save and randomise. */
 export function PresetRow() {
   const activePreset = useStore((s) => s.activePreset);
   const userPresets = useStore((s) => s.userPresets);
@@ -11,25 +15,19 @@ export function PresetRow() {
   const chaos = useStore((s) => s.chaos);
 
   return (
-    <div className="hscroll" style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 8 }}>
-      <button onClick={saveUserPreset} style={chip(false, MAG)}>＋ SAVE FX</button>
+    <div className="hscroll" style={{ display: "flex", gap: 8, paddingBottom: 2, alignItems: "center" }}>
+      {PRESETS.map((p) => (
+        <Chip key={p.name} on={activePreset === p.name} onClick={() => applyPreset(p)}>{nice(p.name)}</Chip>
+      ))}
       {userPresets.map((p, i) => (
-        <span key={p.name} style={{ position: "relative", flexShrink: 0 }}>
-          <button onClick={() => applyPreset(p)} style={chip(activePreset === p.name, MAG)}>★ {p.name}</button>
-          <span
-            onClick={() => deleteUserPreset(i)}
-            style={{
-              position: "absolute", top: -5, right: -4, width: 15, height: 15, borderRadius: "50%",
-              background: "#222", border: BORDER, fontSize: 8, display: "flex", alignItems: "center",
-              justifyContent: "center", cursor: "pointer",
-            }}
-          >✕</span>
+        <span key={p.name} style={{ display: "inline-flex", flexShrink: 0, alignItems: "center" }}>
+          <Chip on={activePreset === p.name} onClick={() => applyPreset(p)}>★ {nice(p.name)}</Chip>
+          <button className="icon-btn" aria-label={`Delete preset ${p.name}`} onClick={() => deleteUserPreset(i)} style={{ width: 26, height: 26, marginLeft: -2 }}><I.close size={13} /></button>
         </span>
       ))}
-      {PRESETS.map((p) => (
-        <button key={p.name} onClick={() => applyPreset(p)} style={chip(activePreset === p.name)}>{p.name}</button>
-      ))}
-      <button onClick={chaos} style={chip(activePreset === "??", MAG)}>🎲 CHAOS</button>
+      <span style={{ width: 1, height: 20, background: "var(--line-2)", flexShrink: 0 }} />
+      <Chip onClick={saveUserPreset} title="Save the current settings as a preset">+ Save FX</Chip>
+      <Chip on={activePreset === "??"} onClick={chaos} title="Randomise everything">Chaos</Chip>
     </div>
   );
 }

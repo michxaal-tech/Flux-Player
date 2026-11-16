@@ -105,7 +105,7 @@ await page.goto(BASE, { waitUntil: "networkidle" });
 await step("the YouTube source exists and opens", async () => {
   await go("search");
   await tap("button[role=radio]:has-text('YouTube')");
-  await page.waitForSelector("text=▶ YOUTUBE", { timeout: 5000 });
+  await page.waitForSelector(".card-title:has-text(\"YouTube\")", { timeout: 5000 });
 });
 
 await step("the sample-access limitation is disclosed before anything is queued", async () => {

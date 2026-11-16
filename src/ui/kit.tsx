@@ -455,3 +455,107 @@ export function ViewTitle({ eyebrow, title, right }: { eyebrow?: string; title: 
     </header>
   );
 }
+
+// ── Knob ──────────────────────────────────────────────────────────────────
+// A rotary control for the sound tools. Drag up/down (Shift for fine), scroll,
+// arrow keys, double-click to reset. The arc follows the hand exactly while
+// dragging and springs when the value changes from elsewhere (a preset).
+export function Knob({
+  label, value, min, max, step = 0.01, onChange, format, center, reset, size = 68,
+}: {
+  label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void;
+  format: (v: number) => string; center?: number; reset?: number; size?: number;
+}) {
+  const [drag, setDrag] = useState(false);
+  const start = useRef({ y: 0, v: 0 });
+  const clampV = (v: number) => Math.min(max, Math.max(min, Math.round(v / step) * step));
+  const frac = (Math.min(max, Math.max(min, value)) - min) / (max - min);
+  const c0 = center !== undefined ? (center - min) / (max - min) : 0;
+  const R = 26, C = 2 * Math.PI * R, SWEEP = 0.75;
+  const lo = Math.min(c0, frac), hi = Math.max(c0, frac);
+  const angle = -135 + frac * 270;
+  const active = Math.abs(frac - c0) > 0.004;
+  const ease = drag ? "none" : "stroke-dasharray var(--t3) var(--ease-out), stroke-dashoffset var(--t3) var(--ease-out), transform var(--t3) var(--ease-spring)";
+  return (
+    <div style={{ display: "grid", justifyItems: "center", gap: 6, width: size + 16, userSelect: "none" }}>
+      <div
+        role="slider"
+        tabIndex={0}
+        aria-label={label}
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={+value.toFixed(3)}
+        aria-valuetext={format(value)}
+        onPointerDown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); start.current = { y: e.clientY, v: value }; setDrag(true); }}
+        onPointerMove={(e) => { if (drag) onChange(clampV(start.current.v + ((start.current.y - e.clientY) / (e.shiftKey ? 900 : 180)) * (max - min))); }}
+        onPointerUp={() => setDrag(false)}
+        onPointerCancel={() => setDrag(false)}
+        onDoubleClick={() => onChange(reset ?? center ?? min)}
+        onWheel={(e) => onChange(clampV(value - Math.sign(e.deltaY) * step * (e.shiftKey ? 1 : 4)))}
+        onKeyDown={(e) => {
+          const d = e.key === "ArrowUp" || e.key === "ArrowRight" ? 1 : e.key === "ArrowDown" || e.key === "ArrowLeft" ? -1 : 0;
+          if (!d) return;
+          e.preventDefault();
+          onChange(clampV(value + d * step * (e.shiftKey ? 10 : 1)));
+        }}
+        style={{ position: "relative", width: size, height: size, cursor: "ns-resize", touchAction: "none", borderRadius: "50%" }}
+      >
+        <svg width={size} height={size} viewBox="0 0 68 68" style={{ display: "block", transform: "rotate(135deg)" }}>
+          <circle cx="34" cy="34" r={R} fill="none" stroke="var(--surface-3)" strokeWidth="4" strokeLinecap="round" strokeDasharray={`${C * SWEEP} ${C}`} />
+          <circle
+            cx="34" cy="34" r={R} fill="none" stroke="var(--accent)" strokeWidth="4" strokeLinecap="round"
+            strokeDasharray={`${Math.max(0.01, C * SWEEP * (hi - lo))} ${C}`} strokeDashoffset={-C * SWEEP * lo}
+            style={{ transition: ease, opacity: active ? 1 : 0 }}
+          />
+        </svg>
+        <div
+          style={{
+            position: "absolute", inset: 11, borderRadius: "50%", transform: `rotate(${angle}deg) scale(${drag ? 0.96 : 1})`, transition: ease,
+            background: "linear-gradient(160deg, var(--surface-3), var(--surface))", border: "1px solid var(--line-2)",
+            boxShadow: "0 6px 14px -6px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.12)",
+          }}
+        >
+          <span style={{ position: "absolute", left: "50%", top: 5, width: 3, height: 9, marginLeft: -1.5, borderRadius: 3, background: active ? "var(--accent)" : "var(--text-2)", transition: "background-color var(--t2)" }} />
+        </div>
+      </div>
+      <div style={{ textAlign: "center", lineHeight: 1.2 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600 }}>{label}</div>
+        <div className="mono" style={{ fontSize: 11, color: active ? "var(--accent)" : "var(--text-3)", transition: "color var(--t2)" }}>{format(value)}</div>
+      </div>
+    </div>
+  );
+}
+
+/** A titled card used by the tool views. */
+export function Card({ title, hint, right, children, style }: { title?: ReactNode; hint?: ReactNode; right?: ReactNode; children: ReactNode; style?: CSSProperties }) {
+  return (
+    <section className="card" style={style}>
+      {(title || right) && (
+        <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: hint ? 4 : 16 }}>
+          <div className="card-title">{title}</div>
+          {right}
+        </header>
+      )}
+      {hint && <div className="faint" style={{ fontSize: 13, marginBottom: 16, lineHeight: 1.45 }}>{hint}</div>}
+      {children}
+    </section>
+  );
+}
+
+/** Pill chip: a choice among several, or a small action. */
+export function Chip({ on, onClick, children, title, tone }: { on?: boolean; onClick?: () => void; children: ReactNode; title?: string; tone?: "danger" }) {
+  return (
+    <motion.button
+      whileTap={{ scale: 0.94 }}
+      transition={spring.pop}
+      onClick={onClick}
+      title={title}
+      aria-pressed={on}
+      style={{
+        height: 34, padding: "0 14px", borderRadius: 999, fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0,
+        background: on ? "var(--accent)" : "var(--surface-2)", color: on ? "var(--on-accent)" : tone === "danger" ? "var(--danger)" : "var(--text)",
+        border: `1px solid ${on ? "transparent" : "var(--line)"}`, transition: "background-color var(--t2), color var(--t2)",
+      }}
+    >{children}</motion.button>
+  );
+}

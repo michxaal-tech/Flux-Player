@@ -21,13 +21,16 @@
     "taglyrics": "node --experimental-strip-types scripts/taglyrics-check.mjs",
     "taglyrics:e2e": "node scripts/taglyrics-e2e.mjs",
     "youtube": "node scripts/youtube-check.mjs",
-    "sync": "node scripts/sync-check.mjs"
+    "sync": "node scripts/sync-check.mjs",
+    "ios:sync": "npm run build && npx cap sync ios",
+    "ios:open": "npx cap open ios"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
     "@capacitor/android": "^6.2.1",
     "@capacitor/app": "^6.0.3",
     "@capacitor/core": "^6.2.1",
+    "@capacitor/ios": "6.2.1",
     "@capacitor/status-bar": "^6.0.3",
     "@fontsource-variable/bricolage-grotesque": "5.3.0",
     "@fontsource-variable/instrument-sans": "5.3.0",

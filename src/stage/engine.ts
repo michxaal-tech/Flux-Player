@@ -9,7 +9,7 @@
 // Interface motion and music motion are kept apart on purpose: nothing in this
 // file touches the DOM interface, and nothing in the interface waits for it.
 import { useStore, getCurrentTrack } from "../store/useStore";
-import { sig, updateSignals, smoothstep, setSensitivity } from "../flux/signals";
+import { sig, smoothstep } from "../flux/signals";
 import { artNow, hexToRgb, rgbToHsl, hsl } from "../flux/art";
 import { paletteById, type Look } from "../flux/look";
 import { lineAt } from "../flux/lyricTime";
@@ -328,8 +328,6 @@ class Stage {
     const dt = this.lastFrame ? Math.min(0.1, (now - this.lastFrame) / 1000) : 1 / 60;
     this.lastFrame = now;
     const s = useStore.getState();
-    setSensitivity(1);
-    updateSignals(now);
     const look = s.look;
     this.updatePalette(dt, look);
 

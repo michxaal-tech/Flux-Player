@@ -40,6 +40,30 @@ for the visualizer, and controls and text never move with the music. **Studio �
 Motion** offers Full / Calm / Minimal interface motion (Minimal also follows the
 system reduced-motion setting), independent of the stage's own intensity.
 
+## Platforms
+
+| Platform | How | 
+| --- | --- |
+| Web / PWA | `npm run build`, host `dist/` anywhere (installable, works offline) |
+| macOS app | **Desktop build (macOS)** workflow → `.dmg` for Apple Silicon and Intel on the `desktop-latest` release. Native window chrome: no title bar, traffic lights over the rail. By hand, on a Mac: `npm run build && mkdir -p desktop/app && cp -R dist/* desktop/app/ && cd desktop && npm install && npm run dist:mac` |
+| Windows app | **Desktop build (Windows)** workflow → installer + portable `.exe` |
+| iPhone / iPad (Xcode) | `ios/` is a Capacitor Xcode project. On a Mac: `npm install && npm run ios:sync && npm run ios:open`, pick your team under Signing, run on a device. Background audio is enabled. The same project can target the Mac from Xcode (Designed for iPad / Mac Catalyst). |
+| Android | **Android build (APK)** workflow |
+
+The Mac build is ad-hoc signed, not notarised (that needs an Apple Developer
+ID — see the notes at the bottom of `.github/workflows/mac.yml`). First launch:
+right-click the app → Open.
+
+## Visualizers
+
+The stage (`src/stage/`) is a self-contained module behind a small interface,
+and is being redesigned from scratch. [`docs/VISUALIZER_BRIEF.md`](docs/VISUALIZER_BRIEF.md)
+is the complete brief: what it owns, what it is given each frame, and the
+rules it has to keep (honest beat tracking, performance, offline). Outside the
+immersive stage and the Studio preview, the interface is lit by the **aura** —
+soft colour taken from the playing record — so it never depends on which
+visualizer is installed.
+
 ## Run it
 
 ```bash

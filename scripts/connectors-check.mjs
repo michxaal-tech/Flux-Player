@@ -78,7 +78,7 @@ const tap = async (sel, timeout = 8000) => {
 const openConnections = async () => {
   await go("settings");
   await tap("button[role=radio]:has-text('Sources')");
-  await page.waitForSelector("text=🔌 CONNECTIONS");
+  await page.waitForSelector(".card-title:has-text(\"Connections\")");
 };
 
 let failed = 0;

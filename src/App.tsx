@@ -18,7 +18,7 @@ import { Library } from "./ui/Library";
 import { Search } from "./ui/Search";
 import { Studio } from "./ui/Studio";
 import { Sound, Settings } from "./ui/Panels";
-import { Dock, DropOverlay, FluxMark, Rail, StageButton, TabBar, Toasts, VIEW_ORDER, YouTubeHost } from "./ui/Chrome";
+import { Aura, Dock, DropOverlay, FluxMark, Rail, StageButton, TabBar, Toasts, VIEW_ORDER, YouTubeHost } from "./ui/Chrome";
 import { Intro, StageView } from "./ui/Stage";
 import { I } from "./ui/icons";
 import { ShortcutsPanel } from "./components/ShortcutsPanel";
@@ -38,19 +38,20 @@ function useWide(): boolean {
   return wide;
 }
 
-/** How visible and how calm the stage is, per view. */
-function usePresence(wide: boolean) {
+/**
+ * The stage (the visualizer) draws only where it is the subject: in the
+ * immersive stage, and as the live preview in Studio. Everywhere else the room
+ * is lit by the aura — colour taken from the playing record — so the interface
+ * never depends on which visualizer is running.
+ */
+function usePresence() {
   const view = useStore((s) => s.view);
   const open = useStore((s) => s.stage);
-  const ui = useStore((s) => s.ui);
   useEffect(() => {
-    const paper = ui.theme === "paper" ? 1 : 0;
-    const b = ui.backdrop;
     if (open) stage.setPresence({ show: true, calm: 0, dim: 1, paper: 0 });
     else if (view === "studio") stage.setPresence({ show: true, calm: 0.15, dim: 1, paper: 0 });
-    else if (view === "listen") stage.setPresence({ show: b > 0.01, calm: 0.75, dim: b * 0.85, paper });
-    else stage.setPresence({ show: b > 0.01, calm: 1, dim: b * 0.42, paper });
-  }, [view, open, ui.theme, ui.backdrop, wide]);
+    else stage.setPresence({ show: false, calm: 1, dim: 0, paper: 0 });
+  }, [view, open]);
 }
 
 const depthOf = (v: ViewId) => (v === "listen" ? 0 : 1);
@@ -69,7 +70,7 @@ export default function App() {
 
   useKeyboard();
   useMediaSession();
-  usePresence(wide);
+  usePresence();
 
   useEffect(() => {
     if (canvas.current) stage.attach(canvas.current);
@@ -105,13 +106,14 @@ export default function App() {
     <MotionConfig reducedMotion={reduce} transition={motionPref === "calm" ? { duration: 0.25 } : undefined}>
       <LayoutGroup>
         <div style={{ position: "fixed", inset: 0, background: "var(--bg)", overflow: "hidden" }}>
-          <canvas ref={canvas} aria-hidden style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
-          {/* a soft vignette of the page colour over the stage, so text never sits on a bright patch */}
-          <motion.div
+          {(window as unknown as { __fluxPlatform?: string }).__fluxPlatform === "darwin" && <div className="mac-drag" />}
+          <Aura hidden={open || view === "studio"} />
+          <motion.canvas
+            ref={canvas}
             aria-hidden
-            animate={{ opacity: open ? 0 : view === "studio" ? 0 : 1 }}
-            transition={{ duration: 0.6, ease: ease.out }}
-            style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(120% 90% at 30% 40%, rgb(var(--scrim) / 0.15), rgb(var(--scrim) / 0.6))" }}
+            animate={{ opacity: open || view === "studio" ? 1 : 0 }}
+            transition={{ duration: 0.7, ease: ease.out }}
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }}
           />
 
           <motion.div

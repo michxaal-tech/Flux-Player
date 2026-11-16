@@ -5,6 +5,8 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("__fluxDesktop", true);
+// lets the page lay itself out around the Mac traffic lights
+contextBridge.exposeInMainWorld("__fluxPlatform", process.platform);
 
 // Rich Presence: the page describes what is playing, the main process does the
 // talking. Deliberately one-way — the page has nothing to learn from Discord,

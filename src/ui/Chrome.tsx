@@ -8,12 +8,53 @@ import { artistOf, getCurrentTrack, useStore } from "../store/useStore";
 import { addFiles } from "../audio/transport";
 import { ensurePlayer, isYouTube } from "../youtube";
 import type { ViewId } from "../types";
-import { Artwork } from "./Artwork";
+import { Artwork, useArt } from "./Artwork";
+import { sig } from "../flux/signals";
+import { hexToRgb, hsl, rgbToHsl } from "../flux/art";
 import { FluxLine } from "./FluxLine";
 import { LikeButton, Transport, Volume } from "./Transport";
 import { I } from "./icons";
 import { Loader } from "./kit";
 import { ease, spring } from "./motion";
+
+// ── the aura ───────────────────────────────────────────────────────────────
+/**
+ * Four soft fields of colour from the playing record's palette, drifting very
+ * slowly behind the interface. Colours glide when the track changes; the whole
+ * thing brightens a touch with the music's level (one CSS variable, written
+ * per frame), and it costs four composited layers — no canvas, no shader.
+ */
+export function Aura({ hidden }: { hidden: boolean }) {
+  const track = useStore((s) => getCurrentTrack(s));
+  const strength = useStore((s) => s.ui.backdrop);
+  const art = useArt(track);
+  const ref = useRef<HTMLDivElement>(null);
+  const want = useRef(0);
+  want.current = hidden ? 0 : strength;
+  useEffect(() => {
+    let raf = 0, v = 0, cur = 0;
+    const loop = () => {
+      raf = requestAnimationFrame(loop);
+      v += ((sig.playing ? sig.level : 0) - v) * 0.04;
+      const paper = document.documentElement.dataset.theme === "paper" ? 0.5 : 1;
+      cur += (want.current * (0.82 + v * 0.3) * paper - cur) * 0.07;
+      if (ref.current) ref.current.style.opacity = cur.toFixed(3);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  // vivid tones only: dark palette steps turn to mud when blurred this wide
+  const [h, sat] = rgbToHsl(...hexToRgb(art.accent));
+  const grey = sat < 15;
+  const tones = grey
+    ? ["#8d8d96", "#5b5f6e", "#77706a", "#4a4d57"]
+    : [hsl(h, 78, 52), hsl(h + 38, 70, 48), hsl(h - 34, 72, 44), art.accent2];
+  return (
+    <div ref={ref} className="aura" aria-hidden style={{ opacity: 0 }}>
+      {tones.map((c, i) => <i key={i} style={{ color: c }} />)}
+    </div>
+  );
+}
 
 // ── the mark ───────────────────────────────────────────────────────────────
 /** A record seen edge-on, crossed by a waveform. `draw` animates the strokes in. */
@@ -55,7 +96,7 @@ function NavButton({ id, label, icon, on, vertical }: { id: ViewId; label: strin
         <motion.span
           layoutId={vertical ? "rail-pill" : "tab-pill"}
           transition={spring.slide}
-          style={{ position: "absolute", inset: vertical ? "4px 6px" : "2px 14%", borderRadius: 16, background: "rgb(var(--accent-rgb) / 0.14)" }}
+          style={{ position: "absolute", inset: vertical ? "2px 4px" : "2px 14%", borderRadius: 18, background: "rgb(var(--accent-rgb) / 0.16)" }}
         />
       )}
       <motion.span animate={{ y: on ? -1 : 0, scale: on ? 1.06 : 1 }} transition={spring.pop} style={{ position: "relative", display: "grid", color: on ? "var(--accent)" : undefined }}>{icon}</motion.span>
@@ -68,7 +109,14 @@ export function Rail() {
   const view = useStore((s) => s.view);
   const stage = useStore((s) => s.stage);
   return (
-    <nav aria-label="Main" style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "22px 0 18px", gap: 6, height: "100%", position: "relative", zIndex: 3 }}>
+    <nav
+      aria-label="Main"
+      style={{
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 4, position: "relative", zIndex: 4,
+        margin: "12px 0 12px 12px", height: "calc(100% - 24px)", padding: "calc(18px + var(--mac-top, 0px)) 0 12px",
+        borderRadius: 28, background: "rgb(var(--scrim) / 0.55)", border: "1px solid var(--line)",
+      }}
+    >
       <motion.div layoutId="flux-mark" transition={spring.soft} style={{ marginBottom: 22, color: "var(--text)" }}>
         <FluxMark size={34} />
       </motion.div>

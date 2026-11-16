@@ -142,6 +142,8 @@ await step("stage opens, modes switch, Escape leaves", async () => {
 });
 
 await step("every mode renders without error", async () => {
+  // the stage only draws where it is the subject (the stage itself, Studio)
+  await S(() => window.__fluxStore.setState({ stage: true }));
   for (const m of ["veil", "ink", "caustic", "orbit", "signal", "ridge", "words"]) {
     await S((m) => window.__fluxStore.getState().setLook("style", { mode: m }), m);
     await page.waitForFunction((m) => window.__fluxStage.mode === m, m, { timeout: 5000 });
@@ -149,6 +151,7 @@ await step("every mode renders without error", async () => {
   }
   const err = await S(() => window.__fluxStage.error);
   if (err) throw new Error(err);
+  await S(() => window.__fluxStore.setState({ stage: false }));
 });
 
 await step("Studio: apply, save, rename, duplicate and delete a look", async () => {

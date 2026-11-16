@@ -1,0 +1,83 @@
+name: Desktop build (macOS)
+
+# Run by hand from the Actions tab. Same web build, same Electron shell as the
+# Windows workflow, packaged as a .dmg for Apple Silicon and for Intel and
+# attached to the `desktop-latest` release.
+#
+# The app is ad-hoc signed, not notarised: notarising needs a paid Apple
+# Developer ID, which is yours to add (see the notes at the bottom). Until
+# then macOS asks once on first launch — right-click the app → Open.
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Attach the .dmg files to the desktop-latest release"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build the web app
+        run: |
+          npm ci
+          npm run build
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+      - name: Stage the build into the shell
+        run: |
+          mkdir -p desktop/app
+          cp -R dist/* desktop/app/
+
+      - name: Install the shell's dependencies
+        working-directory: desktop
+        run: npm install
+
+      # Same reason as on Windows: packaging succeeding says nothing about
+      # whether the window loads.
+      - name: Check it actually launches
+        working-directory: desktop
+        run: npx electron launch-check.cjs
+
+      - name: Package
+        working-directory: desktop
+        run: npx electron-builder --mac --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Check the package has everything it requires
+        working-directory: desktop
+        run: node pack-check.cjs "out/mac-arm64/FLUX Player.app/Contents/Resources/app.asar"
+
+      - name: Publish to the desktop-latest release
+        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls desktop/out/*.dmg
+          if gh release view desktop-latest >/dev/null 2>&1; then
+            gh release upload desktop-latest desktop/out/*.dmg --clobber
+          else
+            gh release create desktop-latest desktop/out/*.dmg \
+              --target "$GITHUB_SHA" \
+              --title "Flux — desktop" \
+              --notes "Desktop builds of Flux."
+          fi
+
+# To ship a notarised build (no first-launch warning): add repository secrets
+# CSC_LINK (base64 of your Developer ID Application .p12), CSC_KEY_PASSWORD,
+# APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID, pass them as env to
+# the Package step, remove CSC_IDENTITY_AUTO_DISCOVERY and the "identity": "-"
+# line in desktop/package.json, and add "notarize": true under "mac".

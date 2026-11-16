@@ -15,18 +15,18 @@
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
 
   /* ink (default) */
-  --bg: #0f0d0b;
-  --bg-raise: #17140f;
-  --bg-sunk: #0a0908;
-  --surface: rgba(255, 246, 232, 0.045);
-  --surface-2: rgba(255, 246, 232, 0.08);
-  --surface-3: rgba(255, 246, 232, 0.13);
-  --line: rgba(255, 242, 224, 0.1);
-  --line-2: rgba(255, 242, 224, 0.18);
-  --text: #f4eee4;
-  --text-2: rgba(244, 238, 228, 0.68);
-  --text-3: rgba(244, 238, 228, 0.44);
-  --scrim: 15 13 11;
+  --bg: #09090b;
+  --bg-raise: #141417;
+  --bg-sunk: #050506;
+  --surface: rgba(255, 255, 255, 0.05);
+  --surface-2: rgba(255, 255, 255, 0.085);
+  --surface-3: rgba(255, 255, 255, 0.14);
+  --line: rgba(255, 255, 255, 0.09);
+  --line-2: rgba(255, 255, 255, 0.17);
+  --text: #f6f6f7;
+  --text-2: rgba(246, 246, 247, 0.66);
+  --text-3: rgba(246, 246, 247, 0.42);
+  --scrim: 9 9 11;
   --shadow: 0 1px 0 rgba(255, 245, 230, 0.05) inset, 0 18px 50px -18px rgba(0, 0, 0, 0.75);
   --shadow-lg: 0 40px 90px -30px rgba(0, 0, 0, 0.85), 0 12px 30px -12px rgba(0, 0, 0, 0.6);
   --danger: #ff6b57;
@@ -40,9 +40,9 @@
 
   /* instrument panels (FX rack, deck, sources, settings) stay dark in every
      theme — they read as a piece of hardware set into the page */
-  --panel-bg: #12100d;
-  --panel-card: rgba(255, 246, 232, 0.045);
-  --panel-line: rgba(255, 242, 224, 0.1);
+  --panel-bg: transparent;
+  --panel-card: var(--surface);
+  --panel-line: var(--line);
 
   /* motion */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -55,14 +55,14 @@
   --t4: 620ms;
 
   --radius: 14px;
-  --radius-lg: 22px;
-  --rail: 84px;
+  --radius-lg: 24px;
+  --rail: 92px;
   --dock-h: 76px;
   color-scheme: dark;
 }
 
 :root[data-theme="night"] {
-  --bg: #080a10;
+  --bg: #070a12;
   --bg-raise: #0f131c;
   --bg-sunk: #05070b;
   --surface: rgba(220, 232, 255, 0.045);
@@ -205,29 +205,53 @@ img { display: block; }
 
 .hairline { height: 1px; background: var(--line); border: 0; margin: 0; }
 
-/* ── instrument panels (legacy feature panels, re-skinned) ─────────────── */
-.instrument {
-  --text: #f4eee4;
-  color: #f4eee4;
-  background: var(--panel-bg);
+/* ── cards and tool panels ─────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  padding: 18px;
-  box-shadow: var(--shadow-lg);
-  font-family: var(--font-ui);
+  padding: 20px;
 }
+.card-title { font-family: var(--font-display); font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
+.instrument { font-family: var(--font-ui); display: grid; gap: 14px; }
 .instrument input[type="range"] { width: 100%; accent-color: var(--accent); height: 22px; }
-.instrument .glass { box-shadow: none; }
+.instrument input:not([type="range"]):not([type="checkbox"]), .instrument textarea, .instrument select {
+  background: var(--surface) !important; border: 1px solid var(--line) !important; color: var(--text) !important;
+  border-radius: 12px !important; font-family: var(--font-ui) !important; font-size: 14px !important; padding: 10px 14px !important;
+  transition: border-color var(--t2);
+}
+.instrument input:focus, .instrument textarea:focus { border-color: rgb(var(--accent-rgb) / 0.7) !important; }
 .instrument .stagger > * { animation: rise var(--t4) var(--ease-out) both; }
 .instrument .stagger > *:nth-child(2) { animation-delay: 30ms; }
 .instrument .stagger > *:nth-child(3) { animation-delay: 60ms; }
 .instrument .stagger > *:nth-child(4) { animation-delay: 90ms; }
-.instrument .stagger > *:nth-child(5) { animation-delay: 120ms; }
-.instrument .stagger > *:nth-child(n + 6) { animation-delay: 150ms; }
+.instrument .stagger > *:nth-child(n + 5) { animation-delay: 120ms; }
 .instrument .pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; align-items: start; }
 .instrument .dropin, .instrument .overlayIn { animation: rise var(--t3) var(--ease-out) both; }
-.instrument .liftable { transition: transform var(--t2) var(--ease-out), background var(--t2); }
 .instrument button { transition: transform var(--t2) var(--ease-spring), background-color var(--t2), color var(--t2), border-color var(--t2); }
-.instrument button:active { transform: scale(0.95); transition-duration: 60ms; }
+.instrument button:active { transform: scale(0.96); transition-duration: 60ms; }
+
+/* ── aura: the room's light, taken from the record ────────────────────── */
+.aura { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.aura i {
+  position: absolute; width: 78vmax; height: 78vmax; border-radius: 50%;
+  background: radial-gradient(closest-side, currentColor 0%, transparent 100%);
+  transition: color 1400ms var(--ease-out);
+  will-change: transform;
+}
+.aura i:nth-child(1) { left: -26vmax; top: -38vmax; opacity: 0.42; animation: auraA 46s ease-in-out infinite alternate; }
+.aura i:nth-child(2) { right: -34vmax; top: -30vmax; opacity: 0.3; animation: auraB 58s ease-in-out infinite alternate; }
+.aura i:nth-child(3) { left: 8vmax; bottom: -54vmax; opacity: 0.34; animation: auraC 52s ease-in-out infinite alternate; }
+.aura i:nth-child(4) { right: -20vmax; bottom: -50vmax; opacity: 0.26; animation: auraA 64s ease-in-out infinite alternate-reverse; }
+.aura::after {
+  content: ""; position: absolute; inset: 0; opacity: 0.5; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+}
+@keyframes auraA { to { transform: translate(14vmax, 10vmax) scale(1.18); } }
+@keyframes auraB { to { transform: translate(-16vmax, 12vmax) scale(0.88); } }
+@keyframes auraC { to { transform: translate(10vmax, -12vmax) scale(1.12); } }
+:root[data-motion="minimal"] .aura i { animation: none; }
+@media (prefers-reduced-motion: reduce) { .aura i { animation: none; } }
 
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -313,3 +337,23 @@ img { display: block; }
 .track-row .row-play { opacity: 0; transition: opacity var(--t2) var(--ease-out); }
 .track-row:hover .row-play, .track-row[data-current="true"] .row-play, .track-row button:focus-visible .row-play { opacity: 1; }
 @media (max-width: 640px) { .hide-narrow { display: none !important; } }
+
+/* ── macOS app: the window has no title bar; the top edge drags it ─────── */
+.mac-drag { position: fixed; top: 0; left: 0; right: 0; height: 40px; z-index: 3; -webkit-app-region: drag; }
+:root[data-platform="darwin"] button, :root[data-platform="darwin"] a, :root[data-platform="darwin"] input,
+:root[data-platform="darwin"] [role="slider"], :root[data-platform="darwin"] [role="radio"] { -webkit-app-region: no-drag; }
+:root[data-platform="darwin"] { --mac-top: 34px; }
+
+/* tool panels written before the redesign: lift their tiny caps to the scale */
+.instrument { font-size: 14px; color: var(--text); }
+.instrument [style*="font-size: 8"], .instrument [style*="font-size: 9"], .instrument [style*="font-size: 10"] { font-size: 12px !important; }
+.instrument [style*="font-size: 11"] { font-size: 13px !important; }
+.instrument [style*="letter-spacing"] { letter-spacing: 0.01em !important; }
+.instrument [style*="rgba(255, 255, 255, 0.3"], .instrument [style*="rgba(255, 255, 255, 0.4"], .instrument [style*="rgba(255, 255, 255, 0.5"] { color: var(--text-2) !important; }
+/* …and on the light theme they keep a dark surface of their own */
+:root[data-theme="paper"] .instrument {
+  --text: #f6f6f7; --text-2: rgba(246,246,247,0.66); --text-3: rgba(246,246,247,0.42);
+  --surface: rgba(255,255,255,0.05); --surface-2: rgba(255,255,255,0.085); --surface-3: rgba(255,255,255,0.14);
+  --line: rgba(255,255,255,0.09); --line-2: rgba(255,255,255,0.17);
+  background: #141417; padding: 16px; border-radius: 26px;
+}

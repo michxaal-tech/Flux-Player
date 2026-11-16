@@ -1,81 +1,72 @@
 import type { CSSProperties, ReactNode } from "react";
-import { BG, BORDER, CARD, CYAN, MAG, MONO } from "../constants";
+import { BG, CYAN, MAG } from "../constants";
 import { mix } from "../theme";
+import { Chip, Slider as KitSlider } from "../ui/kit";
+
+// These are the shared atoms of the tool panels (sources, AI, Revoice). They
+// keep their original call signatures and are drawn with the interface kit, so
+// every panel follows the same design without each one being rewritten.
+
+/** "⏱ TIME & PITCH" → "Time & pitch": the old emoji-and-caps titles, set quietly. */
+export const tidy = (t: string) => {
+  const s = t.replace(/^[^\p{L}\p{N}]+/u, "").trim();
+  return s === s.toUpperCase() ? s.charAt(0) + s.slice(1).toLowerCase().replace(/\b(ai|fx|bpm|midi|dj|lrc)\b/g, (m) => m.toUpperCase()) : s;
+};
 
 export function Slider({
-  label, value, min, max, step, format, onChange, color = CYAN,
+  label, value, min, max, step, format, onChange,
 }: {
   label: string; value: number; min: number; max: number; step: number;
   format: (v: number) => string; onChange: (v: number) => void; color?: string;
 }) {
   return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-        <span style={{ fontSize: 11, letterSpacing: "0.1em", color: "rgba(255,255,255,0.55)" }}>{label}</span>
-        <span style={{ fontFamily: MONO, fontSize: 11, color }}>{format(value)}</span>
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
+        <span style={{ fontSize: 13, fontWeight: 560 }}>{tidy(label)}</span>
+        <span className="mono" style={{ fontSize: 11.5, color: "var(--text-3)" }}>{format(value)}</span>
       </div>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(+e.target.value)} />
+      <KitSlider label={label} value={value} min={min} max={max} step={step} onChange={onChange} format={format} />
     </div>
   );
 }
 
 export function Toggle({
-  label, on, onChange, color = CYAN,
+  label, on, onChange,
 }: {
   label: string; on: boolean; onChange: (v: boolean) => void; color?: string;
 }) {
-  return (
-    <button
-      onClick={() => onChange(!on)}
-      style={{
-        padding: "7px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer",
-        background: on ? color : "rgba(255,255,255,0.06)", color: on ? BG : "rgba(255,255,255,0.6)",
-        border: on ? `1px solid ${color}` : BORDER,
-      }}
-    >
-      {label}
-    </button>
-  );
+  return <Chip on={on} onClick={() => onChange(!on)}>{tidy(label)}</Chip>;
 }
 
 export function Module({ title, children, extra }: { title: string; children: ReactNode; extra?: ReactNode }) {
   return (
-    <div className="glass" style={{ background: CARD, border: BORDER, borderRadius: 14, padding: "12px 14px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", color: "rgba(255,255,255,0.85)" }}>{title}</span>
+    <section className="card">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14 }}>
+        <span className="card-title">{tidy(title)}</span>
         {extra}
       </div>
       {children}
-    </div>
+    </section>
   );
 }
 
-/**
- * "NEW" marker for options added in the latest change. Rendered inline inside a
- * chip's label so it rides along with wrapping instead of needing its own slot.
- */
+/** "NEW" marker, rendered inline inside a chip's label. */
 export function NewTag() {
   return (
-    <span
-      style={{
-        marginLeft: 4, padding: "1px 4px", borderRadius: 4,
-        fontSize: 7, fontWeight: 800, letterSpacing: "0.08em",
-        background: MAG, color: "#05060A", verticalAlign: "middle",
-      }}
-    >NEW</span>
+    <span style={{ marginLeft: 6, padding: "1px 6px", borderRadius: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.06em", background: "var(--accent)", color: "var(--on-accent)", verticalAlign: "middle" }}>NEW</span>
   );
 }
 
-export const chip = (active: boolean, color = CYAN): CSSProperties => ({
-  padding: "9px 15px", borderRadius: 999, fontSize: 11.5, fontWeight: 700, letterSpacing: "0.04em",
-  cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
-  background: active ? color : "rgba(255,255,255,0.06)", color: active ? BG : "rgba(255,255,255,0.75)",
-  border: active ? `1px solid ${color}` : BORDER,
+export const chip = (active: boolean, _color?: string): CSSProperties => ({
+  height: 34, padding: "0 14px", borderRadius: 999, fontSize: 13, fontWeight: 600,
+  cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+  background: active ? "var(--accent)" : "var(--surface-2)", color: active ? "var(--on-accent)" : "var(--text)",
+  border: `1px solid ${active ? "transparent" : "var(--line)"}`,
 });
 
-export const bigBtn = (color = CYAN): CSSProperties => ({
-  padding: "16px 10px", borderRadius: 12, fontSize: 13, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer",
-  background: "rgba(255,255,255,0.05)", color, border: `1px solid ${mix(color, 27)}`, textAlign: "center",
+export const bigBtn = (_color?: string): CSSProperties => ({
+  padding: "13px 16px", borderRadius: 14, fontSize: 14, fontWeight: 650, cursor: "pointer",
+  background: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--line)", textAlign: "center",
 });
 
 // crisp SVG transport icons

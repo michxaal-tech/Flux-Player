@@ -110,3 +110,20 @@ for (const [file, size, scale] of [
   writeFileSync(join(outDir, file), encodePng(size, drawIcon(size, scale)));
   console.log(`wrote ${file}`);
 }
+
+// Desktop icon (Windows + macOS): 1024px, the mark on a rounded tile with
+// transparent corners, inset the way macOS app icons are.
+{
+  const size = 1024, px = drawIcon(size, 0.25);
+  const inset = size * 0.1, r = size * 0.18;
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const qx = Math.max(inset + r - x, x - (size - inset - r), 0);
+    const qy = Math.max(inset + r - y, y - (size - inset - r), 0);
+    const outside = x < inset || y < inset || x > size - inset || y > size - inset;
+    const d = Math.hypot(qx, qy) - r;
+    const a = outside ? 0 : Math.max(0, Math.min(1, 0.5 - d));
+    px[(y * size + x) * 4 + 3] = Math.round(a * 255);
+  }
+  writeFileSync(join(outDir, "..", "..", "desktop", "build", "icon.png"), encodePng(size, px));
+  console.log("wrote desktop/build/icon.png");
+}
