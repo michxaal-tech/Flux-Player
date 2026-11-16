@@ -10,13 +10,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useStore, getCurrentTrack, BUILTIN_PRESETS } from "../store/useStore";
-import { DEFAULT_LOOK, DEFAULT_LYRICS, DEFAULT_UI, PALETTES, type Look, type LookPreset } from "../flux/look";
+import { DEFAULT_LOOK, DEFAULT_LYRICS, DEFAULT_UI, LYRIC_ANIMS, PALETTES, type Look, type LookPreset } from "../flux/look";
 import { MODES, modeById } from "../stage/modes";
 import { resolvePalette, stage, stageInfo } from "../stage/engine";
 import { sig } from "../flux/signals";
 import { artNow } from "../flux/art";
 import { I } from "./icons";
-import { Field, Segmented, Slider, Switch, useMenuButton, type MenuItem } from "./kit";
+import { Chip, Field, Segmented, Slider, Switch, useMenuButton, type MenuItem } from "./kit";
 import { ease, spring } from "./motion";
 
 type Sec = "looks" | "style" | "color" | "motion" | "intensity" | "lyrics" | "interface";
@@ -505,6 +505,11 @@ function LyricsSec() {
       </div>
       <Field label="Size"><Slider label="Lyric size" value={p.size} min={0.8} max={1.4} onChange={(v) => set({ size: v })} format={(v) => `${Math.round(v * 100)}%`} /></Field>
       <Field label="Alignment"><Segmented stretch label="Alignment" value={p.align} onChange={(v) => set({ align: v })} options={[{ id: "left", label: "Left" }, { id: "center", label: "Centre" }]} /></Field>
+      <Field label="Line animation" hint="How each line's words arrive when it becomes the one being sung.">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {LYRIC_ANIMS.map((a) => <Chip key={a} on={p.anim === a} onClick={() => set({ anim: a })}>{a.charAt(0).toUpperCase() + a.slice(1)}</Chip>)}
+        </div>
+      </Field>
       <Field label="Active word" hint="Used when the lyrics carry word timing; otherwise the whole line lights.">
         <Segmented stretch label="Highlight" value={p.highlight} onChange={(v) => set({ highlight: v })} options={[{ id: "fill", label: "Fill" }, { id: "glow", label: "Glow" }, { id: "lift", label: "Lift" }]} />
       </Field>

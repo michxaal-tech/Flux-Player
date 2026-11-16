@@ -16,7 +16,7 @@ import { Artwork } from "./Artwork";
 import { KineticText } from "./Kinetic";
 import { FluxLine } from "./FluxLine";
 import { LikeButton, Transport, Volume } from "./Transport";
-import { Lyrics } from "./Lyrics";
+import { Lyrics, LyricTools } from "./Lyrics";
 import { Queue } from "./Queue";
 import { I } from "./icons";
 import { EmptyState, Segmented, useMenuButton, type MenuItem } from "./kit";
@@ -259,7 +259,7 @@ export function NowPlaying({ wide }: { wide: boolean }) {
   }
   const paneEl = (
     <div style={{ display: "grid", gridTemplateRows: "auto 1fr", gap: 14, minHeight: 0, height: "100%" }}>
-      <div style={{ display: "flex", justifyContent: wide ? "flex-start" : "center", alignItems: "center", gap: 14 }}>
+      <div style={{ display: "flex", justifyContent: wide ? "flex-start" : "center", alignItems: "center", gap: 10, position: "relative" }}>
         <Segmented
           size="sm"
           label="Show"
@@ -267,6 +267,7 @@ export function NowPlaying({ wide }: { wide: boolean }) {
           onChange={(v) => useStore.setState({ listenPane: v })}
           options={[{ id: "lyrics", label: "Lyrics", icon: <I.lyrics size={15} /> }, { id: "queue", label: "Up next", icon: <I.queue size={15} /> }]}
         />
+        {pane === "lyrics" && <LyricTools />}
         {wide && <TempoChip />}
       </div>
       <div style={{ minHeight: 0, position: "relative" }}>

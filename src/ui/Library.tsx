@@ -14,13 +14,13 @@ import { TAGS } from "../constants";
 import type { Playlist, Track } from "../types";
 import { Artwork, useArt } from "./Artwork";
 import { I } from "./icons";
-import { EmptyState, Segmented, useMenuButton, type MenuItem } from "./kit";
+import { Chip, EmptyState, Segmented, useMenuButton, type MenuItem } from "./kit";
 import { ease, spring } from "./motion";
 import { sig } from "../flux/signals";
 import { pickFiles } from "./files";
 import { EmojiSearch, LibraryAiBar, TrackAiMenu } from "../components/ai/LibraryAi";
 
-type Tab = "playlists" | "songs" | "artists" | "liked" | "recent";
+type Tab = "playlists" | "songs" | "artists" | "liked" | "recent" | "tags";
 
 export function Library() {
   const [tab, setTab] = useState<Tab>("playlists");
@@ -82,6 +82,7 @@ export function Library() {
                     { id: "artists", label: "Artists" },
                     { id: "liked", label: "Liked" },
                     { id: "recent", label: "Recent" },
+                    { id: "tags", label: "Tags" },
                   ]}
                 />
               </div>
@@ -105,6 +106,7 @@ export function Library() {
                 {tab === "liked" && <SongList filter={q} which="liked" />}
                 {tab === "recent" && <SongList filter={q} which="recent" />}
                 {tab === "artists" && <Artists />}
+                {tab === "tags" && <Tags filter={q} />}
               </motion.div>
             </AnimatePresence>
           </motion.div>
@@ -115,7 +117,26 @@ export function Library() {
 }
 
 // ── playlists ──────────────────────────────────────────────────────────────
+/** An AI-made cover for a playlist, when one has been generated. */
+function usePlaylistCover(id: string): string | null {
+  const rev = useStore((s) => s.coverRev);
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void import("../ai/covers").then((m) => m.loadCover("playlist", id)).then((svg) => {
+      if (!alive) return;
+      if (!svg) { setUrl(null); return; }
+      const ns = /<svg[^>]*\sxmlns=/i.test(svg) ? svg : svg.replace(/<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"');
+      setUrl(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(ns)}`);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [id, rev]);
+  return url;
+}
+
 function Collage({ pl, radius = 16, style }: { pl: Playlist; radius?: number; style?: CSSProperties }) {
+  const cover = usePlaylistCover(pl.id);
+  if (cover) return <img src={cover} alt="" draggable={false} style={{ display: "block", width: "100%", aspectRatio: "1 / 1", objectFit: "cover", borderRadius: radius, ...style }} />;
   const firsts = pl.tracks.slice(0, 4);
   if (firsts.length < 4) return <Artwork track={firsts[0] ?? null} title={pl.name} radius={radius} style={style} />;
   return (
@@ -130,11 +151,24 @@ function PlaylistGrid({ onOpen }: { onOpen: (id: string) => void }) {
   const playPl = useStore((s) => s.playPl);
   const playing = useStore((s) => s.playing);
   const newPlaylist = useStore((s) => s.newPlaylist);
+  const movePlaylist = useStore((s) => s.movePlaylist);
+  // Drag a cover onto another to reorder: the grid re-flows as you pass over
+  // each one, and the cards glide to their new places.
+  const dragFrom = useRef<number | null>(null);
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(168px, 1fr))", gap: 22 }}>
       {playlists.map((p, i) => (
         <motion.button
           key={p.id}
+          layout
+          draggable
+          onDragStart={(e) => { dragFrom.current = i; (e as unknown as DragEvent).dataTransfer?.setData("text/plain", p.id); }}
+          onDragOver={(e) => {
+            if (dragFrom.current === null) return;
+            e.preventDefault();
+            if (dragFrom.current !== i) { movePlaylist(dragFrom.current, i); dragFrom.current = i; }
+          }}
+          onDragEnd={() => { dragFrom.current = null; }}
           onClick={() => onOpen(p.id)}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -172,6 +206,10 @@ function PlaylistPage({ pl, onBack }: { pl: Playlist; onBack: () => void }) {
   const rename = useStore((s) => s.renamePlaylist);
   const moveTrack = useStore((s) => s.moveTrack);
   const playlists = useStore((s) => s.playlists);
+  const movePlaylist = useStore((s) => s.movePlaylist);
+  const aiReady = useStore((s) => s.aiReady);
+  const aiBusy = useStore((s) => s.aiBusy);
+  const plIndex = playlists.findIndex((p) => p.id === pl.id);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(titleCase(pl.name));
   const [confirm, setConfirm] = useState(false);
@@ -218,6 +256,17 @@ function PlaylistPage({ pl, onBack }: { pl: Playlist; onBack: () => void }) {
             <button className="btn" data-variant="accent" disabled={!pl.tracks.length} onClick={() => { useStore.setState({ shuffle: false }); void playAt(pl.id, 0); }}>Play</button>
             <button className="btn" disabled={!pl.tracks.length} onClick={() => { useStore.setState({ shuffle: true }); void playAt(pl.id, Math.floor(Math.random() * pl.tracks.length)); }}><I.shuffle size={16} /> Shuffle</button>
             <button className="btn" data-variant="ghost" onClick={() => setEditing(true)}><I.edit size={16} /> Rename</button>
+            {playlists.length > 1 && (
+              <>
+                <button className="icon-btn" aria-label="Move playlist earlier" title="Move earlier in the library" disabled={plIndex <= 0} onClick={() => movePlaylist(plIndex, plIndex - 1)} style={{ opacity: plIndex <= 0 ? 0.3 : 1 }}><I.back size={18} /></button>
+                <button className="icon-btn" aria-label="Move playlist later" title="Move later in the library" disabled={plIndex >= playlists.length - 1} onClick={() => movePlaylist(plIndex, plIndex + 1)} style={{ opacity: plIndex >= playlists.length - 1 ? 0.3 : 1 }}><I.chevron size={18} /></button>
+              </>
+            )}
+            {aiReady && (
+              <button className="btn" data-variant="ghost" disabled={aiBusy} onClick={() => void import("../ai/features").then((m) => m.coverArt("playlist", pl.id, pl.name)).catch(() => {})}>
+                <I.sparkle size={16} /> {aiBusy ? "Working…" : "AI cover"}
+              </button>
+            )}
             {playlists.length > 1 && (
               <button className="btn" data-variant={confirm ? "accent" : "ghost"} style={confirm ? { background: "var(--danger)", color: "#fff" } : { color: "var(--danger)" }}
                 onClick={() => { if (confirm) { deletePlaylist(pl.id); onBack(); } else { setConfirm(true); setTimeout(() => setConfirm(false), 3000); } }}
@@ -277,13 +326,35 @@ function DraggableRow({ track, plId, idx, onDragStart, onDragEnd }: { track: Tra
 // ── song lists ─────────────────────────────────────────────────────────────
 const ROW_H = 62;
 
-function SongList({ filter, which }: { filter: string; which: "all" | "liked" | "recent" }) {
+/** Browse by mood tag: pick one and see every track that carries it. */
+function Tags({ filter }: { filter: string }) {
+  const playlists = useStore((s) => s.playlists);
+  const [tag, setTag] = useState(TAGS[0]);
+  const counts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const p of playlists) for (const t of p.tracks) for (const g of t.tags) c[g] = (c[g] ?? 0) + 1;
+    return c;
+  }, [playlists]);
+  return (
+    <div>
+      <div className="hscroll" style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        {TAGS.map((g) => (
+          <Chip key={g} on={tag === g} onClick={() => setTag(g)}>#{g.toLowerCase()} <span style={{ opacity: 0.6, marginLeft: 6 }}>{counts[g] ?? 0}</span></Chip>
+        ))}
+      </div>
+      <SongList key={tag} filter={filter} which="all" tag={tag} />
+    </div>
+  );
+}
+
+function SongList({ filter, which, tag }: { filter: string; which: "all" | "liked" | "recent"; tag?: string }) {
   const playlists = useStore((s) => s.playlists);
   const sortBy = useStore((s) => s.sortBy);
   const entries = useMemo(() => {
     let out: { tr: Track; plId: string; idx: number }[] = [];
     for (const p of playlists) p.tracks.forEach((tr, idx) => out.push({ tr, plId: p.id, idx }));
     if (which === "liked") out = out.filter((e) => e.tr.fav);
+    if (tag) out = out.filter((e) => e.tr.tags.includes(tag));
     if (which === "recent") out = out.filter((e) => e.tr.lastPlayedAt).sort((a, b) => b.tr.lastPlayedAt - a.tr.lastPlayedAt).slice(0, 100);
     const qq = filter.trim().toLowerCase();
     if (qq) out = out.filter((e) => e.tr.name.toLowerCase().includes(qq) || (artistOf(e.tr) ?? "").toLowerCase().includes(qq));
@@ -293,7 +364,7 @@ function SongList({ filter, which }: { filter: string; which: "all" | "liked" | 
       else out.sort((a, b) => b.tr.addedAt - a.tr.addedAt);
     }
     return out;
-  }, [playlists, which, filter, sortBy]);
+  }, [playlists, which, filter, sortBy, tag]);
 
   // simple windowing so a library of thousands scrolls like a library of ten
   const host = useRef<HTMLDivElement>(null);
@@ -316,16 +387,16 @@ function SongList({ filter, which }: { filter: string; which: "all" | "liked" | 
   if (!entries.length) {
     return (
       <EmptyState
-        title={which === "liked" ? "Nothing liked yet" : which === "recent" ? "Nothing played yet" : filter ? "No matches" : "Your library is empty"}
-        body={which === "liked" ? "Tap the heart while something plays and it collects here." : filter ? "Try a shorter or different word." : "Drop audio files anywhere on the window, or search online sources."}
-        action={which === "all" && !filter ? <button className="btn" data-variant="accent" onClick={() => pickFiles()}><I.upload size={16} /> Add music</button> : undefined}
+        title={tag ? `Nothing tagged #${tag.toLowerCase()}` : which === "liked" ? "Nothing liked yet" : which === "recent" ? "Nothing played yet" : filter ? "No matches" : "Your library is empty"}
+        body={tag ? "Tag a track from its ⋯ menu and it shows up here." : which === "liked" ? "Tap the heart while something plays and it collects here." : filter ? "Try a shorter or different word." : "Drop audio files anywhere on the window, or search online sources."}
+        action={which === "all" && !filter && !tag ? <button className="btn" data-variant="accent" onClick={() => pickFiles()}><I.upload size={16} /> Add music</button> : undefined}
       />
     );
   }
   const visible = entries.slice(range[0], range[1]);
   return (
     <div>
-      {which === "all" && (
+      {which === "all" && !tag && (
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
           <Segmented size="sm" label="Sort" value={sortBy} onChange={(v) => useStore.setState({ sortBy: v })} options={[{ id: "added", label: "Recent" }, { id: "name", label: "A–Z" }, { id: "plays", label: "Most played" }]} />
         </div>

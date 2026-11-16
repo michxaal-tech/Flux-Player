@@ -221,6 +221,20 @@ accent, accent2 }`. The cover image itself is fair game as a texture.
 - **Code quality.** TypeScript strict, no `any` leaks into the app, one module
   per visualizer, comments that explain intent. `npm run build` must pass.
 
+## Features the visualizer picker used to have — bring them back
+
+The old system had these and the owner wants them again, in your picker:
+
+- **Favourites:** star a visualizer; starred ones sort first.
+- **Auto-change:** off / cycle in order / shuffle, moving to another
+  visualizer every so often (on a musical boundary — `sig.section` changing or
+  a bar line — rather than mid-phrase), using your transition.
+- **Share codes:** copy the current look as a short self-contained code and
+  paste one to apply it (validate pasted input with `sanitizeLook`).
+
+Persist whatever state these need in the store (`src/store/useStore.ts`,
+added to `partialize`).
+
 ## Housekeeping that goes with new visualizers
 
 1. `src/stage/modeIds.ts` — the new ids.

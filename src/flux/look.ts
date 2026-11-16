@@ -60,7 +60,12 @@ export interface LyricPrefs {
   scrim: number;
   /** extra lyric-only offset in ms (positive = lyrics later) */
   offsetMs: number;
+  /** how the words of a line arrive when it becomes the active one */
+  anim: LyricAnim;
 }
+
+export const LYRIC_ANIMS = ["rise", "wave", "glide", "zoom", "type", "focus", "bounce", "flip"] as const;
+export type LyricAnim = (typeof LYRIC_ANIMS)[number];
 
 export interface UiPrefs {
   theme: "ink" | "paper" | "night";
@@ -104,7 +109,7 @@ export const DEFAULT_LOOK: Look = {
 };
 
 export const DEFAULT_LYRICS: LyricPrefs = {
-  show: true, size: 1, align: "left", highlight: "fill", scrim: 0.55, offsetMs: 0,
+  show: true, size: 1, align: "left", highlight: "fill", scrim: 0.55, offsetMs: 0, anim: "rise",
 };
 
 export const DEFAULT_UI: UiPrefs = { theme: "ink", accent: "artwork", motion: "full", backdrop: 0.7 };

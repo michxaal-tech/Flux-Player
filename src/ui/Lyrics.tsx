@@ -22,7 +22,7 @@ import { lineAt, wordAt, GAP_MIN } from "../flux/lyricTime";
 import { seek } from "../audio/transport";
 import { getCurrentTrack, useStore } from "../store/useStore";
 import type { LyricLineData, Track } from "../types";
-import { EmptyState, Loader } from "./kit";
+import { EmptyState, Loader, useMenuButton, type MenuItem } from "./kit";
 import { I } from "./icons";
 import { ease, spring } from "./motion";
 
@@ -263,6 +263,7 @@ function TimedLyrics({ lines, variant }: { lines: LyricLineData[]; variant: "pan
       className="lyrics"
       data-variant={variant}
       data-highlight={prefs.highlight}
+      data-anim={prefs.anim}
       style={{
         position: "relative", height: "100%", overflow: "hidden",
         maskImage: "linear-gradient(to bottom, transparent 0, #000 14%, #000 78%, transparent 100%)",
@@ -288,11 +289,11 @@ function TimedLyrics({ lines, variant }: { lines: LyricLineData[]; variant: "pan
               {l.words?.length ? (
                 l.words.map((w, j) => (
                   <span key={j}>
-                    <span ref={(el) => { (wordEls.current[i] ??= [])[j] = el; }} className="lyric-word">{w.text}</span>{" "}
+                    <span ref={(el) => { (wordEls.current[i] ??= [])[j] = el; }} className="lyric-word" style={{ ["--i" as string]: j }}>{w.text}</span>{" "}
                   </span>
                 ))
               ) : (
-                <span className="lyric-text">{l.text}</span>
+                <span className="lyric-text">{l.text.split(/\s+/).map((w, j, a) => <span key={j}><span className="lyric-w" style={{ ["--i" as string]: j }}>{w}</span>{j < a.length - 1 ? " " : ""}</span>)}</span>
               )}
             </div>
           </motion.div>
@@ -319,5 +320,63 @@ function TimedLyrics({ lines, variant }: { lines: LyricLineData[]; variant: "pan
         <div className="eyebrow" style={{ position: "absolute", top: 4, right: 4, opacity: 0.7 }} title="This source times whole lines, not individual words">Line timing</div>
       )}
     </div>
+  );
+}
+
+
+/**
+ * Lyric tools for the playing track, whether or not it has lyrics yet: search
+ * again (a wrong match is the usual reason), read the file's own tags, attach
+ * a .lrc, transcribe, or clear what's there.
+ */
+export function LyricTools() {
+  const track = useStore((s) => getCurrentTrack(s));
+  const aiReady = useStore((s) => s.aiReady);
+  const [search, setSearch] = useState(false);
+  const file = useRef<HTMLInputElement>(null);
+  const trackId = track?.id;
+  const count = track?.lyrics?.length ?? 0;
+  // a new track, or a pick being applied, closes the search
+  useEffect(() => { setSearch(false); }, [trackId, count]);
+  const menu = useMenuButton((): MenuItem[] => {
+    if (!track) return [];
+    const L = () => import("../lyrics");
+    return [
+      { label: track.lyrics ? "Wrong lyrics? Search again" : "Search for lyrics", icon: <I.search size={17} />, onSelect: () => setSearch(true) },
+      { label: "Read from the file's tags", icon: <I.note size={17} />, onSelect: () => void L().then((m) => m.lyricsFromTrackFile(track)) },
+      { label: "Attach a .lrc file", icon: <I.upload size={17} />, onSelect: () => file.current?.click() },
+      ...(aiReady ? [{ label: "Transcribe from the audio", icon: <I.sparkle size={17} />, onSelect: () => void L().then((m) => m.transcribeTrack(track)) }] : []),
+      ...(track.lyrics ? [{ label: "Clear lyrics", icon: <I.trash size={17} />, danger: true, onSelect: () => void L().then((m) => m.clearLyrics(track)) }] : []),
+    ];
+  }, 260);
+  if (!track) return null;
+  return (
+    <>
+      <button className="icon-btn" aria-label="Lyric options" aria-haspopup="menu" aria-expanded={menu.open} onClick={menu.toggle} style={{ width: 34, height: 34 }}><I.more size={18} /></button>
+      {menu.menu}
+      <input ref={file} type="file" accept=".lrc,text/plain" hidden onChange={(e) => {
+        const f = e.target.files?.[0];
+        if (f) void import("../lyrics").then((m) => m.importLrcFile(track, f));
+        e.target.value = "";
+      }} />
+      <AnimatePresence>
+        {search && (
+          <motion.div
+            key="ls"
+            initial={{ opacity: 0, y: -8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+            transition={spring.snap}
+            style={{ position: "absolute", left: 0, right: 0, top: 48, zIndex: 6, background: "var(--bg-raise)", border: "1px solid var(--line)", borderRadius: 20, padding: "14px 14px 4px", boxShadow: "var(--shadow-lg)" }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span className="card-title">Find the right lyrics</span>
+              <button className="icon-btn" aria-label="Close lyric search" onClick={() => setSearch(false)} style={{ width: 30, height: 30 }}><I.close size={16} /></button>
+            </div>
+            <LyricSearch track={track} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
