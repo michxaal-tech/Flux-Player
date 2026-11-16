@@ -61,8 +61,10 @@ app.whenReady().then(async () => {
     desktop: window.__fluxDesktop === true,
     navs: document.querySelectorAll("nav[aria-label=Main] button").length,
     canvases: document.querySelectorAll("canvas").length,
-    // the stage reports the mode it is drawing once its loop has run
-    loop: !!(window.__fluxStage && window.__fluxStage.mode && !window.__fluxStage.error),
+    // The app's per-frame tick advances the signals whether or not a
+    // visualizer is drawing (the stage only renders where it is the subject),
+    // and the stage must not have reported an error.
+    loop: !!(window.__fluxSig && window.__fluxSig.dt > 0 && window.__fluxStage && !window.__fluxStage.error),
     stageError: window.__fluxStage ? window.__fluxStage.error : "no stage",
   }))()`);
 
